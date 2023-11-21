@@ -36,6 +36,8 @@ function setup-buildenv() {
 
     cp -rT "/pkgbuilds/${PACKAGE}" "${BUILDDIR}"
     chown -R builder:builder "${BUILDDIR}"
+
+    pacman -Syu --noconfirm
 }
 
 function build-pkg() {

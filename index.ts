@@ -3,7 +3,6 @@ import IORedis from 'ioredis';
 import createBuilder from './builder';
 import createDatabaseWorker from './database';
 import schedulePackage from './scheduler';
-import config from 'config';
 import * as commandLineArgs from 'command-line-args';
 
 const mainDefinitions = [
@@ -13,14 +12,14 @@ const mainDefinitions = [
 ];
 const mainOptions = commandLineArgs.default(mainDefinitions, { stopAtFirstUnknown: true });
 
-const redisHost = String(config.get("redis.host"));
-const redisPort = Number(config.get("redis.port"));
-const redisPassword = String(config.get("redis.password"));
+const redisHost = process.env.REDIS_HOST || "localhost"
+const redisPort = Number(process.env.REDIS_PORT) || 6379;
+const redisPassword = process.env.REDIS_PASSWORD || "";
 
 var workers: Worker[] = [];
 
 async function main(): Promise<void> {
-    const connection = new IORedis(redisPort, redisHost, { password: redisPassword, maxRetriesPerRequest: null });
+    const connection = new IORedis(redisPort, redisHost, { password: redisPassword, maxRetriesPerRequest: null, lazyConnect: true });
 
     switch (mainOptions.command) {
         case 'schedule':
@@ -28,21 +27,24 @@ async function main(): Promise<void> {
                 console.error('No package name specified');
                 process.exit(1);
             }
+            await connection.connect();
             await schedulePackage(connection, mainOptions.arch || 'x86_64', mainOptions.repo || 'chaotic-aur', mainOptions._unknown[0]);
             connection.quit();
             return;
         case 'builder':
-            if (!config.has("paths.shared") || !config.has("database.host") || !config.has("database.port") || !config.has("database.username")) {
+            if (!process.env.SHARED_PATH) {
                 console.error('Config variables incomplete');
                 return process.exit(1);
             }
+            await connection.connect();
             workers.push(createBuilder(connection));
             break;
         case 'database':
-            if (!config.has("paths.landing_zone") || !config.has("paths.repo") || !config.has("paths.gpg")) {
+            if (!process.env.LANDING_ZONE_PATH || !process.env.REPO_PATH || !process.env.GPG_PATH || !process.env.DATABASE_HOST || !process.env.DATABASE_PORT || !process.env.DATABASE_USER) {
                 console.error('Config variables incomplete');
                 return process.exit(1);
             }
+            await connection.connect();
             createDatabaseWorker(connection);
             break;
         default:

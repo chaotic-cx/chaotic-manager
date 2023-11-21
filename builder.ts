@@ -6,7 +6,7 @@ import to from 'await-to-js';
 import fs from 'fs';
 import path from 'path';
 import { Client } from 'node-scp';
-import config from 'config';
+import { RemoteSettings, current_version } from './types';
 
 function ensurePathClean(dir: string): void {
     if (fs.existsSync(dir))
@@ -14,14 +14,48 @@ function ensurePathClean(dir: string): void {
     fs.mkdirSync(dir);
 }
 
+async function requestRemoteConfig(connection: RedisConnection, worker: Worker, config: any): Promise<void> {
+    const subscriber = connection.duplicate();
+    subscriber.on("message", async (channel: string, message: string) => {
+        if (channel === "config-response") {
+            const remote_config : RemoteSettings = JSON.parse(message);
+            if (remote_config.version !== current_version) {
+                if (!worker.isPaused())
+                {
+                    worker.pause();
+                    console.log("Worker received incompatible config from master. Worker paused.");
+                }
+                return;
+            }
+            else
+            {
+                config.settings = remote_config;
+                if (worker.isPaused())
+                {
+                    worker.resume();
+                    console.log("Worker received valid config from master. Worker resumed.");
+                }
+            }
+        }
+    });
+    await subscriber.subscribe("config-response");
+    connection.publish("config-request", "request");
+}
+
 export default function createBuilder(connection: RedisConnection): Worker {
-    const remotemount: string = path.join(String(config.get("paths.shared")), 'pkgout');
+    const remotemount: string = path.join(process.env.SHARED_PATH || '', 'pkgout');
     const mount = "/shared/pkgout"
 
     const docker = new Docker();
     const database_queue = new Queue("database", { connection });
+
+    const runtime_settings : { settings: any } = { settings: null };
+
     const worker = new Worker("builds", async (job: Job) => {
         console.log(`Processing job ${job.id}`);
+        // Copy settings
+        const remote_settings : RemoteSettings = structuredClone(runtime_settings.settings);
+
         ensurePathClean(mount);
         const [err, out] = await to(docker.run('registry.gitlab.com/garuda-linux/pkgsbuilds-aur', ["build", String(job.id)], process.stdout, {
             HostConfig: {
@@ -39,7 +73,10 @@ export default function createBuilder(connection: RedisConnection): Worker {
             }
         }
         ));
-        if (out.StatusCode != undefined) {
+        if (err)
+            console.error(err);
+
+        if (err || out.StatusCode !== undefined) {
             console.log(`Job ${job.id} failed`);
             throw new Error('Building failed.');
         }
@@ -48,14 +85,14 @@ export default function createBuilder(connection: RedisConnection): Worker {
 
         try {
             const client = await Client({
-                host: String(config.get("database.host")),
-                port: Number(config.get("database.port")),
-                username: String(config.get("database.username")),
+                host: String(remote_settings.database.ssh.host),
+                port: Number(remote_settings.database.ssh.port),
+                username: String(remote_settings.database.ssh.user),
                 privateKey: fs.readFileSync('sshkey'),
             })
             await client.uploadDir(
                 mount,
-                String(config.get("paths.landing_zone")),
+                remote_settings.database.landing_zone,
             )
             client.close()
         } catch (e) {
@@ -74,5 +111,9 @@ export default function createBuilder(connection: RedisConnection): Worker {
         });
         console.log(`Job ${job.id} finished.`);
     }, { connection });
+    worker.pause();
+
+    requestRemoteConfig(connection, worker, runtime_settings);
+
     return worker;
 }

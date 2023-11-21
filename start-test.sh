@@ -1,28 +1,18 @@
 #!/bin/bash
 
-set -x
+set -ex
 
-pushd container-test
+pushd builder-container
 ./build-test-container.sh
 popd
 
-read -r -d '' JSON_CONFIG << EOM
-{
-    "paths": {
-        "shared": "$(pwd)/temp/shared",
-        "repo_root": "$(pwd)/temp/repo_root",
-        "landing_zone": "$(pwd)/temp/landing_zone",
-        "gpg": "$(pwd)/gpg"
-    },
-    "database": {
-        "host": "localhost",
-        "port": 2891
-    }
-}
-EOM
-
-# Use JQ to minify the JSON
-JSON_CONFIG_MINI="$(jq -c . <<< "$JSON_CONFIG")"
+SHARED_PATH="$(pwd)/temp/shared"
+REPO_PATH="$(pwd)/temp/repo_root"
+LANDING_ZONE_PATH="$(pwd)/temp/landing_zone"
+GPG_PATH="$(pwd)/gpg"
+DATABASE_HOST="localhost"
+DATABASE_PORT=2891
+DATABASE_USER="package-deployer"
 
 chmod 600 sshkey
 sshkey="$(ssh-keygen -y -t ed25519 -f ./sshkey)"
@@ -54,7 +44,7 @@ services:
             - /var/run/docker.sock:/var/run/docker.sock
             - ./temp/shared:/shared
         environment:
-            - NODE_CONFIG=${JSON_CONFIG_MINI}
+            - SHARED_PATH=${SHARED_PATH}
         image: chaotic-runner
         command: builder
     chaotic-database:
@@ -63,7 +53,12 @@ services:
             - ./sshkey:/app/sshkey
             - /var/run/docker.sock:/var/run/docker.sock
         environment:
-            - NODE_CONFIG=${JSON_CONFIG_MINI}
+            - REPO_PATH=${REPO_PATH}
+            - LANDING_ZONE_PATH=${LANDING_ZONE_PATH}
+            - GPG_PATH=${GPG_PATH}
+            - DATABASE_HOST=${DATABASE_HOST}
+            - DATABASE_PORT=${DATABASE_PORT}
+            - DATABASE_USER=${DATABASE_USER}
         image: chaotic-runner
         command: database
 EOM

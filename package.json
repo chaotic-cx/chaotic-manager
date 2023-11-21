@@ -13,14 +13,13 @@
     "await-to-js": "^3.0.0",
     "bullmq": "^4.13.3",
     "command-line-args": "^5.2.1",
-    "config": "^3.3.9",
     "dockerode": "^4.0.0",
     "ioredis": "^5.3.2",
     "node-scp": "^0.0.23",
     "typescript": "^5.2.2"
   },
   "scripts": {
-    "start": "node dist/index.js $@",
+    "start": "tsc && node dist/index.js $@",
     "build": "tsc"
   }
 }
