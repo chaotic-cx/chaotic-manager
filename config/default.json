@@ -1,0 +1,18 @@
+{
+    "redis": {
+        "host": "localhost",
+        "port": 6379,
+        "password": ""
+    },
+    "paths": {
+        "shared": "/var/cache/chaotic/shared",
+        "repo_root": "/srv/http",
+        "repo": "chaotic-aur",
+        "landing_zone": "/var/cache/chaotic/landing_zone"
+    },
+    "database": {
+        "host": "builds.garudalinux.org",
+        "port": 223,
+        "username": "package-deployer"
+    }
+}
