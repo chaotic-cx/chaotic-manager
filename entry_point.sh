@@ -1,40 +1,33 @@
 #!/usr/bin/env sh
 
-run_cmd() {
-    case "$1" in
-    "builder")
-        shift
-        node /app/index.js builder
-        ;;
-    "database")
-        shift
-        node /app/index.js database
-        ;;
-    *)
-        echo "Invalid argument. Please specify 'builder' or 'database'."
-        exit 1
-        ;;
-    esac
-}
+set -e
 
-install_tailscale() {
-    # https://tailscale.com/kb/1112/userspace-networking/
-    apk add --no-cache tailscale
+export REDIS_PORT="${REDIS_PORT:-6379}"
 
-    tailscaled --tun=userspace-networking \
-        --socks5-server=localhost:1055 &
-    tailscale up --authkey="$TAILSCALE_AUTHKEY" \
-        --advertise-tags="tag:chaotic-node" \
-        --accept-dns=false ||
-        echo "Failed to connect to Tailscale!" &&
-        exit 1
-}
+if [ -n "$REDIS_SSH_HOST" ]; then
+    REDIS_SSH_PORT="${REDIS_SSH_PORT:-22}"
+    REDIS_SSH_USER="${REDIS_SSH_USER:-root}"
 
-if [ -z "$TAILSCALE_ENABLE" ]; then
-    run_cmd "$@"
-elif [ "$TAILSCALE_ENABLE" = "true" ] && [ -n "$TAILSCALE_AUTHKEY" ]; then
-    install_tailscale
-    ALL_PROXY=socks5://localhost:1055/ run_cmd "$@"
-else
-    echo "We can't operate Tailscale without valid authkey!"
+    # Set up ssh tunneling
+    AUTOSSH_GATETIME=0 AUTOSSH_PORT=0 autossh -f -N -L "6380:127.0.0.1:${REDIS_PORT}" \
+        -p "$REDIS_SSH_PORT" \
+        -o StrictHostKeyChecking=no \
+        -o ServerAliveInterval=60 \
+        -o ServerAliveCountMax=3 \
+        -o ExitOnForwardFailure=yes \
+        -o ConnectTimeout=10 \
+        -o TCPKeepAlive=yes \
+        -i /app/sshkey \
+        "$REDIS_SSH_USER@$REDIS_SSH_HOST"
+
+    export REDIS_PORT=6380
+
+    # Wait for tunnel to be established
+    echo "Waiting for tunnel to be established..."
+    while ! nc -z localhost $REDIS_PORT; do
+        sleep 1
+    done
+    echo "Tunnel established"
 fi
+
+node /app/index.js "$@"

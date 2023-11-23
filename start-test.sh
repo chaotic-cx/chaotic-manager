@@ -10,7 +10,7 @@ SHARED_PATH="$(pwd)/temp/shared"
 REPO_PATH="$(pwd)/temp/repo_root"
 LANDING_ZONE_PATH="$(pwd)/temp/landing_zone"
 GPG_PATH="$(pwd)/gpg"
-DATABASE_HOST="localhost"
+DATABASE_HOST="127.0.0.1"
 DATABASE_PORT=2891
 DATABASE_USER="package-deployer"
 
@@ -23,6 +23,7 @@ services:
     openssh-server:
         container_name: openssh-server
         hostname: openssh-server
+        network_mode: host
         environment:
             - PUID=1000
             - PGID=1000
@@ -31,10 +32,11 @@ services:
             - SUDO_ACCESS=false
             - PASSWORD_ACCESS=false
             - USER_NAME=package-deployer
-        ports:
-            - 2891:2222
+            - LISTEN_PORT=2891
+            - DOCKER_MODS=linuxserver/mods:openssh-server-ssh-tunnel # enable AllowTcpForwarding here
         volumes:
             - ./temp/landing_zone:$(pwd)/temp/landing_zone
+            - ./container_init:/etc/cont-init.d/01-container_init.sh
         image: lscr.io/linuxserver/openssh-server:latest
         entrypoint: bash -c "chown -R 1000:1000 '$(pwd)/temp/landing_zone' && exec /init"
     chaotic-runner:
@@ -45,6 +47,9 @@ services:
             - ./temp/shared:/shared
         environment:
             - SHARED_PATH=${SHARED_PATH}
+            - REDIS_SSH_HOST=${DATABASE_HOST}
+            - REDIS_SSH_PORT=${DATABASE_PORT}
+            - REDIS_SSH_USER=${DATABASE_USER}
         image: chaotic-runner
         command: builder
     chaotic-database:

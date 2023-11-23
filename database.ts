@@ -18,6 +18,7 @@ async function publishSettingsObject(connection: RedisConnection, settings: Remo
 
 export default function createDatabaseWorker(connection: RedisConnection): Worker {
     const landing_zone = process.env.LANDING_ZONE_PATH || '';
+    const landing_zone_adv = process.env.LANDING_ZONE_ADVERTISED_PATH || null;
     const repo_root = process.env.REPO_PATH || '';
     const gpg = process.env.GPG_PATH || '';
 
@@ -32,7 +33,7 @@ export default function createDatabaseWorker(connection: RedisConnection): Worke
                 port: database_port,
                 user: database_user
             },
-            landing_zone
+            landing_zone: landing_zone_adv || landing_zone,
         },
         version: current_version
     };
