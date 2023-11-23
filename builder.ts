@@ -33,9 +33,9 @@ async function requestRemoteConfig(connection: RedisConnection, worker: Worker, 
             }
             else
             {
-                remote_config.database.ssh.user.host = database_host;
-                remote_config.database.ssh.user.port = database_port;
-                remote_config.database.ssh.user.port = database_user;
+                remote_config.database.ssh.host = database_host;
+                remote_config.database.ssh.port = database_port;
+                remote_config.database.ssh.user = database_user;
                 config.settings = remote_config;
                 if (worker.isPaused())
                 {
