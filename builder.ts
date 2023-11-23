@@ -15,6 +15,10 @@ function ensurePathClean(dir: string): void {
 }
 
 async function requestRemoteConfig(connection: RedisConnection, worker: Worker, config: any): Promise<void> {
+    const database_host = process.env.DATABASE_HOST || 'localhost';
+    const database_port = Number(process.env.DATABASE_PORT || 22);
+    const database_user = process.env.DATABASE_USER || 'root';
+
     const subscriber = connection.duplicate();
     subscriber.on("message", async (channel: string, message: string) => {
         if (channel === "config-response") {
@@ -29,6 +33,9 @@ async function requestRemoteConfig(connection: RedisConnection, worker: Worker, 
             }
             else
             {
+                remote_config.database.ssh.user.host = database_host;
+                remote_config.database.ssh.user.port = database_port;
+                remote_config.database.ssh.user.port = database_user;
                 config.settings = remote_config;
                 if (worker.isPaused())
                 {

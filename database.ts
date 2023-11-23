@@ -22,9 +22,9 @@ export default function createDatabaseWorker(connection: RedisConnection): Worke
     const repo_root = process.env.REPO_PATH || '';
     const gpg = process.env.GPG_PATH || '';
 
-    const database_host = process.env.DATABASE_HOST || '';
-    const database_port = Number(process.env.DATABASE_PORT) || 0;
-    const database_user = process.env.DATABASE_USER || '';
+    const database_host = process.env.DATABASE_HOST || 'localhost';
+    const database_port = Number(process.env.DATABASE_PORT || 22);
+    const database_user = process.env.DATABASE_USER || 'root';
 
     const settings: RemoteSettings = {
         database: {
