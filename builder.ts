@@ -64,7 +64,7 @@ export default function createBuilder(connection: RedisConnection): Worker {
         const remote_settings : RemoteSettings = structuredClone(runtime_settings.settings);
 
         ensurePathClean(mount);
-        const [err, out] = await to(docker.run('registry.gitlab.com/garuda-linux/pkgsbuilds-aur', ["build", String(job.id)], process.stdout, {
+        const [err, out] = await to(docker.run('registry.gitlab.com/garuda-linux/tools/chaotic-manager/builder', ["build", String(job.id)], process.stdout, {
             HostConfig: {
                 AutoRemove: true,
                 Binds: [

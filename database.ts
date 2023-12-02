@@ -50,7 +50,7 @@ export default function createDatabaseWorker(connection: RedisConnection): Worke
             throw new UnrecoverableError('No packages to add.');
         }
 
-        const [err, out] = await to(docker.run('registry.gitlab.com/garuda-linux/pkgsbuilds-aur', ["repo-add", arch, "/landing_zone", "/repo_root", repo].concat(packages), process.stdout, {
+        const [err, out] = await to(docker.run('registry.gitlab.com/garuda-linux/tools/chaotic-manager/builder', ["repo-add", arch, "/landing_zone", "/repo_root", repo].concat(packages), process.stdout, {
             HostConfig: {
                 AutoRemove: true,
                 Binds: [
