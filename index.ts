@@ -2,7 +2,7 @@ import { Worker } from 'bullmq';
 import IORedis from 'ioredis';
 import createBuilder from './builder';
 import createDatabaseWorker from './database';
-import schedulePackage from './scheduler';
+import { schedulePackages } from './scheduler';
 import * as commandLineArgs from 'command-line-args';
 
 const mainDefinitions = [
@@ -23,12 +23,12 @@ async function main(): Promise<void> {
 
     switch (mainOptions.command) {
         case 'schedule':
-            if (typeof mainOptions._unknown === 'undefined' || mainOptions._unknown.length !== 1) {
-                console.error('No package name specified');
+            if (typeof mainOptions._unknown === 'undefined' || mainOptions._unknown.length < 1) {
+                console.error('No package names specified');
                 process.exit(1);
             }
             await connection.connect();
-            await schedulePackage(connection, mainOptions.arch || 'x86_64', mainOptions.repo || 'chaotic-aur', mainOptions._unknown[0]);
+            await schedulePackages(connection, mainOptions.arch || 'x86_64', mainOptions.repo || 'chaotic-aur', mainOptions._unknown);
             connection.quit();
             return;
         case 'builder':
