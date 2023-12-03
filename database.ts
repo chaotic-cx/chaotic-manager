@@ -1,9 +1,8 @@
 
 import { Worker, Job, UnrecoverableError } from 'bullmq';
 import RedisConnection from 'ioredis';
-import Docker from 'dockerode';
-import to from 'await-to-js';
 import { RemoteSettings, current_version } from './types';
+import { DockerManager } from './docker-manager';
 
 async function publishSettingsObject(connection: RedisConnection, settings: RemoteSettings): Promise<void> {
     const subscriber = connection.duplicate();
@@ -26,6 +25,9 @@ export default function createDatabaseWorker(connection: RedisConnection): Worke
     const database_port = Number(process.env.DATABASE_PORT || 22);
     const database_user = process.env.DATABASE_USER || 'root';
 
+    const builder_image = process.env.BUILDER_IMAGE || 'registry.gitlab.com/garuda-linux/tools/chaotic-manager/builder:latest';
+    const package_repo = process.env.PACKAGE_REPO || 'https://gitlab.com/garuda-linux/pkgsbuilds-aur.git';
+
     const settings: RemoteSettings = {
         database: {
             ssh: {
@@ -35,10 +37,14 @@ export default function createDatabaseWorker(connection: RedisConnection): Worke
             },
             landing_zone: landing_zone_adv || landing_zone,
         },
+        builder: {
+            image: builder_image,
+            package_repo: package_repo
+        },
         version: current_version
     };
 
-    const docker = new Docker();
+    const docker_manager = new DockerManager();
     const worker = new Worker("database", async (job: Job) => {
         console.log(`Processing job ${job.id}`);
         const arch = job.data.arch;
@@ -50,23 +56,7 @@ export default function createDatabaseWorker(connection: RedisConnection): Worke
             throw new UnrecoverableError('No packages to add.');
         }
 
-        const [err, out] = await to(docker.run('registry.gitlab.com/garuda-linux/tools/chaotic-manager/builder', ["repo-add", arch, "/landing_zone", "/repo_root", repo].concat(packages), process.stdout, {
-            HostConfig: {
-                AutoRemove: true,
-                Binds: [
-                    `${landing_zone}:/landing_zone`,
-                    `${repo_root}:/repo_root`,
-                    `${gpg}:/root/.gnupg`
-                ],
-                Ulimits: [
-                    {
-                        Name: "nofile",
-                        Soft: 1024,
-                        Hard: 1048576
-                    }
-                ]
-            }
-        }));
+        const [err, out] = await docker_manager.run(settings.builder.image, ["repo-add", arch, "/landing_zone", "/repo_root", repo].concat(packages), [ `${landing_zone}:/landing_zone`, `${repo_root}:/repo_root`, `${gpg}:/root/.gnupg` ]);
 
         if (err)
             console.error(err);
@@ -78,8 +68,17 @@ export default function createDatabaseWorker(connection: RedisConnection): Worke
             console.log(`Finished job ${job.id}.`);
         }
     }, { connection });
+    worker.pause();
 
     publishSettingsObject(connection, settings);
+
+    docker_manager.scheduledPull(settings.builder.image).then(() => {
+        worker.resume();
+        console.log("Ready to deploy packages.");
+    }).catch((err) => {
+        console.error(err);
+        process.exit(1);
+    });
 
     return worker;
 }

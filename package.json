@@ -10,6 +10,7 @@
     "@types/config": "^3.3.3",
     "@types/dockerode": "^3.3.23",
     "@types/node": "^20.9.1",
+    "async-mutex": "^0.4.0",
     "await-to-js": "^3.0.0",
     "bullmq": "^4.13.3",
     "command-line-args": "^5.2.1",

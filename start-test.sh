@@ -50,7 +50,7 @@ services:
             - REDIS_SSH_HOST=${DATABASE_HOST}
             - REDIS_SSH_PORT=${DATABASE_PORT}
             - REDIS_SSH_USER=${DATABASE_USER}
-        image: chaotic-runner
+        image: registry.gitlab.com/garuda-linux/tools/chaotic-manager/manager
         command: builder
     chaotic-database:
         network_mode: host
@@ -64,11 +64,11 @@ services:
             - DATABASE_HOST=${DATABASE_HOST}
             - DATABASE_PORT=${DATABASE_PORT}
             - DATABASE_USER=${DATABASE_USER}
-        image: chaotic-runner
+        image: registry.gitlab.com/garuda-linux/tools/chaotic-manager/manager
         command: database
 EOM
 
-docker build -t chaotic-runner .
+docker build -t registry.gitlab.com/garuda-linux/tools/chaotic-manager/manager .
 
 docker-compose up
 docker-compose down

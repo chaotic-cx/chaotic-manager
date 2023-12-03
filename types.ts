@@ -8,7 +8,11 @@ export type RemoteSettings = {
         },
         landing_zone: string,
     };
+    builder: {
+        image: string,
+        package_repo: string,
+    }
     version: number;
 };
 
-export const current_version = 1;
+export const current_version = 2;

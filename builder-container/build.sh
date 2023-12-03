@@ -7,15 +7,18 @@ PACKAGE="$1"
 BUILDDIR="/home/builder/build/"
 
 function setup-package-repo() {
+    if [ -z "$PACKAGE_REPO" ]; then PACKAGE_REPO="https://gitlab.com/garuda-linux/pkgsbuilds-aur.git"; fi
     if [ ! -d /pkgbuilds ]; then mkdir /pkgbuilds; fi
     chown root:root /pkgbuilds
-    chmod 700 /pkgbuilds
+    chmod 755 /pkgbuilds
     pushd /pkgbuilds
     if [ ! -d .git ]; then
         git init
-        git remote add origin https://gitlab.com/garuda-linux/pkgsbuilds-aur.git
+        git remote add origin "$PACKAGE_REPO"
+    else
+        git remote set-url origin "$PACKAGE_REPO"
     fi
-    git fetch origin main --depth=1
+    GIT_TERMINAL_PROMPT=0 git fetch origin main --depth=1
     git reset --hard origin/main
     popd
 }

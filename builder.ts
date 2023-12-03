@@ -1,12 +1,11 @@
 
 import { Worker, Queue, Job } from 'bullmq';
 import RedisConnection from 'ioredis';
-import Docker from 'dockerode';
-import to from 'await-to-js';
 import fs from 'fs';
 import path from 'path';
 import { Client } from 'node-scp';
 import { RemoteSettings, current_version } from './types';
+import { DockerManager } from './docker-manager';
 
 function ensurePathClean(dir: string): void {
     if (fs.existsSync(dir))
@@ -14,72 +13,71 @@ function ensurePathClean(dir: string): void {
     fs.mkdirSync(dir);
 }
 
-async function requestRemoteConfig(connection: RedisConnection, worker: Worker, config: any): Promise<void> {
-    const database_host = process.env.DATABASE_HOST || 'localhost';
-    const database_port = Number(process.env.DATABASE_PORT || 22);
-    const database_user = process.env.DATABASE_USER || 'root';
+function requestRemoteConfig(connection: RedisConnection, worker: Worker, docker: DockerManager, config: any): Promise<void> {
+    return new Promise<void>(async (resolve, reject) => { 
+        const database_host = process.env.DATABASE_HOST || null;
+        const database_port = Number(process.env.DATABASE_PORT || 22);
+        const database_user = process.env.DATABASE_USER || null;
+        var init: boolean = true;
 
-    const subscriber = connection.duplicate();
-    subscriber.on("message", async (channel: string, message: string) => {
-        if (channel === "config-response") {
-            const remote_config : RemoteSettings = JSON.parse(message);
-            if (remote_config.version !== current_version) {
-                if (!worker.isPaused())
-                {
+        const subscriber = connection.duplicate();
+        subscriber.on("message", async (channel: string, message: string) => {
+            if (channel === "config-response") {
+                if (!worker.isPaused()) {
+                    console.log("Pausing worker for incoming config...");
                     worker.pause();
+                }
+                const remote_config : RemoteSettings = JSON.parse(message);
+                if (remote_config.version !== current_version) {
                     console.log("Worker received incompatible config from master. Worker paused.");
+                    return;
                 }
-                return;
-            }
-            else
-            {
-                remote_config.database.ssh.host = database_host;
-                remote_config.database.ssh.port = database_port;
-                remote_config.database.ssh.user = database_user;
-                config.settings = remote_config;
-                if (worker.isPaused())
+                else
                 {
-                    worker.resume();
-                    console.log("Worker received valid config from master. Worker resumed.");
+                    if (database_host !== null) {
+                        remote_config.database.ssh.host = database_host;
+                        remote_config.database.ssh.port = database_port;
+                    }
+                    if (database_user !== null)
+                        remote_config.database.ssh.user = database_user;
+                    config.settings = remote_config;
+                    await docker.scheduledPull(remote_config.builder.image);
+                    if (init) {
+                        init = false;
+                        resolve();
+                    }
+                    else
+                    {
+                        worker.resume();
+                        console.log("Worker received valid config from master. Worker resumed.");
+                    }
                 }
             }
-        }
+        });
+        await subscriber.subscribe("config-response");
+        connection.publish("config-request", "request");
     });
-    await subscriber.subscribe("config-response");
-    connection.publish("config-request", "request");
 }
 
 export default function createBuilder(connection: RedisConnection): Worker {
-    const remotemount: string = path.join(process.env.SHARED_PATH || '', 'pkgout');
+    const shared_pkgout: string = path.join(process.env.SHARED_PATH || '', 'pkgout');
+    const shared_sources: string = path.join(process.env.SHARED_PATH || '', 'sources');
     const mount = "/shared/pkgout"
 
-    const docker = new Docker();
+    const docker_manager = new DockerManager();
     const database_queue = new Queue("database", { connection });
 
-    const runtime_settings : { settings: any } = { settings: null };
+    const runtime_settings : { settings: RemoteSettings | null } = { settings: null };
 
     const worker = new Worker("builds", async (job: Job) => {
         console.log(`Processing job ${job.id}`);
         // Copy settings
-        const remote_settings : RemoteSettings = structuredClone(runtime_settings.settings);
+        const remote_settings: RemoteSettings = structuredClone(runtime_settings.settings) as RemoteSettings;
 
         ensurePathClean(mount);
-        const [err, out] = await to(docker.run('registry.gitlab.com/garuda-linux/tools/chaotic-manager/builder', ["build", String(job.id)], process.stdout, {
-            HostConfig: {
-                AutoRemove: true,
-                Binds: [
-                    remotemount + ':/home/builder/pkgout'
-                ],
-                Ulimits: [
-                    {
-                        Name: "nofile",
-                        Soft: 1024,
-                        Hard: 1048576
-                    }
-                ]
-            }
-        }
-        ));
+        const [err, out] = await docker_manager.run(remote_settings.builder.image, ["build", String(job.id)], [shared_pkgout + ':/home/builder/pkgout', shared_sources + ':/pkgbuilds'], [
+            "PACKAGE_REPO=" + remote_settings.builder.package_repo,
+        ]);
         if (err)
             console.error(err);
 
@@ -120,7 +118,14 @@ export default function createBuilder(connection: RedisConnection): Worker {
     }, { connection });
     worker.pause();
 
-    requestRemoteConfig(connection, worker, runtime_settings);
+    requestRemoteConfig(connection, worker, docker_manager, runtime_settings).then(async () => {
+        worker.resume();
+        console.log("Worker ready to process jobs.");
+        // In general, avoid putting logic here that can't be changed via remote config update dynamically
+    }).catch((err) => {
+        console.error(err);
+        process.exit(1);
+    });;
 
     return worker;
 }
