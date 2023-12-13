@@ -4,7 +4,7 @@ import {Mutex} from 'async-mutex';
 
 export class DockerManager {
   docker: Docker = new Docker();
-  pull_schedule: number | null = null;
+  pull_schedule: NodeJS.Timeout | null = null;
   pull_mutex = new Mutex();
 
   constructor() { // registry.gitlab.com/garuda-linux/tools/chaotic-manager/builder:latest
@@ -19,22 +19,25 @@ export class DockerManager {
     if (!locked)
       await this.pull_mutex.acquire();
     console.log("Downloading builder image...");
-    await new Promise<void>((resolve, reject) => {
-      this.docker.pull(imagename, (err: any, stream: NodeJS.ReadableStream) => {
-        if (err) {
-          return reject(err);
-        }
-        this.docker.modem.followProgress(stream, (err, output) => {
+    try {
+      await new Promise<void>((resolve, reject) => {
+        this.docker.pull(imagename, (err: any, stream: NodeJS.ReadableStream) => {
           if (err) {
             return reject(err);
           }
-          resolve();
+          this.docker.modem.followProgress(stream, (err, output) => {
+            if (err) {
+              return reject(err);
+            }
+            resolve();
+          });
         });
       });
-    });
-    console.log("Downloaded builder image.");
-    if (!locked)
-      this.pull_mutex.release();
+      console.log("Downloaded builder image.");
+    } finally {
+      if (!locked)
+        this.pull_mutex.release();
+    }
   }
 
   async getImage(imagename: string): Promise<string> {
@@ -42,13 +45,17 @@ export class DockerManager {
       console.log("Waiting for container pull to finish...");
     await this.pull_mutex.acquire();
     try {
-      var image = this.docker.getImage(imagename)
-      await image.get();
+      try {
+        var image = this.docker.getImage(imagename)
+        await image.get();
+      }
+      catch {
+        await this.pullImage(imagename, true);
+      }
+    } finally {
+      this.pull_mutex.release();
     }
-    catch {
-      await this.pullImage(imagename, true);
-    }
-    this.pull_mutex.release();
+  
     return imagename;
   }
 
@@ -87,7 +94,7 @@ export class DockerManager {
     } catch (err) {
       console.error(err);
     }
-    this.pull_schedule = setTimeout(this.scheduledPull.bind(this), 7200000);
+    this.pull_schedule = setTimeout(this.scheduledPull.bind(this, imagename), 7200000);
     await this.pull_mutex.release();
   }
 }

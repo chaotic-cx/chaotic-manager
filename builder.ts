@@ -7,6 +7,18 @@ import { Client } from 'node-scp';
 import { RemoteSettings, current_version } from './types';
 import { DockerManager } from './docker-manager';
 
+// Console.log immitation that saves to a variable instead of stdout
+class SshLogger {
+    logs: string[] = [];
+
+    log(arg: any): void {
+        this.logs.push(arg);
+    }
+    dump(): string {
+        return this.logs.join('\n');
+    }
+}
+
 function ensurePathClean(dir: string): void {
     if (fs.existsSync(dir))
         fs.rmSync(dir, { recursive: true });
@@ -78,8 +90,6 @@ export default function createBuilder(connection: RedisConnection): Worker {
         const [err, out] = await docker_manager.run(remote_settings.builder.image, ["build", String(job.id)], [shared_pkgout + ':/home/builder/pkgout', shared_sources + ':/pkgbuilds'], [
             "PACKAGE_REPO=" + remote_settings.builder.package_repo,
         ]);
-        if (err)
-            console.error(err);
 
         if (err || out.StatusCode !== undefined) {
             console.log(`Job ${job.id} failed`);
@@ -88,12 +98,14 @@ export default function createBuilder(connection: RedisConnection): Worker {
         else
             console.log(`Finished build ${job.id}. Uploading...`);
 
+        const logger = new SshLogger();
         try {
             const client = await Client({
                 host: String(remote_settings.database.ssh.host),
                 port: Number(remote_settings.database.ssh.port),
                 username: String(remote_settings.database.ssh.user),
                 privateKey: fs.readFileSync('sshkey'),
+                debug: logger.log.bind(logger)
             })
             await client.uploadDir(
                 mount,
@@ -101,7 +113,9 @@ export default function createBuilder(connection: RedisConnection): Worker {
             )
             client.close()
         } catch (e) {
-            console.error(`Failed to upload ${job.id}: ${e}`)
+            console.error(`Failed to upload ${job.id}: ${e}`);
+            console.error(logger.dump());
+            console.log("End of ssh log.");
             throw new Error('Upload failed.');
         }
         console.log(`Finished upload ${job.id}. Scheduling database job...`);
