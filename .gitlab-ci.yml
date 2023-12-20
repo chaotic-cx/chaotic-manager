@@ -1,20 +1,33 @@
 ---
-stages: [check-pr, build]
+stages: [checks, build]
 
-# check-pr:
-#   # Check the current commit message for compliance with commitizen
-#   stage: check-pr
-#   image: alpine:latest
-#   inherit:
-#     variables: false
-#   script:
-#     - apk add --no-cache --upgrade py3-pip
-#     - pip install -U commitizen
-#     - cz check --message "$CI_COMMIT_MESSAGE" >/tmp/cz_check || true # why does it return 1 if its actually 0?
-#     - grep "successful" /tmp/cz_check # ugly hack to workaround the above issue
-#   rules:
-#     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-#     - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+check-lint:
+  # Check all files for common anti-patterns and issues
+  stage: checks
+  image: alpine:latest
+  inherit:
+    variables: false
+  script:
+    - apk add --no-cache --upgrade bash npm py3-pip shellcheck shfmt
+    # Pass --break-system-packages since since this containers sole purpose is
+    # running 2 applications. If we get to advance this, implement a proper venv
+    - pip install --break-system-packages yamllint
+    - npm install -g markdownlint-cli
+    - bash .ci/lint.sh || true # be graceful for now
+
+check-pr-commitizen:
+  # Check the current commit message for compliance with commitizen
+  stage: checks
+  image: alpine:latest
+  inherit:
+    variables: false
+  script:
+    - apk add --no-cache --upgrade py3-pip
+    # Pass --break-system-packages since since this containers sole purpose is
+    # running 2 applications. If we get to advance this, implement a proper venv
+    - pip install --break-system-packages commitizen
+    - cz check --message "$CI_COMMIT_MESSAGE" >/tmp/cz_check || true # why does it return 1 if its actually 0?
+    - grep "successful" /tmp/cz_check # ugly hack to workaround the above issue
 
 build-builder:
   # Used to deploy a new base Docker image for building purposes
