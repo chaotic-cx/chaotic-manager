@@ -10,6 +10,7 @@ BUILDDIR="/home/builder/build/"
 source ./interfere.sh
 
 function setup-package-repo() {
+    printf "\nSetting up package repository...\n"
     if [ -z "$PACKAGE_REPO" ]; then PACKAGE_REPO="https://gitlab.com/garuda-linux/pkgsbuilds-aur.git"; fi
     if [ ! -d /pkgbuilds ]; then mkdir /pkgbuilds; fi
     chown root:root /pkgbuilds
@@ -29,6 +30,7 @@ function setup-package-repo() {
 }
 
 function setup-buildenv() {
+    printf "\nSetting up build environment...\n"
     if [[ -z $PACKAGER ]]; then PACKAGER="Garuda Builder <team@garudalinux.org>"; fi
     if [[ -z $MAKEFLAGS ]]; then MAKEFLAGS="-j$(nproc)"; fi
     if [[ -z $PACKAGE ]]; then exit 1; fi
@@ -50,10 +52,17 @@ function setup-buildenv() {
 }
 
 function build-pkg() {
+    printf "\nBuilding package...\n"
     sudo -D "${BUILDDIR}" -u builder PKGDEST="${PKGOUT}" makepkg -s --noconfirm || { echo "Failed to build package!" && exit 1; }
+}
+
+function check-pkg() {
+    printf "\nChecking the package integrity with namcap...\n"
+    namcap -i "$PKGOUT"/*.pkg.tar.zst
 }
 
 setup-package-repo
 setup-buildenv
 interference-apply
 build-pkg
+check-pkg
