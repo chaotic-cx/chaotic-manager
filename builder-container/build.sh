@@ -16,6 +16,8 @@ function setup-package-repo() {
     chmod 755 /pkgbuilds
     pushd /pkgbuilds
     if [ ! -d .git ]; then
+        # Silence log output by setting a default main branch name
+        git config --global init.defaultBranch main
         git init
         git remote add origin "$PACKAGE_REPO"
     else
@@ -34,6 +36,7 @@ function setup-buildenv() {
     echo "PACKAGER=\"$PACKAGER\"" >>/etc/makepkg.conf
     echo "MAKEFLAGS=$MAKEFLAGS" >>/etc/makepkg.conf
 
+    if [[ ! -d "$PKGOUT" ]]; then mkdir -p "$PKGOUT"; fi
     chown builder:builder "$PKGOUT"
     chmod 700 "$PKGOUT"
     pushd "$PKGOUT"
