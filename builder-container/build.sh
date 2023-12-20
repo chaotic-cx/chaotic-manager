@@ -6,6 +6,9 @@ PKGOUT="/home/builder/pkgout/"
 PACKAGE="$1"
 BUILDDIR="/home/builder/build/"
 
+# shellcheck source=/dev/null
+source ./interfere.sh
+
 function setup-package-repo() {
     if [ -z "$PACKAGE_REPO" ]; then PACKAGE_REPO="https://gitlab.com/garuda-linux/pkgsbuilds-aur.git"; fi
     if [ ! -d /pkgbuilds ]; then mkdir /pkgbuilds; fi
@@ -49,4 +52,5 @@ function build-pkg() {
 
 setup-package-repo
 setup-buildenv
+interference-apply
 build-pkg
