@@ -2,9 +2,10 @@
 
 set -ex
 
-pushd builder-container
-./build-test-container.sh
-popd
+# FIXME
+#pushd builder-container
+#./build-test-container.sh
+#popd
 
 SHARED_PATH="$(pwd)/temp/shared"
 REPO_PATH="$(pwd)/temp/repo_root"
@@ -36,7 +37,6 @@ services:
             - DOCKER_MODS=linuxserver/mods:openssh-server-ssh-tunnel # enable AllowTcpForwarding here
         volumes:
             - ./temp/landing_zone:$(pwd)/temp/landing_zone
-            - ./container_init:/etc/cont-init.d/01-container_init.sh
         image: lscr.io/linuxserver/openssh-server:latest
         entrypoint: bash -c "chown -R 1000:1000 '$(pwd)/temp/landing_zone' && exec /init"
     chaotic-runner:

@@ -36,7 +36,7 @@ export async function startWebServer(port: number, connection: RedisConnection) 
             return;
         }
     
-        var unref: [] = [];
+        var unref: any[] = [];
     
         const subscribable = "build-logs." + id + "." + timestamp;
     
@@ -49,6 +49,7 @@ export async function startWebServer(port: number, connection: RedisConnection) 
                 emitter.removeListener('ended', unrefable);
             }
         };
+        unref.push(closer);
         res.once('close', closer);
         res.once('finish', closer);
     
@@ -70,6 +71,8 @@ export async function startWebServer(port: number, connection: RedisConnection) 
                 res.end();
         }
     
+        unref.push(forwarder);
+        unref.push(emitter_listener);
         subscriber.on("message", forwarder);
         emitter.once('ended', emitter_listener);
     
@@ -104,7 +107,10 @@ export async function startWebServer(port: number, connection: RedisConnection) 
         return await getOrStreamLog(req, res);
     });
 
-    app.use(express.static('public'));
+    app.use(express.static('public', {
+        // 1 day in milliseconds
+        maxAge: 1000 * 60 * 60 * 24
+    }));
 
     app.listen(port, () => {
         console.log(`Web server listening on port ${port}`);
