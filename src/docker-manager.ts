@@ -1,6 +1,7 @@
 import to from 'await-to-js';
 import Docker from 'dockerode';
 import {Mutex} from 'async-mutex';
+import { Stream } from 'stream';
 
 export class DockerManager {
   docker: Docker = new Docker();
@@ -59,9 +60,16 @@ export class DockerManager {
     return imagename;
   }
 
-  async run(imagename: string, args: string[], binds: string[] = [], env: string[] = []) {
+  async run(imagename: string, args: string[], binds: string[] = [], env: string[] = [], logfunc: (arg: Buffer) => void = console.log) {
     const image = await this.getImage(imagename);
-    const out = await to(this.docker.run(image, args, process.stdout, {
+
+    const stream = new Stream.Writable();
+    stream._write = (chunk, encoding, next) => {
+      logfunc(chunk.toString());
+      next();
+    };
+
+    const out = await to(this.docker.run(image, args, stream, {
       HostConfig: {
           AutoRemove: true,
           Binds: binds,

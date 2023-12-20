@@ -6,18 +6,7 @@ import path from 'path';
 import { Client } from 'node-scp';
 import { RemoteSettings, current_version } from './types';
 import { DockerManager } from './docker-manager';
-
-// Console.log immitation that saves to a variable instead of stdout
-class SshLogger {
-    logs: string[] = [];
-
-    log(arg: any): void {
-        this.logs.push(arg);
-    }
-    dump(): string {
-        return this.logs.join('\n');
-    }
-}
+import { BuildsRedisLogger, SshLogger } from './logging';
 
 function ensurePathClean(dir: string): void {
     if (fs.existsSync(dir))
@@ -82,30 +71,34 @@ export default function createBuilder(connection: RedisConnection): Worker {
     const runtime_settings : { settings: RemoteSettings | null } = { settings: null };
 
     const worker = new Worker("builds", async (job: Job) => {
-        console.log(`Processing job ${job.id}`);
+        if (job.id === undefined)
+            throw new Error('Job ID is undefined');
+        const logger = new BuildsRedisLogger(connection, job.id, job.timestamp);
+
+        logger.log(`Processing build job ${job.id} at ${new Date().toISOString()}`);
         // Copy settings
         const remote_settings: RemoteSettings = structuredClone(runtime_settings.settings) as RemoteSettings;
 
         ensurePathClean(mount);
         const [err, out] = await docker_manager.run(remote_settings.builder.image, ["build", String(job.id)], [shared_pkgout + ':/home/builder/pkgout', shared_sources + ':/pkgbuilds'], [
             "PACKAGE_REPO=" + remote_settings.builder.package_repo,
-        ]);
+        ], logger.raw_log.bind(logger));
 
         if (err || out.StatusCode !== undefined) {
-            console.log(`Job ${job.id} failed`);
+            logger.log(`Job ${job.id} failed`);
             throw new Error('Building failed.');
         }
         else
-            console.log(`Finished build ${job.id}. Uploading...`);
+            logger.log(`Finished build ${job.id}. Uploading...`);
 
-        const logger = new SshLogger();
+        const sshlogger = new SshLogger();
         try {
             const client = await Client({
                 host: String(remote_settings.database.ssh.host),
                 port: Number(remote_settings.database.ssh.port),
                 username: String(remote_settings.database.ssh.user),
                 privateKey: fs.readFileSync('sshkey'),
-                debug: logger.log.bind(logger)
+                debug: sshlogger.log.bind(sshlogger)
             })
             await client.uploadDir(
                 mount,
@@ -113,22 +106,24 @@ export default function createBuilder(connection: RedisConnection): Worker {
             )
             client.close()
         } catch (e) {
-            console.error(`Failed to upload ${job.id}: ${e}`);
-            console.error(logger.dump());
+            logger.error(`Failed to upload ${job.id}: ${e}`);
+            // This does not get logged to redis
+            console.error(sshlogger.dump());
             console.log("End of ssh log.");
             throw new Error('Upload failed.');
         }
-        console.log(`Finished upload ${job.id}. Scheduling database job...`);
+        logger.log(`Finished upload ${job.id}.`);
         await database_queue.add("database", {
             arch: job.data.arch,
             repo: job.data.repo,
-            packages: fs.readdirSync(mount)
+            packages: fs.readdirSync(mount),
+            timestamp: job.timestamp
         }, {
             jobId: job.id,
             removeOnComplete: true,
             removeOnFail: true
         });
-        console.log(`Job ${job.id} finished.`);
+        logger.log(`Build job ${job.id} finished. Scheduled database job at ${new Date().toISOString()}...`);
     }, { connection });
     worker.pause();
 

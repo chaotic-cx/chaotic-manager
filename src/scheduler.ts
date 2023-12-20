@@ -8,9 +8,10 @@ export default function schedulePackage(connection: RedisConnection, arch: strin
 export async function schedulePackages(connection: RedisConnection, arch: string, repo: string, packages: string[]): Promise<void> {
     const queue = new Queue("builds", { connection });
     const list: { name: string, data: any, opts?: JobsOptions }[] = [];
+    const timestamp = Date.now();
     packages.forEach((pkg) => {
         list.push({
-            name: pkg,
+            name: String(timestamp),
             data: {
                 arch: arch,
                 repo: repo
@@ -18,7 +19,8 @@ export async function schedulePackages(connection: RedisConnection, arch: string
             opts: {
                 jobId: pkg,
                 removeOnComplete: true,
-                removeOnFail: true
+                removeOnFail: true,
+                timestamp: timestamp
             }
         });
     });

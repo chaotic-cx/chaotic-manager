@@ -65,7 +65,7 @@ services:
             - DATABASE_PORT=${DATABASE_PORT}
             - DATABASE_USER=${DATABASE_USER}
         image: registry.gitlab.com/garuda-linux/tools/chaotic-manager/manager
-        command: database
+        command: database --web-port 8080
 EOM
 
 docker build -t registry.gitlab.com/garuda-linux/tools/chaotic-manager/manager .

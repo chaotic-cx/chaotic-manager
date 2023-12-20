@@ -15,4 +15,6 @@ export type RemoteSettings = {
     version: number;
 };
 
-export const current_version = 2;
+export const current_version = 3;
+
+export const SEVEN_DAYS = 60 * 60 * 24 * 7;

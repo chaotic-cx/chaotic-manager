@@ -4,11 +4,13 @@ import createBuilder from './builder';
 import createDatabaseWorker from './database';
 import { schedulePackages } from './scheduler';
 import * as commandLineArgs from 'command-line-args';
+import { startWebServer } from './web';
 
 const mainDefinitions = [
     { name: 'command', defaultOption: true },
     { name: 'arch', type: String },
-    { name: 'repo', type: String }
+    { name: 'repo', type: String },
+    { name: 'web-port', type: Number },
 ];
 const mainOptions = commandLineArgs.default(mainDefinitions, { stopAtFirstUnknown: true });
 
@@ -45,7 +47,14 @@ async function main(): Promise<void> {
                 return process.exit(1);
             }
             await connection.connect();
+            if (typeof mainOptions['web-port'] !== 'undefined') {
+                startWebServer(Number(mainOptions['web-port']), connection);
+            }
             createDatabaseWorker(connection);
+            break;
+        case 'web':
+            await connection.connect();
+            startWebServer(Number(mainOptions['web-port']) || 8080, connection);
             break;
         default:
             console.error('Invalid command');

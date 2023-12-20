@@ -1,8 +1,9 @@
 
-import { Worker, Job, UnrecoverableError } from 'bullmq';
+import { Worker, Job, UnrecoverableError, QueueEvents, Queue } from 'bullmq';
 import RedisConnection from 'ioredis';
-import { RemoteSettings, current_version } from './types';
+import { RemoteSettings, SEVEN_DAYS, current_version } from './types';
 import { DockerManager } from './docker-manager';
+import { BuildsRedisLogger } from './logging';
 
 async function publishSettingsObject(connection: RedisConnection, settings: RemoteSettings): Promise<void> {
     const subscriber = connection.duplicate();
@@ -46,29 +47,51 @@ export default function createDatabaseWorker(connection: RedisConnection): Worke
 
     const docker_manager = new DockerManager();
     const worker = new Worker("database", async (job: Job) => {
-        console.log(`Processing job ${job.id}`);
+        if (job.id === undefined)
+            throw new Error('Job ID is undefined');
+        const logger = new BuildsRedisLogger(connection, job.id, job.data.timestamp);
+        logger.log(`Processing database job ${job.id} at ${new Date().toISOString()}`);
         const arch = job.data.arch;
         const repo = job.data.repo;
         const packages: string[] = job.data.packages;
 
         if (packages.length === 0) {
-            console.log(`Job ${job.id} had no packages to add.`);
+            logger.log(`Job ${job.id} had no packages to add.`);
             throw new UnrecoverableError('No packages to add.');
         }
 
-        const [err, out] = await docker_manager.run(settings.builder.image, ["repo-add", arch, "/landing_zone", "/repo_root", repo].concat(packages), [ `${landing_zone}:/landing_zone`, `${repo_root}:/repo_root`, `${gpg}:/root/.gnupg` ]);
+        const [err, out] = await docker_manager.run(settings.builder.image, ["repo-add", arch, "/landing_zone", "/repo_root", repo].concat(packages), [ `${landing_zone}:/landing_zone`, `${repo_root}:/repo_root`, `${gpg}:/root/.gnupg` ], [], logger.raw_log.bind(logger));
 
         if (err)
-            console.error(err);
+            logger.error(err);
 
         if (err || out.StatusCode !== undefined) {
-            console.log(`Job ${job.id} failed`);
+            logger.log(`Job ${job.id} failed at ${new Date().toISOString()}`);
             throw new Error('repo-add failed.');
         } else {
-            console.log(`Finished job ${job.id}.`);
+            logger.log(`Finished job ${job.id} at ${new Date().toISOString()}.`);
         }
     }, { connection });
     worker.pause();
+
+    const builds_queue_events = new QueueEvents("builds", { connection });
+    const builds_queue = new Queue("builds", { connection });
+
+    builds_queue_events.on("added", async ({ jobId, name }) => {
+        // Init log
+        await connection.pipeline().setex("build-logs:" + jobId + ":" + name, SEVEN_DAYS, `Added to build queue at ${new Date().toISOString()}. Waiting for builder...\r\n`).setex("build-logs:" + jobId + ":default", SEVEN_DAYS, name).exec().catch(() => { });
+    });
+    /* TODO: Implement notifiying gitlab
+    builds_queue_events.on("active", async ({ jobId }) => {
+    });
+    */
+    builds_queue_events.on("stalled", async ({ jobId }) => {
+        await builds_queue.getJob(jobId).then(async (job) => {
+            if (job === undefined)
+                return;
+            await connection.pipeline().append("build-logs:" + jobId + ":" + job.timestamp, `Job stalled at ${new Date().toISOString()}\r\n`).expire("build-logs:" + jobId + ":default", SEVEN_DAYS).exec().catch(() => { });
+        }).catch(() => { });
+    });
 
     publishSettingsObject(connection, settings);
 
