@@ -9,12 +9,22 @@ export type RemoteSettings = {
         landing_zone: string,
     };
     builder: {
-        image: string,
-        package_repo: string,
-    }
+        image: string
+    },
+    repos: {
+        [key: string]: {
+            url: string
+        }
+    },
     version: number;
 };
 
-export const current_version = 3;
+export type JobData = {
+    arch: string,
+    srcrepo: string | undefined,
+    timestamp: number,
+};
+
+export const current_version = 4;
 
 export const SEVEN_DAYS = 60 * 60 * 24 * 7;

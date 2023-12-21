@@ -1,9 +1,10 @@
 
-import { Worker, Job, UnrecoverableError, QueueEvents, Queue } from 'bullmq';
+import { Worker, Job, UnrecoverableError, QueueEvents, Queue, tryCatch } from 'bullmq';
 import RedisConnection from 'ioredis';
 import { RemoteSettings, SEVEN_DAYS, current_version } from './types';
 import { DockerManager } from './docker-manager';
 import { BuildsRedisLogger } from './logging';
+import { RepoManager } from './repo-manager';
 
 async function publishSettingsObject(connection: RedisConnection, settings: RemoteSettings): Promise<void> {
     const subscriber = connection.duplicate();
@@ -27,7 +28,40 @@ export default function createDatabaseWorker(connection: RedisConnection): Worke
     const database_user = process.env.DATABASE_USER || 'root';
 
     const builder_image = process.env.BUILDER_IMAGE || 'registry.gitlab.com/garuda-linux/tools/chaotic-manager/builder:latest';
-    const package_repo = process.env.PACKAGE_REPO || 'https://gitlab.com/garuda-linux/pkgsbuilds-aur.git';
+    
+    const base_logs_url = process.env.BASE_LOGS_URL;
+    var package_repos = process.env.PACKAGE_REPOS;
+    const package_repos_notifiers = process.env.PACKAGE_REPO_NOTIFIERS;
+
+    var repo_manager = new RepoManager(base_logs_url ? new URL(base_logs_url) : undefined);
+
+    if (package_repos)
+    {
+        try {
+            var obj = JSON.parse(package_repos);
+            repo_manager.fromObject(obj);
+        } catch (error) {
+            console.error(error);
+            throw new Error("Invalid package repos.");
+        }
+    }
+    if (!package_repos)
+    {
+        repo_manager.fromObject({
+            "chaotic-aur": {
+                "url": "https://gitlab.com/garuda-linux/pkgsbuilds-aur"
+            },
+        });
+    }
+
+    if (package_repos_notifiers)
+    {
+        try {
+            var obj = JSON.parse(package_repos_notifiers);
+            repo_manager.fromObject(obj);
+        } catch (error) {
+        }
+    }
 
     const settings: RemoteSettings = {
         database: {
@@ -40,8 +74,8 @@ export default function createDatabaseWorker(connection: RedisConnection): Worke
         },
         builder: {
             image: builder_image,
-            package_repo: package_repo
         },
+        repos: repo_manager.toObject(),
         version: current_version
     };
 
@@ -49,7 +83,9 @@ export default function createDatabaseWorker(connection: RedisConnection): Worke
     const worker = new Worker("database", async (job: Job) => {
         if (job.id === undefined)
             throw new Error('Job ID is undefined');
-        const logger = new BuildsRedisLogger(connection, job.id, job.data.timestamp);
+        const logger = new BuildsRedisLogger(connection);
+        logger.fromJob(job);
+
         logger.log(`Processing database job ${job.id} at ${new Date().toISOString()}`);
         const arch = job.data.arch;
         const repo = job.data.repo;
@@ -78,19 +114,15 @@ export default function createDatabaseWorker(connection: RedisConnection): Worke
     const builds_queue = new Queue("builds", { connection });
 
     builds_queue_events.on("added", async ({ jobId, name }) => {
-        // Init log
-        await connection.pipeline().setex("build-logs:" + jobId + ":" + name, SEVEN_DAYS, `Added to build queue at ${new Date().toISOString()}. Waiting for builder...\r\n`).setex("build-logs:" + jobId + ":default", SEVEN_DAYS, name).exec().catch(() => { });
+        const logger = new BuildsRedisLogger(connection);
+        await logger.fromJobID(jobId, builds_queue);
+        logger.setDefault();
+        logger.log(`Added to build queue at ${new Date().toISOString()}. Waiting for builder...`);
     });
-    /* TODO: Implement notifiying gitlab
-    builds_queue_events.on("active", async ({ jobId }) => {
-    });
-    */
     builds_queue_events.on("stalled", async ({ jobId }) => {
-        await builds_queue.getJob(jobId).then(async (job) => {
-            if (job === undefined)
-                return;
-            await connection.pipeline().append("build-logs:" + jobId + ":" + job.timestamp, `Job stalled at ${new Date().toISOString()}\r\n`).expire("build-logs:" + jobId + ":default", SEVEN_DAYS).exec().catch(() => { });
-        }).catch(() => { });
+        const logger = new BuildsRedisLogger(connection);
+        await logger.fromJobID(jobId, builds_queue);
+        logger.log(`Job stalled at ${new Date().toISOString()}`);
     });
 
     publishSettingsObject(connection, settings);

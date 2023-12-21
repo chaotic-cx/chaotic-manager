@@ -4,9 +4,11 @@ import RedisConnection from 'ioredis';
 import fs from 'fs';
 import path from 'path';
 import { Client } from 'node-scp';
-import { RemoteSettings, current_version } from './types';
+import { RemoteSettings, current_version, JobData } from './types';
 import { DockerManager } from './docker-manager';
 import { BuildsRedisLogger, SshLogger } from './logging';
+import { RepoManager } from './repo-manager';
+import { splitJobId } from './utils';
 
 function ensurePathClean(dir: string): void {
     if (fs.existsSync(dir))
@@ -73,18 +75,28 @@ export default function createBuilder(connection: RedisConnection): Worker {
     const worker = new Worker("builds", async (job: Job) => {
         if (job.id === undefined)
             throw new Error('Job ID is undefined');
-        const logger = new BuildsRedisLogger(connection, job.id, job.timestamp);
+        
+        const { target_repo, pkgbase } = splitJobId(job.id);
+        const logger = new BuildsRedisLogger(connection);
+        logger.fromJob(job);
 
         logger.log(`Processing build job ${job.id} at ${new Date().toISOString()}`);
         // Copy settings
         const remote_settings: RemoteSettings = structuredClone(runtime_settings.settings) as RemoteSettings;
 
+        const jobdata: JobData = job.data;
+        const repo_manager: RepoManager = new RepoManager(undefined);
+        repo_manager.fromObject(remote_settings.repos);
+        const src_repo = repo_manager.getRepo(jobdata.srcrepo);
+
         ensurePathClean(mount);
-        const [err, out] = await docker_manager.run(remote_settings.builder.image, ["build", String(job.id)], [shared_pkgout + ':/home/builder/pkgout', shared_sources + ':/pkgbuilds'], [
-            "PACKAGE_REPO=" + remote_settings.builder.package_repo,
+        const [err, out] = await docker_manager.run(remote_settings.builder.image, ["build", pkgbase], [shared_pkgout + ':/home/builder/pkgout', shared_sources + ':/pkgbuilds'], [
+            "PACKAGE_REPO_ID=" + src_repo.id,
+            "PACKAGE_REPO_URL=" + src_repo.getUrl(),
         ], logger.raw_log.bind(logger));
 
-        if (err || out.StatusCode !== undefined) {
+        const file_list = fs.readdirSync(mount);
+        if (err || out.StatusCode !== undefined || file_list.length === 0) {
             logger.log(`Job ${job.id} failed`);
             throw new Error('Building failed.');
         }
@@ -114,14 +126,15 @@ export default function createBuilder(connection: RedisConnection): Worker {
         }
         logger.log(`Finished upload ${job.id}.`);
         await database_queue.add("database", {
-            arch: job.data.arch,
-            repo: job.data.repo,
-            packages: fs.readdirSync(mount),
-            timestamp: job.timestamp
+            arch: jobdata.arch,
+            repo: target_repo,
+            packages: file_list,
+            timestamp: jobdata.timestamp,
+            pkgbase: pkgbase
         }, {
             jobId: job.id,
             removeOnComplete: true,
-            removeOnFail: true
+            removeOnFail: { age: 5 },
         });
         logger.log(`Build job ${job.id} finished. Scheduled database job at ${new Date().toISOString()}...`);
     }, { connection });

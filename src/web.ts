@@ -75,16 +75,31 @@ export async function startWebServer(port: number, connection: RedisConnection) 
         unref.push(emitter_listener);
         subscriber.on("message", forwarder);
         emitter.once('ended', emitter_listener);
-    
-        const jobs = await Promise.all([builder_queue.getJob(id), database_queue.getJob(id)]);
+
         var busy: boolean = false;
-        for (const job of jobs) {
-            if (!job || job.timestamp !== Number(timestamp))
-                continue;
-            const state = await job.getState();
-            if (['active', 'waiting'].includes(state)) {
-                busy = true;
+        var [err, active] = await to(connection.keys(`bull:[^:]*:[^:]*/${id}:lock`));
+        console.log(err, active)
+        if (active && active.length > 0) {
+            var full_key;
+            for (const key of active) {
+                // Extract full key from redis via regex
+                const temp_key = key.match(/bull:[^:]*:([^:]*\/[^:]*):lock/)?.[1];
+                if (!temp_key)
+                    continue;
+                full_key = temp_key;
                 break;
+            }
+            if (full_key) {
+                const jobs = await Promise.all([builder_queue.getJob(full_key), database_queue.getJob(full_key)]);
+                for (const job of jobs) {
+                    if (!job || job.timestamp !== Number(timestamp))
+                        continue;
+                    const state = await job.getState();
+                    if (['active', 'waiting'].includes(state)) {
+                        busy = true;
+                        break;
+                    }
+                }
             }
         }
     

@@ -17,6 +17,8 @@ export class DockerManager {
   }
 
   async pullImage(imagename: string, locked: boolean = false) {
+    if (process.env.NODE_ENV === "development")
+      return;
     if (!locked)
       await this.pull_mutex.acquire();
     console.log("Downloading builder image...");

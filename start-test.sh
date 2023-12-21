@@ -2,10 +2,9 @@
 
 set -ex
 
-# FIXME
-#pushd builder-container
-#./build-test-container.sh
-#popd
+pushd builder-container
+./build-test-container.sh
+popd
 
 SHARED_PATH="$(pwd)/temp/shared"
 REPO_PATH="$(pwd)/temp/repo_root"
@@ -50,6 +49,7 @@ services:
             - REDIS_SSH_HOST=${DATABASE_HOST}
             - REDIS_SSH_PORT=${DATABASE_PORT}
             - REDIS_SSH_USER=${DATABASE_USER}
+            - NODE_ENV=development
         image: registry.gitlab.com/garuda-linux/tools/chaotic-manager/manager
         command: builder
     chaotic-database:
@@ -64,9 +64,12 @@ services:
             - DATABASE_HOST=${DATABASE_HOST}
             - DATABASE_PORT=${DATABASE_PORT}
             - DATABASE_USER=${DATABASE_USER}
+            - NODE_ENV=development
         image: registry.gitlab.com/garuda-linux/tools/chaotic-manager/manager
         command: database --web-port 8080
 EOM
+
+#             - PACKAGE_REPOS={"garuda":{"url":"https://gitlab.com/garuda-linux/pkgbuilds"}}
 
 docker build -t registry.gitlab.com/garuda-linux/tools/chaotic-manager/manager .
 
