@@ -10,6 +10,10 @@ class GitlabNotifier {
         return `${this.base_log_url}/${job.id}/${job.data.timestamp}`;
     }
 
+    async notify(job: Job) {
+    }
+}
+
 export class Repo {
     constructor(public id: string, public repo: string, private notifier: GitlabNotifier | undefined) {}
 

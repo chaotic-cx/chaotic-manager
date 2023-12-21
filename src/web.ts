@@ -77,13 +77,12 @@ export async function startWebServer(port: number, connection: RedisConnection) 
         emitter.once('ended', emitter_listener);
 
         var busy: boolean = false;
-        var [err, active] = await to(connection.keys(`bull:[^:]*:[^:]*/${id}:lock`));
-        console.log(err, active)
+        var [err, active] = await to(connection.keys(`bull:[^:]*:[^:]*/${id}`));
         if (active && active.length > 0) {
             var full_key;
             for (const key of active) {
                 // Extract full key from redis via regex
-                const temp_key = key.match(/bull:[^:]*:([^:]*\/[^:]*):lock/)?.[1];
+                const temp_key = key.match(/^bull:[^:]*:([^:]*\/[^:]*)$/)?.[1];
                 if (!temp_key)
                     continue;
                 full_key = temp_key;
