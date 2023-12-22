@@ -70,8 +70,9 @@ export async function startWebServer(port: number, manager: RedisConnectionManag
         }
     
         const emitter_listener = (jobId: string) => {
+            // Delay by 1 second to ensure the gather the last logs before we end the connection
             if (jobId === id)
-                res.end();
+                setTimeout(() => res.end(), 1000);
         }
     
         unref.push(forwarder);
