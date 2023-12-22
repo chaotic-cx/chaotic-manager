@@ -14,6 +14,13 @@ async function setup() {
     term.loadAddon(fitAddon);
     term.open(termdiv);
 
+    term.element!.addEventListener('focusin', () => {
+        term.blur();
+    });
+    term.element!.addEventListener('focus', () => {
+        term.blur();
+    });
+
     // Disable all key events
     term.attachCustomKeyEventHandler(() => {
         return false;
