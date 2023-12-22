@@ -1,9 +1,9 @@
-import RedisConnection from 'ioredis';
 import express, { Request, Response } from 'express';
-import { Job, Queue, QueueEvents } from 'bullmq';
+import { Queue, QueueEvents } from 'bullmq';
 import to from 'await-to-js';
 import EventEmitter from 'events';
 import { RedisConnectionManager } from './redis-connection-manager';
+import { splitJobId } from './utils';
 
 export async function startWebServer(port: number, manager: RedisConnectionManager) {
     const emitter = new EventEmitter();
@@ -13,10 +13,12 @@ export async function startWebServer(port: number, manager: RedisConnectionManag
     
     const database_queue_events = new QueueEvents("database", { connection });
     database_queue_events.on('completed', ({ jobId }) => {
-        emitter.emit('ended', jobId);
+        var { target_repo, pkgbase } = splitJobId(jobId);
+        emitter.emit('ended', pkgbase);
     });
     database_queue_events.on('failed', ({ jobId }) => {
-        emitter.emit('ended', jobId);
+        var { target_repo, pkgbase } = splitJobId(jobId);
+        emitter.emit('ended', pkgbase);
     });
 
     const builder_queue = new Queue("builds", { connection });
