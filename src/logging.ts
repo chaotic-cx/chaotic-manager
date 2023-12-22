@@ -39,7 +39,7 @@ export class BuildsRedisLogger {
         this.init = true;
     }
 
-    public async fromJobID(job_id: string, queue: Queue) {
+    public async fromJobID(job_id: string, queue: Queue): Promise<Job | undefined> {
         var [err, job] = await to(queue.getJob(job_id));
         if (err || !job) {
             const { target_repo, pkgbase } = splitJobId(job_id);
@@ -53,9 +53,11 @@ export class BuildsRedisLogger {
                 this.key = "build-logs:" + pkgbase + ":" + out;
                 this.timestamp = parseInt(out);
                 this.init = true;
+                return undefined;
             }
         } else {
             this.fromJob(job);
+            return job;
         }
     }
 

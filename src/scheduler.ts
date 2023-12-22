@@ -2,11 +2,11 @@ import { Queue, Job, JobsOptions } from 'bullmq';
 import RedisConnection from 'ioredis';
 import { JobData } from './types';
 
-export default function schedulePackage(connection: RedisConnection, arch: string, repo: string, name: string): Promise<void> {
-    return schedulePackages(connection, arch, repo, [ name ]);
+export default function schedulePackage(connection: RedisConnection, arch: string, repo: string, name: string, commit: string | undefined): Promise<void> {
+    return schedulePackages(connection, arch, repo, [ name ], commit);
 }
 
-export async function schedulePackages(connection: RedisConnection, arch: string, repo: string, packages: string[]): Promise<void> {
+export async function schedulePackages(connection: RedisConnection, arch: string, repo: string, packages: string[], commit: string | undefined): Promise<void> {
     const queue = new Queue("builds", { connection });
     const list: { name: string, data: any, opts?: JobsOptions }[] = [];
     const timestamp = Date.now();
@@ -21,6 +21,7 @@ export async function schedulePackages(connection: RedisConnection, arch: string
             arch: arch,
             srcrepo: src_repo,
             timestamp: timestamp,
+            commit: commit
         };
 
         list.push({
@@ -28,7 +29,7 @@ export async function schedulePackages(connection: RedisConnection, arch: string
             data: jobdata,
             opts: {
                 jobId: repo + "/" + pkg_base,
-                removeOnComplete: { age: 5 },
+                removeOnComplete: true,
                 removeOnFail: { age: 5 },
                 timestamp: timestamp
             }

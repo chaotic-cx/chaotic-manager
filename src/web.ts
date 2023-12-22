@@ -3,9 +3,13 @@ import express, { Request, Response } from 'express';
 import { Job, Queue, QueueEvents } from 'bullmq';
 import to from 'await-to-js';
 import EventEmitter from 'events';
+import { RedisConnectionManager } from './redis-connection-manager';
 
-export async function startWebServer(port: number, connection: RedisConnection) {
+export async function startWebServer(port: number, manager: RedisConnectionManager) {
     const emitter = new EventEmitter();
+
+    const connection = manager.getClient();
+    const subscriber = manager.getSubscriber();
     
     const database_queue_events = new QueueEvents("database", { connection });
     database_queue_events.on('completed', ({ jobId }) => {
@@ -17,9 +21,6 @@ export async function startWebServer(port: number, connection: RedisConnection) 
 
     const builder_queue = new Queue("builds", { connection });
     const database_queue = new Queue("database", { connection });
-
-    const subscriber = connection.duplicate();
-    await subscriber.connect();
 
     const app = express();
 

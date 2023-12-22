@@ -65,6 +65,7 @@ services:
             - DATABASE_PORT=${DATABASE_PORT}
             - DATABASE_USER=${DATABASE_USER}
             - NODE_ENV=development
+            - LOGS_URL=http://localhost:8080/logs.html
         image: registry.gitlab.com/garuda-linux/tools/chaotic-manager/manager
         command: database --web-port 8080
 EOM
@@ -73,6 +74,6 @@ EOM
 
 docker build -t registry.gitlab.com/garuda-linux/tools/chaotic-manager/manager .
 
-docker-compose up
+docker-compose up || true
 docker-compose down
 rm docker-compose.yml

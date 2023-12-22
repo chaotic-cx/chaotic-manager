@@ -1,25 +1,63 @@
 import to from 'await-to-js';
 import { Job } from 'bullmq';
 import { URL } from 'url';
+import { splitJobId } from './utils';
+
+export type GitlabState = 'pending' | 'running' | 'success' | 'failed' | 'canceled';
 
 class GitlabNotifier {
-    constructor (public gitlab_id: string, public token: string, public check_name: string, public base_log_url: string) {
+    constructor (public gitlab_id: string, public token: string, public check_name: string, public base_log_url: URL) {
     }
 
     getLogUrl(job: Job) {
-        return `${this.base_log_url}/${job.id}/${job.data.timestamp}`;
+        var { target_repo, pkgbase } = splitJobId(job.id as string);
+        var url = new URL(this.base_log_url.toString());
+        url.searchParams.set('timestamp', job.data.timestamp);
+        url.searchParams.set('id', pkgbase);
+        return {
+            url: url.toString(),
+            target_repo: target_repo,
+            pkgbase: pkgbase
+        }
     }
 
-    async notify(job: Job) {
+    async notify(job: Job, status?: GitlabState, description?: string) {
+        if (job.data.commit === undefined)
+            return;
+
+        var log_url = this.getLogUrl(job);
+
+        var [err, out] = await to(fetch(`https://gitlab.com/api/v4/projects/${this.gitlab_id}/statuses/${job.data.commit}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'PRIVATE-TOKEN': this.token
+            },
+            body: JSON.stringify({
+                state: status,
+                context: this.check_name.replace("%pkgbase%", log_url.pkgbase),
+                target_url: log_url.url,
+                description: description
+            })
+        }));
+        if (err || !out) {
+            console.error(err);
+            return;
+        }
+
+        if (out.status < 200 || out.status >= 300) {
+            console.error(await out.text());
+            return;
+        }
     }
 }
 
 export class Repo {
     constructor(public id: string, public repo: string, private notifier: GitlabNotifier | undefined) {}
 
-    async notify(job: Job) {
+    async notify(job: Job, status?: GitlabState, description?: string) {
         if (this.notifier !== undefined)
-            await this.notifier.notify(job);
+            await this.notifier.notify(job, status, description);
     }
 
     getUrl() {
@@ -69,13 +107,13 @@ export class RepoManager {
                 console.warn(`Notifier for non-existant repo ${key}`);
                 continue;
             }
-            this.repos[key].setNotifier(new GitlabNotifier(value['id'], value['token'], value['check_name'], this.base_log_url.toString()));
+            this.repos[key].setNotifier(new GitlabNotifier(value['id'], value['token'], value['check_name'], this.base_log_url));
         }
     }
 
-    async notify(job: Job) {
+    async notify(job: Job, status?: GitlabState, description?: string) {
         if (typeof this.repos[job.data.repo] !== 'undefined')
-            await this.repos[job.data.repo].notify(job);
+            await this.repos[job.data.repo].notify(job, status, description);
     }
 
     getRepo(repo: string | undefined) {

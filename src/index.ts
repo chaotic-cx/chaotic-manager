@@ -1,3 +1,6 @@
+if (!process.env.NODE_ENV)
+    process.env.NODE_ENV = "production";
+
 import { Worker } from 'bullmq';
 import IORedis from 'ioredis';
 import createBuilder from './builder';
@@ -5,12 +8,14 @@ import createDatabaseWorker from './database';
 import { schedulePackages } from './scheduler';
 import * as commandLineArgs from 'command-line-args';
 import { startWebServer } from './web';
+import { RedisConnectionManager } from './redis-connection-manager';
 
 const mainDefinitions = [
     { name: 'command', defaultOption: true },
     { name: 'arch', type: String },
     { name: 'repo', type: String },
     { name: 'web-port', type: Number },
+    { name: 'commit', type: String },
 ];
 const mainOptions = commandLineArgs.default(mainDefinitions, { stopAtFirstUnknown: true });
 
@@ -30,7 +35,7 @@ async function main(): Promise<void> {
                 process.exit(1);
             }
             await connection.connect();
-            await schedulePackages(connection, mainOptions.arch || 'x86_64', mainOptions.repo || 'chaotic-aur', mainOptions._unknown);
+            await schedulePackages(connection, mainOptions.arch || 'x86_64', mainOptions.repo || 'chaotic-aur', mainOptions._unknown, mainOptions.commit);
             connection.quit();
             return;
         case 'builder':
@@ -39,7 +44,8 @@ async function main(): Promise<void> {
                 return process.exit(1);
             }
             await connection.connect();
-            workers.push(createBuilder(connection));
+            var redis_connection_manager = new RedisConnectionManager(connection);
+            workers.push(createBuilder(redis_connection_manager));
             break;
         case 'database':
             if (!process.env.LANDING_ZONE_PATH || !process.env.REPO_PATH || !process.env.GPG_PATH || !process.env.DATABASE_HOST || !process.env.DATABASE_PORT || !process.env.DATABASE_USER) {
@@ -47,14 +53,16 @@ async function main(): Promise<void> {
                 return process.exit(1);
             }
             await connection.connect();
+            var redis_connection_manager = new RedisConnectionManager(connection);
             if (typeof mainOptions['web-port'] !== 'undefined') {
-                startWebServer(Number(mainOptions['web-port']), connection);
+                startWebServer(Number(mainOptions['web-port']), redis_connection_manager);
             }
-            createDatabaseWorker(connection);
+            createDatabaseWorker(redis_connection_manager);
             break;
         case 'web':
             await connection.connect();
-            startWebServer(Number(mainOptions['web-port']) || 8080, connection);
+            var redis_connection_manager = new RedisConnectionManager(connection);
+            startWebServer(Number(mainOptions['web-port']) || 8080, redis_connection_manager);
             break;
         default:
             console.error('Invalid command');

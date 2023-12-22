@@ -9,6 +9,7 @@ import { DockerManager } from './docker-manager';
 import { BuildsRedisLogger, SshLogger } from './logging';
 import { RepoManager } from './repo-manager';
 import { splitJobId } from './utils';
+import { RedisConnectionManager } from './redis-connection-manager';
 
 function ensurePathClean(dir: string): void {
     if (fs.existsSync(dir))
@@ -16,14 +17,15 @@ function ensurePathClean(dir: string): void {
     fs.mkdirSync(dir);
 }
 
-function requestRemoteConfig(connection: RedisConnection, worker: Worker, docker: DockerManager, config: any): Promise<void> {
+function requestRemoteConfig(manager: RedisConnectionManager, worker: Worker, docker: DockerManager, config: any): Promise<void> {
     return new Promise<void>(async (resolve, reject) => { 
         const database_host = process.env.DATABASE_HOST || null;
         const database_port = Number(process.env.DATABASE_PORT || 22);
         const database_user = process.env.DATABASE_USER || null;
         var init: boolean = true;
 
-        const subscriber = connection.duplicate();
+        const subscriber = manager.getSubscriber();
+        const connection = manager.getClient();
         subscriber.on("message", async (channel: string, message: string) => {
             if (channel === "config-response") {
                 if (!worker.isPaused()) {
@@ -62,10 +64,12 @@ function requestRemoteConfig(connection: RedisConnection, worker: Worker, docker
     });
 }
 
-export default function createBuilder(connection: RedisConnection): Worker {
+export default function createBuilder(redis_connection_manager: RedisConnectionManager): Worker {
     const shared_pkgout: string = path.join(process.env.SHARED_PATH || '', 'pkgout');
     const shared_sources: string = path.join(process.env.SHARED_PATH || '', 'sources');
     const mount = "/shared/pkgout"
+
+    const connection = redis_connection_manager.getClient();
 
     const docker_manager = new DockerManager();
     const database_queue = new Queue("database", { connection });
@@ -130,17 +134,18 @@ export default function createBuilder(connection: RedisConnection): Worker {
             repo: target_repo,
             packages: file_list,
             timestamp: jobdata.timestamp,
-            pkgbase: pkgbase
+            pkgbase: pkgbase,
+            commit: jobdata.commit,
         }, {
             jobId: job.id,
             removeOnComplete: true,
-            removeOnFail: { age: 5 },
+            removeOnFail: true,
         });
         logger.log(`Build job ${job.id} finished. Scheduled database job at ${new Date().toISOString()}...`);
     }, { connection });
     worker.pause();
 
-    requestRemoteConfig(connection, worker, docker_manager, runtime_settings).then(async () => {
+    requestRemoteConfig(redis_connection_manager, worker, docker_manager, runtime_settings).then(async () => {
         worker.resume();
         console.log("Worker ready to process jobs.");
         // In general, avoid putting logic here that can't be changed via remote config update dynamically

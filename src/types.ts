@@ -23,6 +23,7 @@ export type JobData = {
     arch: string,
     srcrepo: string | undefined,
     timestamp: number,
+    commit: string | undefined
 };
 
 export const current_version = 4;
