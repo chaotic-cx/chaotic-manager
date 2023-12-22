@@ -10,9 +10,16 @@ function special-interference-needed() {
 	for interfere in PKGBUILD.append PKGBUILD.prepend interfere.patch prepare; do
 		if [[ -e "${BUILDDIR}/${interfere}" ]]; then
 			echo "Interfering via ${interfere}.."
-			((_INTERFERE++)) || true
+			((_INTERFERE++))
 		fi
 	done
+
+	# In case we need to bump pkgrel
+	if [[ -e "${BUILDDIR}/.CI_CONFIG" ]]; then
+		# shellcheck source=/dev/null
+		source "${BUILDDIR}/.CI_CONFIG"
+		[[ -n "$CI_PKGREL" ]] && ((_INTERFERE++))
+	fi
 
 	if [[ "${_INTERFERE}" -gt 0 ]]; then
 		echo 'optdepends+=("chaotic-interfere")' >>"${BUILDDIR}"/PKGBUILD
@@ -104,6 +111,18 @@ function interference-apply() {
 
 	[[ -f "${BUILDDIR}/PKGBUILD.append" ]] &&
 		cat "${BUILDDIR}/PKGBUILD.append" >>"${BUILDDIR}/PKGBUILD"
+
+	if [[ -f "${BUILDDIR}/.CI_CONFIG" ]]; then
+		# shellcheck source=/dev/null
+		source "${BUILDDIR}/.CI_CONFIG"
+		if [[ -n "$CI_PKGREL" ]]; then
+			# shellcheck source=/dev/null
+			source PKGBUILD
+			# shellcheck disable=SC2154 # sourced from PKGBUILD
+			_NEW_PKGREL="$(printf "%s.%s" "$pkgrel" "$CI_PKGREL")"
+			sed -i "s/pkgrel=.*/pkgrel=${CI_PKGREL}/" "${BUILDDIR}/PKGBUILD"
+		fi
+	fi
 
 	return 0
 }
