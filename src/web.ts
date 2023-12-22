@@ -92,7 +92,7 @@ export async function startWebServer(port: number, manager: RedisConnectionManag
             if (full_key) {
                 const jobs = await Promise.all([builder_queue.getJob(full_key), database_queue.getJob(full_key)]);
                 for (const job of jobs) {
-                    if (!job || job.timestamp !== Number(timestamp))
+                    if (!job || !job.data || job.data.timestamp !== Number(timestamp))
                         continue;
                     const state = await job.getState();
                     if (['active', 'waiting'].includes(state)) {
