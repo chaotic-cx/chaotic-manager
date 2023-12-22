@@ -24,10 +24,14 @@ class GitlabNotifier {
     async notify(job: Job, status?: GitlabState, description?: string) {
         if (job.data.commit === undefined)
             return;
+        // format of job.data.commit is: commit:pipeline_id, but pipeline_id is optional
+        const commit_split = job.data.commit.split(':');
+        const commit = commit_split[0];
+        const pipeline_id = commit_split.length > 1 ? commit_split[1] : undefined;
 
         var log_url = this.getLogUrl(job);
 
-        var [err, out] = await to(fetch(`https://gitlab.com/api/v4/projects/${this.gitlab_id}/statuses/${job.data.commit}`, {
+        var [err, out] = await to(fetch(`https://gitlab.com/api/v4/projects/${this.gitlab_id}/statuses/${commit}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -37,7 +41,8 @@ class GitlabNotifier {
                 state: status,
                 context: this.check_name.replace("%pkgbase%", log_url.pkgbase),
                 target_url: log_url.url,
-                description: description
+                description: description,
+                pipeline_id
             })
         }));
         if (err || !out) {
