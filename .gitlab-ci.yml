@@ -14,6 +14,8 @@ check-lint:
     - pip install --break-system-packages yamllint
     - npm install -g markdownlint-cli
     - bash .ci/lint.sh || true # be graceful for now
+  rules:
+  - if: $UPDATE_BUILDER != "1"
 
 check-pr-commitizen:
   # Check the current commit message for compliance with commitizen
@@ -28,6 +30,8 @@ check-pr-commitizen:
     - pip install --break-system-packages commitizen
     - cz check --message "$CI_COMMIT_MESSAGE" >/tmp/cz_check || true # why does it return 1 if its actually 0?
     - grep "successful" /tmp/cz_check # ugly hack to workaround the above issue
+  rules:
+  - if: $UPDATE_BUILDER != "1"
 
 build-builder:
   # Used to deploy a new base Docker image for building purposes

@@ -35,7 +35,7 @@ async function setup() {
         return;
     }
 
-    var url = "/api/logs/" + id;
+    var url = "api/logs/" + id;
     var timestamp: string;
     if (query.has("timestamp") && /^\d+$/.test(timestamp = query.get("timestamp") as string))
         url += "/" + timestamp;
