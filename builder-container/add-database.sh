@@ -248,10 +248,15 @@ function post-deploy() {
   (clean-sigs -q) || true
   (clean-landing-zone -q) || true
 
+  # kill gpg-agent
+  gpgconf --kill gpg-agent
+
   return 0
 }
 
 check-env "$@"
+# delete gpg lock, we are guaranteed to be the only user of this container at any given time
+rm -f /root/.gnupg/public-keys.d/pubring.db.lock
 mkdir -p "$REPO_DIR"
 for pkg in "${PACKAGES[@]}"; do
   sign "$pkg"
