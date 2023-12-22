@@ -72,6 +72,7 @@ function build-pkg() {
 function check-pkg() {
     printf "\nChecking the package integrity with namcap...\n"
     namcap -i "$PKGOUT"/*.pkg.tar.zst
+    printf "\n"
 }
 
 setup-package-repo

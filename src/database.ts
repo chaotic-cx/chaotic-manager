@@ -90,7 +90,7 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
         const logger = new BuildsRedisLogger(connection);
         logger.fromJob(job);
 
-        logger.log(`Processing database job ${job.id} at ${new Date().toISOString()}`);
+        logger.log(`\r\nProcessing database job ${job.id} at ${new Date().toISOString()}`);
         const arch = job.data.arch;
         const repo = job.data.repo;
         const packages: string[] = job.data.packages;
