@@ -90,13 +90,16 @@ export default function createBuilder(redis_connection_manager: RedisConnectionM
 
         const jobdata: JobData = job.data;
         const repo_manager: RepoManager = new RepoManager(undefined);
-        repo_manager.fromObject(remote_settings.repos);
+        repo_manager.repoFromObject(remote_settings.repos);
+        repo_manager.targetRepoFromObject(remote_settings.target_repos);
         const src_repo = repo_manager.getRepo(jobdata.srcrepo);
 
         ensurePathClean(mount);
         const [err, out] = await docker_manager.run(remote_settings.builder.image, ["build", pkgbase], [shared_pkgout + ':/home/builder/pkgout', shared_sources + ':/pkgbuilds'], [
             "PACKAGE_REPO_ID=" + src_repo.id,
             "PACKAGE_REPO_URL=" + src_repo.getUrl(),
+            "EXTRA_PACMAN_REPOS=" + repo_manager.getTargetRepo(target_repo).repoToString(),
+            "EXTRA_PACMAN_KEYRINGS=" + repo_manager.getTargetRepo(target_repo).keyringsToBashArray(),
         ], logger.raw_log.bind(logger));
 
         const file_list = fs.readdirSync(mount);

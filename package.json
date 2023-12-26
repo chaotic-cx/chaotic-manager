@@ -29,7 +29,7 @@
     "xterm-addon-fit": "^0.8.0"
   },
   "scripts": {
-    "start": "tsc && node dist/index.js $@",
+    "start": "tsc && node dist/index.js",
     "build": "tsc && webpack"
   },
   "devDependencies": {

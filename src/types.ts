@@ -1,4 +1,9 @@
 
+export type PacmanRepo = {
+    name: string,
+    servers: string[],
+};
+
 export type RemoteSettings = {
     database: {
         ssh: {
@@ -16,6 +21,12 @@ export type RemoteSettings = {
             url: string
         }
     },
+    target_repos: {
+        [key: string]: {
+            extra_repos: PacmanRepo[],
+            extra_keyrings: string[]
+        }
+    },
     version: number;
 };
 
@@ -26,6 +37,6 @@ export type JobData = {
     commit: string | undefined
 };
 
-export const current_version = 4;
+export const current_version = 5;
 
 export const SEVEN_DAYS = 60 * 60 * 24 * 7;

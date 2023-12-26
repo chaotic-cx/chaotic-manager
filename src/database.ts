@@ -32,6 +32,7 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
     
     const base_logs_url = process.env.LOGS_URL;
     var package_repos = process.env.PACKAGE_REPOS;
+    var package_target_repos = process.env.PACKAGE_TARGET_REPOS;
     const package_repos_notifiers = process.env.PACKAGE_REPOS_NOTIFIERS;
 
     var repo_manager = new RepoManager(base_logs_url ? new URL(base_logs_url) : undefined);
@@ -40,7 +41,7 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
     {
         try {
             var obj = JSON.parse(package_repos);
-            repo_manager.fromObject(obj);
+            repo_manager.repoFromObject(obj);
         } catch (error) {
             console.error(error);
             throw new Error("Invalid package repos.");
@@ -48,11 +49,40 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
     }
     if (!package_repos)
     {
-        repo_manager.fromObject({
+        repo_manager.repoFromObject({
             "chaotic-aur": {
                 "url": "https://gitlab.com/garuda-linux/pkgsbuilds-aur"
             },
         });
+    }
+
+    if (package_target_repos)
+    {
+        try {
+            var obj = JSON.parse(package_target_repos);
+            repo_manager.targetRepoFromObject(obj);
+        } catch (error) {
+            console.error(error);
+            throw new Error("Invalid package repos.");
+        }
+    }
+    if (!package_target_repos)
+    {
+        repo_manager.targetRepoFromObject({
+            "chaotic-aur": {
+                "extra_repos": [
+                    {
+                        "name": "chaotic-aur",
+                        "servers": [
+                            "https://builds.garudalinux.org/repos/$repo/$arch"
+                        ]
+                    }
+                ],
+                "extra_keyrings": [
+                    "https://cdn-mirror.chaotic.cx/chaotic-aur/chaotic-keyring.pkg.tar.zst"
+                ]
+            }
+        })
     }
 
     if (package_repos_notifiers)
@@ -77,7 +107,8 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
         builder: {
             image: builder_image,
         },
-        repos: repo_manager.toObject(),
+        repos: repo_manager.repoToObject(),
+        target_repos: repo_manager.targetRepoToObject(),
         version: current_version
     };
 

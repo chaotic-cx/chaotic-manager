@@ -2,6 +2,7 @@ import to from 'await-to-js';
 import { Job } from 'bullmq';
 import { URL } from 'url';
 import { splitJobId } from './utils';
+import { PacmanRepo } from './types';
 
 export type GitlabState = 'pending' | 'running' | 'success' | 'failed' | 'canceled';
 
@@ -74,13 +75,70 @@ export class Repo {
     }
 }
 
+export class TargetRepo {
+    extra_repos: PacmanRepo[] = [ ];
+    extra_keyrings: URL[] = [ ];
+
+    constructor(public name: string) { }
+
+    fromObject(obj: any) {
+        if (typeof obj.extra_repos != 'undefined') {
+            if (!Array.isArray(obj.extra_repos))
+                throw new Error('Invalid extra_repos');
+            for (const repo of obj.extra_repos) {
+                if (typeof repo.name !== 'string' || !Array.isArray(repo.servers))
+                    throw new Error('Attempted to add invalid repo');
+            }
+            this.extra_repos = obj.extra_repos;
+        }
+        if (typeof obj.extra_keyrings != 'undefined') {
+            if (!Array.isArray(obj.extra_keyrings))
+                throw new Error('Invalid extra_keyrings');
+            for (var link of obj.extra_keyrings) {
+                if (typeof link !== 'string')
+                    throw new Error('Attempted to add invalid gpg link');
+                // Normalize link
+                link = new URL(link);
+            }
+            this.extra_keyrings = obj.extra_keyrings;
+        }
+    }
+
+    toObject() {
+        return {
+            extra_repos: this.extra_repos,
+            extra_keyrings: this.extra_keyrings.map((link) => link.toString())
+        };
+    };
+
+    repoToString(): string {
+        var out = '';
+        for (const repo of this.extra_repos) {
+            out += `[${repo.name}]\n`;
+            for (const server of repo.servers) {
+                out += `Server = ${server}\n`;
+            }
+        }
+        return out;
+    }
+
+    keyringsToBashArray(): string {
+        var out = '';
+        for (const link of this.extra_keyrings) {
+            out += link.toString() + " ";
+        }
+        return out;
+    }
+}
+
 export class RepoManager {
     repos: { [key: string]: Repo } = {};
+    target_repos: { [key: string]: TargetRepo } = {};
 
     constructor(public base_log_url: URL | undefined) {
     }
 
-    fromObject(obj: Object) {
+    repoFromObject(obj: Object) {
         for (const [key, value] of Object.entries(obj)) {
             if (typeof value.url !== 'string') {
                 throw new Error('Invalid repo object');
@@ -89,12 +147,27 @@ export class RepoManager {
         }
     }
 
-    toObject() {
+    targetRepoFromObject(obj: Object) {
+        for (const [key, value] of Object.entries(obj)) {
+            const repo = this.target_repos[key] = new TargetRepo(key);
+            repo.fromObject(value);
+        }
+    }
+
+    repoToObject() {
         var out: { [key: string]: { url: string } } = {};
         for (const [key, value] of Object.entries(this.repos)) {
             out[key] = {
                 url: value.getUrl()
             };
+        }
+        return out;
+    }
+
+    targetRepoToObject() {
+        var out: { [key: string]: { extra_repos: PacmanRepo[], extra_keyrings: string[] } } = {};
+        for (const [key, value] of Object.entries(this.target_repos)) {
+            out[key] = value.toObject();
         }
         return out;
     }
@@ -132,6 +205,13 @@ export class RepoManager {
             if (out === undefined)
                 throw new Error(`Repo ${repo} not found`);
         }
+        return out;
+    }
+
+    getTargetRepo(repo: string) {
+        var out = this.target_repos[repo];
+        if (out === undefined)
+            throw new Error(`Target repo ${repo} not found`);
         return out;
     }
 }

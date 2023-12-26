@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 
-set -e
-
 PKGOUT="/home/builder/pkgout/"
 PACKAGE="$1"
 BUILDDIR="/home/builder/build/"
@@ -9,11 +7,24 @@ BUILDDIR="/home/builder/build/"
 # shellcheck source=/dev/null
 source ./interfere.sh
 
-function setup-package-repo() {
-    printf "\nSetting up package repository...\n"
+set -eo pipefail
+
+function print-if-failed {
+    local output=""
+    local exit=0
+    output="$($@ 2>&1)" || exit=1
+    if [[ $exit -ne 0 ]]; then
+        echo "FATAL: Failed to execute $@:"
+        echo "$output"
+        return 1
+    fi
+}
+
+function setup-package-repo {
+    set -eo pipefail
     if [ -z "$PACKAGE_REPO_ID" ] || [ -z "$PACKAGE_REPO_URL" ]; then
         echo "FATAL: No package repository configured."
-        exit 1
+        return 1
     fi
     # Migration
     if [ -d /pkgbuilds/.git ]; then find /pkgbuilds -mindepth 1 -delete; fi
@@ -42,14 +53,16 @@ function setup-package-repo() {
     popd
 }
 
-function setup-buildenv() {
-    printf "\nSetting up build environment...\n"
+function setup-buildenv {
+    set -eo pipefail
     if [[ -z $PACKAGER ]]; then PACKAGER="Garuda Builder <team@garudalinux.org>"; fi
     if [[ -z $MAKEFLAGS ]]; then MAKEFLAGS="-j$(nproc)"; fi
-    if [[ -z $PACKAGE ]]; then exit 1; fi
+    if [[ -z $PACKAGE ]]; then return 1; fi
 
     echo "PACKAGER=\"$PACKAGER\"" >>/etc/makepkg.conf
     echo "MAKEFLAGS=$MAKEFLAGS" >>/etc/makepkg.conf
+
+    if [[ -v EXTRA_PACMAN_REPOS ]]; then echo "$EXTRA_PACMAN_REPOS" >>/etc/pacman.conf; fi
 
     if [[ ! -d "$PKGOUT" ]]; then mkdir -p "$PKGOUT"; fi
     chown builder:builder "$PKGOUT"
@@ -61,22 +74,27 @@ function setup-buildenv() {
     cp -rT "/pkgbuilds/${PACKAGE_REPO_ID}/${PACKAGE}" "${BUILDDIR}"
     chown -R builder:builder "${BUILDDIR}"
 
-    pacman -Syu --noconfirm
+    pacman-key --init || return 1
+    pacman -Syu --noconfirm || return 1
+    if [[ -v EXTRA_PACMAN_KEYRINGS ]]; then pacman -U --noconfirm ${EXTRA_PACMAN_KEYRINGS[@]} || return 1; fi
 }
 
-function build-pkg() {
+function build-pkg {
+    set -eo pipefail
     printf "\nBuilding package...\n"
-    sudo -D "${BUILDDIR}" -u builder PKGDEST="${PKGOUT}" makepkg -s --noconfirm || { echo "Failed to build package!" && exit 1; }
+    sudo -D "${BUILDDIR}" -u builder PKGDEST="${PKGOUT}" makepkg -s --noconfirm || { echo "Failed to build package!" && return 1; }
 }
 
-function check-pkg() {
+function check-pkg {
     printf "\nChecking the package integrity with namcap...\n"
     namcap -i "$PKGOUT"/*.pkg.tar.zst
     printf "\n"
 }
 
-setup-package-repo
-setup-buildenv
+echo "Setting up package repository..."
+print-if-failed setup-package-repo
+echo "Setting up build environment..."
+print-if-failed setup-buildenv
 interference-apply
 build-pkg
 check-pkg
