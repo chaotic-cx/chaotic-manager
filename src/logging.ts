@@ -1,7 +1,7 @@
 import { Job, Queue } from 'bullmq';
 import RedisConnection from 'ioredis';
 import { splitJobId } from './utils';
-import { JobData, SEVEN_DAYS } from './types';
+import { BuildJobData, SEVEN_DAYS } from './types';
 import to from 'await-to-js';
 
 // Console.log immitation that saves to a variable instead of stdout
@@ -29,7 +29,7 @@ export class BuildsRedisLogger {
     }
 
     public fromJob(job: Job) {
-        var job_data = job.data as JobData;
+        var job_data = job.data as BuildJobData;
         const { target_repo, pkgbase } = splitJobId(job.id as string);
 
         this.channel = "build-logs." + pkgbase + "." + job_data.timestamp;

@@ -1,10 +1,11 @@
 
 import { Worker, Job, UnrecoverableError, QueueEvents, Queue } from 'bullmq';
-import { RemoteSettings, JobData, current_version } from './types';
+import { RemoteSettings, BuildJobData, current_version, DatabaseJobData } from './types';
 import { DockerManager } from './docker-manager';
 import { BuildsRedisLogger } from './logging';
 import { RepoManager } from './repo-manager';
 import { RedisConnectionManager } from './redis-connection-manager';
+import { splitJobId } from './utils';
 
 async function publishSettingsObject(manager: RedisConnectionManager, settings: RemoteSettings): Promise<void> {
     const subscriber = manager.getSubscriber();
@@ -123,7 +124,7 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
 
         logger.log(`\r\nProcessing database job ${job.id} at ${new Date().toISOString()}`);
         const arch = job.data.arch;
-        const repo = job.data.repo;
+        const { target_repo, pkgbase } = splitJobId(job.id);
         const packages: string[] = job.data.packages;
 
         if (packages.length === 0) {
@@ -131,7 +132,7 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
             throw new UnrecoverableError('No packages to add.');
         }
 
-        const [err, out] = await docker_manager.run(settings.builder.image, ["repo-add", arch, "/landing_zone", "/repo_root", repo].concat(packages), [ `${landing_zone}:/landing_zone`, `${repo_root}:/repo_root`, `${gpg}:/root/.gnupg` ], [], logger.raw_log.bind(logger));
+        const [err, out] = await docker_manager.run(settings.builder.image, ["repo-add", arch, "/landing_zone", "/repo_root", target_repo].concat(packages), [ `${landing_zone}:/landing_zone`, `${repo_root}:/repo_root`, `${gpg}:/root/.gnupg` ], [], logger.raw_log.bind(logger));
 
         if (err)
             logger.error(err);
@@ -149,66 +150,86 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
     const builds_queue = new Queue("builds", { connection });
 
     builds_queue_events.on("added", async ({ jobId, name }) => {
-        const logger = new BuildsRedisLogger(connection);
-        var job = await logger.fromJobID(jobId, builds_queue);
-        logger.setDefault();
-        logger.log(`Added to build queue at ${new Date().toISOString()}. Waiting for builder...`);
-        if (job) {
-            const jobdata: JobData = job.data;
-            const repo = repo_manager.getRepo(jobdata.srcrepo);
-            // Wait 3 seconds before we make a request to the notifier. No point in changing the status within a few seconds.
-            await new Promise(resolve => setTimeout(resolve, 3000));
-            try {
+        try {
+            const logger = new BuildsRedisLogger(connection);
+            var job = await logger.fromJobID(jobId, builds_queue);
+            logger.setDefault();
+            logger.log(`Added to build queue at ${new Date().toISOString()}. Waiting for builder...`);
+            if (job) {
+                const jobdata: BuildJobData = job.data;
+                const repo = repo_manager.getRepo(jobdata.srcrepo);
+                // Wait 3 seconds before we make a request to the notifier. No point in changing the status within a few seconds.
+                await new Promise(resolve => setTimeout(resolve, 3000));
                 // There is a chance the job could disappear before we get here
                 if ((await job.getState()) == "waiting")
                     await repo.notify(job, "pending", "Waiting for builder...");
-            } catch (error) {
-                console.error(error);
             }
+        } catch (error) {
+            console.error(error);
         }
     });
     builds_queue_events.on("stalled", async ({ jobId }) => {
-        const logger = new BuildsRedisLogger(connection);
-        var job = await logger.fromJobID(jobId, builds_queue);
-        logger.log(`Job stalled at ${new Date().toISOString()}`);
-        if (job) {
-            const jobdata: JobData = job.data;
-            const repo = repo_manager.getRepo(jobdata.srcrepo);
-            await repo.notify(job, "failed", "Build stalled. Retrying...");
-            await repo.notify(job, "pending", "Build stalled. Retrying...");
+        try {
+            const logger = new BuildsRedisLogger(connection);
+            var job = await logger.fromJobID(jobId, builds_queue);
+            logger.log(`Job stalled at ${new Date().toISOString()}`);
+            if (job) {
+                const jobdata: BuildJobData = job.data;
+                const repo = repo_manager.getRepo(jobdata.srcrepo);
+                await repo.notify(job, "failed", "Build stalled. Retrying...");
+                await repo.notify(job, "pending", "Build stalled. Retrying...");
+            }
+        } catch (error) {
+            console.error(error);
         }
     });
     builds_queue_events.on("active", async ({ jobId }) => {
-        const logger = new BuildsRedisLogger(connection);
-        var job = await logger.fromJobID(jobId, builds_queue);
-        if (job) {
-            const jobdata: JobData = job.data;
-            const repo = repo_manager.getRepo(jobdata.srcrepo);
-            await repo.notify(job, "running", "Build in progress...");
+        try {
+            const logger = new BuildsRedisLogger(connection);
+            var job = await logger.fromJobID(jobId, builds_queue);
+            if (job) {
+                const jobdata: BuildJobData = job.data;
+                const repo = repo_manager.getRepo(jobdata.srcrepo);
+                await repo.notify(job, "running", "Build in progress...");
+            }
+        } catch (error) {
+            console.error(error);
         }
     });
     builds_queue_events.on("retries-exhausted", async ({ jobId }) => {
-        const logger = new BuildsRedisLogger(connection);
-        var job = await logger.fromJobID(jobId, builds_queue);
-        if (job) {
-            const jobdata: JobData = job.data;
-            const repo = repo_manager.getRepo(jobdata.srcrepo);
-            await repo.notify(job, "failed", "Build failed.");
-            job.remove();
+        try {
+            const logger = new BuildsRedisLogger(connection);
+            var job = await logger.fromJobID(jobId, builds_queue);
+            if (job) {
+                const jobdata: BuildJobData = job.data;
+                const repo = repo_manager.getRepo(jobdata.srcrepo);
+                await repo.notify(job, "failed", "Build failed.");
+                job.remove();
+            }
+        } catch (error) {
+            console.error(error);
         }
     });
 
     worker.on('completed', async (job: Job) => {
-        const jobdata: JobData = job.data;
-        const repo = repo_manager.getRepo(jobdata.srcrepo);
-        await repo.notify(job, "success", "Package successfully deployed.");
+        try {
+            const jobdata: DatabaseJobData = job.data;
+            const repo = repo_manager.getRepo(jobdata.srcrepo);
+            await repo.notify(job, "success", "Package successfully deployed.");
+        } catch (error) {
+            console.error(error);
+        }
     });
     worker.on('failed', async (job: Job | undefined) => {
-        if (!job)
-            return;
-        const jobdata: JobData = job.data;
-        const repo = repo_manager.getRepo(jobdata.srcrepo);
-        await repo.notify(job, "failed", "Error adding package to database.");
+        try {
+            if (!job)
+                return;
+            const jobdata: DatabaseJobData = job.data;
+            const repo = repo_manager.getRepo(jobdata.srcrepo);
+            await repo.notify(job, "failed", "Error adding package to database.");
+        } catch (error) {
+            console.error(error);
+        }
     });
 
     publishSettingsObject(redis_connection_manager, settings);

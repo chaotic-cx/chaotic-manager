@@ -30,11 +30,15 @@ export type RemoteSettings = {
     version: number;
 };
 
-export type JobData = {
+export type BuildJobData = {
     arch: string,
     srcrepo: string | undefined,
     timestamp: number,
     commit: string | undefined
+};
+
+export type DatabaseJobData = BuildJobData & {
+    packages: string[],
 };
 
 export const current_version = 5;

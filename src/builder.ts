@@ -4,7 +4,7 @@ import RedisConnection from 'ioredis';
 import fs from 'fs';
 import path from 'path';
 import { Client } from 'node-scp';
-import { RemoteSettings, current_version, JobData } from './types';
+import { RemoteSettings, current_version, BuildJobData, DatabaseJobData } from './types';
 import { DockerManager } from './docker-manager';
 import { BuildsRedisLogger, SshLogger } from './logging';
 import { RepoManager } from './repo-manager';
@@ -88,7 +88,7 @@ export default function createBuilder(redis_connection_manager: RedisConnectionM
         // Copy settings
         const remote_settings: RemoteSettings = structuredClone(runtime_settings.settings) as RemoteSettings;
 
-        const jobdata: JobData = job.data;
+        const jobdata: BuildJobData = job.data;
         const repo_manager: RepoManager = new RepoManager(undefined);
         repo_manager.repoFromObject(remote_settings.repos);
         repo_manager.targetRepoFromObject(remote_settings.target_repos);
@@ -132,14 +132,14 @@ export default function createBuilder(redis_connection_manager: RedisConnectionM
             throw new Error('Upload failed.');
         }
         logger.log(`Finished upload ${job.id}.`);
-        await database_queue.add("database", {
+        const db_job_data: DatabaseJobData = {
             arch: jobdata.arch,
-            repo: target_repo,
             packages: file_list,
             timestamp: jobdata.timestamp,
-            pkgbase: pkgbase,
             commit: jobdata.commit,
-        }, {
+            srcrepo: jobdata.srcrepo,
+        };
+        await database_queue.add("database", db_job_data, {
             jobId: job.id,
             removeOnComplete: true,
             removeOnFail: true,

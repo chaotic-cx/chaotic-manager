@@ -1,6 +1,6 @@
 import { Queue, Job, JobsOptions } from 'bullmq';
 import RedisConnection from 'ioredis';
-import { JobData } from './types';
+import { BuildJobData } from './types';
 
 export default function schedulePackage(connection: RedisConnection, arch: string, repo: string, name: string, commit: string | undefined): Promise<void> {
     return schedulePackages(connection, arch, repo, [ name ], commit);
@@ -17,7 +17,7 @@ export async function schedulePackages(connection: RedisConnection, arch: string
         const src_repo = pkg_split.length > 1 ? pkg_split[0] : undefined;
         const pkg_base = pkg_split.length > 1 ? pkg_split[1] : pkg_split[0];
 
-        var jobdata: JobData = {
+        var jobdata: BuildJobData = {
             arch: arch,
             srcrepo: src_repo,
             timestamp: timestamp,
@@ -30,8 +30,7 @@ export async function schedulePackages(connection: RedisConnection, arch: string
             opts: {
                 jobId: repo + "/" + pkg_base,
                 removeOnComplete: true,
-                removeOnFail: { age: 5 },
-                timestamp: timestamp
+                removeOnFail: { age: 5 }
             }
         });
     });
