@@ -15,10 +15,11 @@ function special-interference-needed() {
 	done
 
 	# In case we need to bump pkgrel
-	if [[ -e "${BUILDDIR}/.CI_CONFIG" ]]; then
-		# shellcheck source=/dev/null
-		source "${BUILDDIR}/.CI_CONFIG"
-		[[ -n "$CI_PKGREL" ]] && ((_INTERFERE++))
+	if [[ -f "${BUILDDIR}/.CI_CONFIG" ]]; then
+		if (grep -q "CI_PKGREL=" "${BUILDDIR}/.CI_CONFIG"); then
+			echo "Interfering via CI_PKGREL.."
+			((_INTERFERE++))
+		fi
 	fi
 
 	if [[ "${_INTERFERE}" -gt 0 ]]; then
