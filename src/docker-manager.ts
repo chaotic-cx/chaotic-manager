@@ -86,6 +86,9 @@ export class DockerManager {
       Env: env,
       AttachStderr: true,
       AttachStdout: true,
+      AttachStdin: false,
+      Tty: false,
+      OpenStdin: false,
     }));
 
     if (out[0])

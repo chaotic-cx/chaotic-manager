@@ -39,7 +39,7 @@ function clean-duplicates() {
     return 0
   fi
 
-  pushd "${REPO_DIR}"
+  pushd "${REPO_DIR}" >/dev/null
 
   local _DUPLICATED _TO_MV _U_SURE
 
@@ -51,7 +51,9 @@ function clean-duplicates() {
   )
 
   if [[ -z "${_DUPLICATED}" ]]; then
-    echo "No duplicate packages were found!"
+    if [[ "${1:-}" != '-q' ]]; then
+      echo '[!] No duplicate packages were found!'
+    fi
   else
     _TO_MV=$(
       echo "${_DUPLICATED[@]}" |
@@ -72,6 +74,7 @@ function clean-duplicates() {
 
     case "${_U_SURE}" in
     [yY])
+      [ -d ../archive ] || mkdir ../archive
       # shellcheck disable=SC2086
       echo "${_TO_MV[@]}" | xargs mv -v -f -t ../archive/
       # Make sure we don't instantly delete them from archive if the package is too old
@@ -80,7 +83,7 @@ function clean-duplicates() {
     esac
   fi
 
-  popd # REPO_DIR
+  popd >/dev/null # REPO_DIR
 
   return 0
 }
@@ -92,15 +95,15 @@ function clean-archive() {
   (clean-duplicates -q) || true
 
   if [[ ! -d "${REPO_DIR}/../archive" ]]; then
-    echo 'Non-exiting archive directory!'
+    echo 'Non-existing archive directory!'
     return 0
   fi
 
-  pushd "${REPO_DIR}/../archive"
+  pushd "${REPO_DIR}/../archive" >/dev/null
 
   find . -type f -mtime +7 -name '*' -execdir rm -- '{}' \; || true
 
-  popd
+  popd >/dev/null
   return 0
 }
 
@@ -109,7 +112,7 @@ function clean-sigs() {
 
   local _TO_MV=()
 
-  pushd "${REPO_DIR}"
+  pushd "${REPO_DIR}" >/dev/null
 
   readarray -d '' _TO_MV < <(find . -name "*.pkg.tar.zst" -mmin +59 -exec sh -c '[[ ! -f "${1}.sig" ]]' -- "{}" \; -print0)
   readarray -d '' -O "${#_TO_MV[@]}" _TO_MV < <(find . -name "*.pkg.tar.zst.sig" -mmin +59 -exec sh -c '[[ ! -f "${1%.*}" ]]' -- "{}" \; -print0)
@@ -121,7 +124,7 @@ function clean-sigs() {
     exit 0
   fi
 
-  echo '[!] Missing sig or archive:'
+  echo '[!] Missing sig or package:'
   printf '%s\n' "${_TO_MV[@]}"
 
   echo "[!] Total: ${#_TO_MV[@]}"
@@ -140,7 +143,7 @@ function clean-sigs() {
     ;;
   esac
 
-  popd
+  popd >/dev/null
 
   return 0
 }
@@ -150,12 +153,14 @@ function clean-landing-zone() {
 
     local _TO_DELETE=()
 
-    pushd "${LANDING_ZONE}"
+    pushd "${LANDING_ZONE}" >/dev/null
 
     readarray -d '' _TO_DELETE < <(find . -type f -mmin +15 -print0)
 
     if [[ -z "${_TO_DELETE:-}" ]]; then
-        echo '[!] No files to delete...'
+        if [[ "${1:-}" != '-q' ]]; then
+          echo '[!] No files to delete...'
+        fi
         exit 0
     fi
 
@@ -163,7 +168,11 @@ function clean-landing-zone() {
     printf '%s\n' "${_TO_DELETE[@]}"
 
     echo "[!] Total: ${#_TO_DELETE[@]}"
-    read -r -p "[?] Are you sure? [y/N] " _U_SURE
+    if [[ "${1:-}" == '-q' ]]; then
+      _U_SURE='Y'
+    else
+      read -r -p "[?] Are you sure? [y/N] " _U_SURE
+    fi
 
     case "${_U_SURE}" in
     [yY])
@@ -172,7 +181,7 @@ function clean-landing-zone() {
         ;;
     esac
 
-    popd
+    popd >/dev/null
 
     return 0
 }
@@ -207,7 +216,7 @@ function add-repo() {
 function db-pkglist() {
   set -euo pipefail
 
-  pushd "${REPO_DIR}"
+  pushd "${REPO_DIR}" >/dev/null
   if (tar -tv --zstd \
     -f "${REPO_NAME}.db.tar.zst" |
     awk '/^d/{print $6}' >../pkgs.txt); then
@@ -218,17 +227,17 @@ function db-pkglist() {
 
     ls -- *.pkg.* >../pkgs.files.txt
 
-    if [[ -e ../pkgs.files.old.txt ]]; then
-      diff ../pkgs.files.old.txt ../pkgs.files.txt |
-        grep '^[\<\>]' |
-        deploy-notify "$@"
-    fi
+    #if [[ -e ../pkgs.files.old.txt ]]; then
+    #  diff ../pkgs.files.old.txt ../pkgs.files.txt |
+    #    grep '^[\<\>]' |
+    #    deploy-notify "$@"
+    #fi
 
     echo "Database's package list dumped"
   else
     echo "Failed to dump package list"
   fi
-  popd # REPO_DIR
+  popd >/dev/null # REPO_DIR
 
   return 0
 }
