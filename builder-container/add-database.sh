@@ -62,7 +62,7 @@ function clean-duplicates() {
         awk '{sub(/\.sig$/,"");print $1"\n"$1".sig"}'
     )
 
-    echo "[!] Moving:"
+    echo "[!] Moving duplicates:"
     echo "${_TO_MV[*]}"
 
     echo "[!] Total: $(echo -n "${_TO_MV[*]}" | wc -l)"
@@ -164,7 +164,7 @@ function clean-landing-zone() {
         exit 0
     fi
 
-    echo '[!] Deleting files:'
+    echo '[!] Deleting files from landing zone:'
     printf '%s\n' "${_TO_DELETE[@]}"
 
     echo "[!] Total: ${#_TO_DELETE[@]}"
