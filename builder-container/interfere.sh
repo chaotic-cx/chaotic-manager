@@ -113,14 +113,10 @@ function interference-apply() {
 		cat "${BUILDDIR}/PKGBUILD.append" >>"${BUILDDIR}/PKGBUILD"
 
 	if [[ -f "${BUILDDIR}/.CI_CONFIG" ]]; then
-		# shellcheck source=/dev/null
-		source "${BUILDDIR}/.CI_CONFIG"
-		if [[ -n "$CI_PKGREL" ]]; then
-			# shellcheck source=/dev/null
-			source PKGBUILD
-			# shellcheck disable=SC2154 # sourced from PKGBUILD
-			_NEW_PKGREL="$(printf "%s.%s" "$pkgrel" "$CI_PKGREL")"
-			sed -i "s/pkgrel=.*/pkgrel=${CI_PKGREL}/" "${BUILDDIR}/PKGBUILD"
+		if (grep -q "CI_PKGREL=" "${BUILDDIR}/.CI_CONFIG"); then
+			_OLD_PKGREL="$(grep -qP '^^CI_PKGREL=\K\d' "${BUILDDIR}/.CI_CONFIG")"
+			_NEW_PKGREL="$(printf "%s.%s" "$_OLD_PKGREL" "$CI_PKGREL")"
+			sed -i "s/pkgrel=.*/pkgrel=${_NEW_PKGREL}/" "${BUILDDIR}/PKGBUILD"
 		fi
 	fi
 
