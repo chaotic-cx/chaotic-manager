@@ -8,7 +8,7 @@ RUN yarn build
 
 FROM node:alpine
 
-RUN apk add autossh
+RUN apk add autossh bash
 WORKDIR /app
 COPY --from=builder /build/config /app/config
 COPY ./entry_point.sh /entry_point.sh
