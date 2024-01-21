@@ -8,15 +8,15 @@ function special-interference-needed() {
 	_INTERFERE=0
 
 	for interfere in PKGBUILD.append PKGBUILD.prepend interfere.patch prepare; do
-		if [[ -e "${BUILDDIR}/${interfere}" ]]; then
+		if [[ -e "${BUILDDIR}/.CI/${interfere}" ]]; then
 			echo "Interfering via ${interfere}.."
 			((_INTERFERE++))
 		fi
 	done
 
 	# In case we need to bump pkgrel
-	if [[ -f "${BUILDDIR}/.CI_CONFIG" ]]; then
-		if (grep -q "CI_PKGREL=" "${BUILDDIR}/.CI_CONFIG"); then
+	if [[ -f "${BUILDDIR}/.CI/config" ]]; then
+		if (grep -q "CI_PKGREL=" "${BUILDDIR}/.CI/config"); then
 			echo "Interfering via CI_PKGREL.."
 			((_INTERFERE++))
 		fi
@@ -91,31 +91,31 @@ function interference-apply() {
 	special-interference-needed
 
 	# shellcheck source=/dev/null
-	[[ -f "${BUILDDIR}/prepare" ]] &&
-		source "${BUILDDIR}/prepare"
+	[[ -f "${BUILDDIR}/.CI/prepare" ]] &&
+		source "${BUILDDIR}/.CI/prepare"
 
-	if [[ -f "${BUILDDIR}/interfere.patch" ]]; then
-		if patch -Np1 <"${BUILDDIR}/interfere.patch"; then
+	if [[ -f "${BUILDDIR}/.CI/interfere.patch" ]]; then
+		if patch -Np1 <"${BUILDDIR}/.CI/interfere.patch"; then
 			echo 'Patches successfully applied.'
 		else
 			echo 'Ignoring patch failure...'
 		fi
 	fi
 
-	if [[ -f "${BUILDDIR}/PKGBUILD.prepend" ]]; then
+	if [[ -f "${BUILDDIR}/.CI/PKGBUILD.prepend" ]]; then
 		# The worst one, but KISS and easier to maintain
-		_PREPEND="$(cat "${BUILDDIR}/PKGBUILD.prepend")"
+		_PREPEND="$(cat "${BUILDDIR}/.CI/PKGBUILD.prepend")"
 		_PKGBUILD="$(cat "${BUILDDIR}/PKGBUILD")"
 		echo "$_PREPEND" >"${BUILDDIR}/PKGBUILD"
 		echo "$_PKGBUILD" >>"${BUILDDIR}/PKGBUILD"
 	fi
 
-	[[ -f "${BUILDDIR}/PKGBUILD.append" ]] &&
-		cat "${BUILDDIR}/PKGBUILD.append" >>"${BUILDDIR}/PKGBUILD"
+	[[ -f "${BUILDDIR}/.CI/PKGBUILD.append" ]] &&
+		cat "${BUILDDIR}/.CI/PKGBUILD.append" >>"${BUILDDIR}/PKGBUILD"
 
-	if [[ -f "${BUILDDIR}/.CI_CONFIG" ]]; then
-		if (grep -q "CI_PKGREL=" "${BUILDDIR}/.CI_CONFIG"); then
-			_OLD_PKGREL="$(grep -qP '^^CI_PKGREL=\K\d' "${BUILDDIR}/.CI_CONFIG")"
+	if [[ -f "${BUILDDIR}/.CI/config" ]]; then
+		if (grep -q "CI_PKGREL=" "${BUILDDIR}/.CI/config"); then
+			_OLD_PKGREL="$(grep -qP '^^CI_PKGREL=\K\d' "${BUILDDIR}/.CI/config")"
 			_NEW_PKGREL="$(printf "%s.%s" "$_OLD_PKGREL" "$CI_PKGREL")"
 			sed -i "s/pkgrel=.*/pkgrel=${_NEW_PKGREL}/" "${BUILDDIR}/PKGBUILD"
 		fi
