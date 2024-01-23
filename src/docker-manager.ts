@@ -8,7 +8,7 @@ export class DockerManager {
   pull_schedule: NodeJS.Timeout | null = null;
   pull_mutex = new Mutex();
 
-  constructor() { // registry.gitlab.com/garuda-linux/tools/chaotic-manager/builder:latest
+  constructor() {
   }
   destroy() {
     if (this.pull_schedule) {

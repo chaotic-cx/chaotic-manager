@@ -52,7 +52,7 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
     {
         repo_manager.repoFromObject({
             "chaotic-aur": {
-                "url": "https://gitlab.com/garuda-linux/pkgsbuilds-aur"
+                "url": "https://gitlab.com/garuda-linux/pkgsbuild-aur"
             },
         });
     }
@@ -119,29 +119,53 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
     const worker = new Worker("database", async (job: Job) => {
         if (job.id === undefined)
             throw new Error('Job ID is undefined');
-        const logger = new BuildsRedisLogger(connection);
-        logger.fromJob(job);
 
-        logger.log(`\r\nProcessing database job ${job.id} at ${new Date().toISOString()}`);
-        const arch = job.data.arch;
         const { target_repo, pkgbase } = splitJobId(job.id);
-        const packages: string[] = job.data.packages;
+        if (pkgbase == "repo-remove") {
+            console.log(`\r\nProcessing repo-remove job for ${target_repo} at ${new Date().toISOString()}`);
+            const arch = job.data.arch;
+            const pkgbases: string[] = job.data.pkgbases;
 
-        if (packages.length === 0) {
-            logger.log(`Job ${job.id} had no packages to add.`);
-            throw new UnrecoverableError('No packages to add.');
-        }
+            if (pkgbases.length === 0) {
+                console.log('Intended package list is empty. Assuming this is in error.');
+                throw new UnrecoverableError('Intended package list is empty. Assuming this is in error.');
+            }
 
-        const [err, out] = await docker_manager.run(settings.builder.image, ["repo-add", arch, "/landing_zone", "/repo_root", target_repo].concat(packages), [ `${landing_zone}:/landing_zone`, `${repo_root}:/repo_root`, `${gpg}:/root/.gnupg` ], [], logger.raw_log.bind(logger));
+            const [err, out] = await docker_manager.run(settings.builder.image, ["auto-repo-remove", arch, "/repo_root", target_repo].concat(pkgbases), [ `${repo_root}:/repo_root` ], [], process.stdout.write.bind(process.stdout));
 
-        if (err)
-            logger.error(err);
+            if (err)
+                console.log(err);
 
-        if (err || out.StatusCode !== undefined) {
-            logger.log(`Job ${job.id} failed at ${new Date().toISOString()}`);
-            throw new Error('repo-add failed.');
+            if (err || out.StatusCode !== undefined) {
+                console.log(`Repo remove job for ${target_repo} failed at ${new Date().toISOString()}`);
+                throw new Error('auto-repo-remove failed.');
+            }
+            console.log(`Finished repo-remove job for ${target_repo} at ${new Date().toISOString()}.`)
+
         } else {
-            logger.log(`Finished job ${job.id} at ${new Date().toISOString()}.`);
+            const logger = new BuildsRedisLogger(connection);
+            logger.fromJob(job);
+    
+            logger.log(`\r\nProcessing database job ${job.id} at ${new Date().toISOString()}`);
+            const arch = job.data.arch;
+            const packages: string[] = job.data.packages;
+    
+            if (packages.length === 0) {
+                logger.log(`Job ${job.id} had no packages to add.`);
+                throw new UnrecoverableError('No packages to add.');
+            }
+    
+            const [err, out] = await docker_manager.run(settings.builder.image, ["repo-add", arch, "/landing_zone", "/repo_root", target_repo].concat(packages), [ `${landing_zone}:/landing_zone`, `${repo_root}:/repo_root`, `${gpg}:/root/.gnupg` ], [], logger.raw_log.bind(logger));
+    
+            if (err)
+                logger.error(err);
+    
+            if (err || out.StatusCode !== undefined) {
+                logger.log(`Job ${job.id} failed at ${new Date().toISOString()}`);
+                throw new Error('repo-add failed.');
+            } else {
+                logger.log(`Finished job ${job.id} at ${new Date().toISOString()}.`);
+            }
         }
     }, { connection: connection });
     worker.pause();

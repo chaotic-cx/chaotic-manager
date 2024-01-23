@@ -37,3 +37,17 @@ export async function schedulePackages(connection: RedisConnection, arch: string
     await queue.addBulk(list);
     await queue.close();
 }
+
+export async function scheduleAutoRepoRemove(connection: RedisConnection, arch: string, repo: string, pkgbases: string[]): Promise<void> {
+    const queue = new Queue("database", { connection });
+    await queue.add("auto-repo-remove", {
+        arch: arch,
+        repo: repo,
+        pkgbases: pkgbases
+    }, {
+        jobId: repo + "/repo-remove/internal",
+        removeOnComplete: true,
+        removeOnFail: true
+    });
+    await queue.close();
+}

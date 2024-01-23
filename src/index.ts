@@ -5,7 +5,7 @@ import { Worker } from 'bullmq';
 import IORedis from 'ioredis';
 import createBuilder from './builder';
 import createDatabaseWorker from './database';
-import { schedulePackages } from './scheduler';
+import { scheduleAutoRepoRemove, schedulePackages } from './scheduler';
 import * as commandLineArgs from 'command-line-args';
 import { startWebServer } from './web';
 import { RedisConnectionManager } from './redis-connection-manager';
@@ -36,6 +36,15 @@ async function main(): Promise<void> {
             }
             await connection.connect();
             await schedulePackages(connection, mainOptions.arch || 'x86_64', mainOptions.repo || 'chaotic-aur', mainOptions._unknown, mainOptions.commit);
+            connection.quit();
+            return;
+        case 'auto-repo-remove':
+            if (typeof mainOptions._unknown === 'undefined' || mainOptions._unknown.length < 1) {
+                console.error('No pkgbases specified');
+                process.exit(1);
+            }
+            await connection.connect();
+            await scheduleAutoRepoRemove(connection, mainOptions.arch || 'x86_64', mainOptions.repo || 'chaotic-aur', mainOptions._unknown);
             connection.quit();
             return;
         case 'builder':

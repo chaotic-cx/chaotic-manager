@@ -1,32 +1,15 @@
 #!/usr/bin/env bash
 
-function special-interference-needed() {
-	# Determines whether an interference got applied or not
-	# if it did, it will add the chaotic-interfere optdepends
-	# so every maintainer about knows what's going on
-	local _INTERFERE
-	_INTERFERE=0
+set -euo pipefail
 
-	for interfere in PKGBUILD.append PKGBUILD.prepend interfere.patch prepare; do
-		if [[ -e "${BUILDDIR}/.CI/${interfere}" ]]; then
-			echo "Interfering via ${interfere}.."
-			((_INTERFERE++))
-		fi
-	done
-
-	# In case we need to bump pkgrel
-	if [[ -f "${BUILDDIR}/.CI/config" ]]; then
-		if (grep -q "CI_PKGREL=" "${BUILDDIR}/.CI/config"); then
-			echo "Interfering via CI_PKGREL.."
-			((_INTERFERE++))
-		fi
-	fi
-
-	if [[ "${_INTERFERE}" -gt 0 ]]; then
-		echo 'optdepends+=("chaotic-interfere")' >>"${BUILDDIR}"/PKGBUILD
-	else
-		return 0
-	fi
+function UTIL_READ_VARIABLES_FROM_FILE() {
+    local file=$1
+    local -n READ_ASSOC_ARRAY=${2:-VARIABLES}
+    while IFS= read -r line || [ -n "$line" ]; do
+        if [[ "$line" =~ ^[[:space:]]*([a-zA-Z0-9_]+)[[:space:]]*=[[:space:]]*(.*)[[:space:]]*$ ]]; then
+            READ_ASSOC_ARRAY["${BASH_REMATCH[1]}"]="${BASH_REMATCH[2]}"
+        fi
+    done < "$file"
 }
 
 function interference-generic() {
@@ -81,6 +64,27 @@ function interference-generic() {
 	return 0
 }
 
+function interference-pkgrel() {
+  set -euo pipefail
+
+  if [ ! -v CONFIG[CI_PACKAGE_BUMP] ]; then
+    return 0
+  fi
+
+  local _PKGVER _BUMPCOUNT
+  # Example format: 1:1.2.3-1/1 or 1.2.3
+  # Split at slash, but if it doesnt exist, set it to 1
+  _PKGVER="${CONFIG[CI_PACKAGE_BUMP]%%/*}"
+  _BUMPCOUNT="${CONFIG[CI_PACKAGE_BUMP]#*/}"
+  if [[ "${_BUMPCOUNT}" == "${CONFIG[CI_PACKAGE_BUMP]}" ]]; then
+	_BUMPCOUNT=1
+  fi
+
+  echo "if [ \"\$(vercmp \"${_PKGVER}\" \"\${epoch:-0}:\$pkgver-\$pkgrel\")\" = \"0\" ]; then
+  pkgrel=\"\$pkgrel.${_BUMPCOUNT}\"
+fi" >>PKGBUILD
+}
+
 function interference-apply() {
 	set -euo pipefail
 
@@ -88,11 +92,10 @@ function interference-apply() {
 
 	interference-generic
 
-	special-interference-needed
-
 	# shellcheck source=/dev/null
-	[[ -f "${BUILDDIR}/.CI/prepare" ]] &&
-		source "${BUILDDIR}/.CI/prepare"
+	if [[ -f "${BUILDDIR}/.CI/prepare" ]]; then
+		source "${BUILDDIR}/prepare"
+	fi
 
 	if [[ -f "${BUILDDIR}/.CI/interfere.patch" ]]; then
 		if patch -Np1 <"${BUILDDIR}/.CI/interfere.patch"; then
@@ -110,16 +113,19 @@ function interference-apply() {
 		echo "$_PKGBUILD" >>"${BUILDDIR}/PKGBUILD"
 	fi
 
-	[[ -f "${BUILDDIR}/.CI/PKGBUILD.append" ]] &&
+	if [[ -f "${BUILDDIR}/.CI/PKGBUILD.append" ]]; then
 		cat "${BUILDDIR}/.CI/PKGBUILD.append" >>"${BUILDDIR}/PKGBUILD"
-
-	if [[ -f "${BUILDDIR}/.CI/config" ]]; then
-		if (grep -q "CI_PKGREL=" "${BUILDDIR}/.CI/config"); then
-			_OLD_PKGREL="$(grep -qP '^^CI_PKGREL=\K\d' "${BUILDDIR}/.CI/config")"
-			_NEW_PKGREL="$(printf "%s.%s" "$_OLD_PKGREL" "$CI_PKGREL")"
-			sed -i "s/pkgrel=.*/pkgrel=${_NEW_PKGREL}/" "${BUILDDIR}/PKGBUILD"
-		fi
 	fi
+
+	interference-pkgrel
 
 	return 0
 }
+
+BUILDDIR="$1"
+PACKAGE="$2"
+declare -A CONFIG
+if [ -f "${BUILDDIR}/.CI/config" ]; then
+	UTIL_READ_VARIABLES_FROM_FILE "${BUILDDIR}/.CI/config" CONFIG
+fi
+interference-apply
