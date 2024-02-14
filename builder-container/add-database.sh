@@ -277,9 +277,18 @@ check-env "$@"
 # delete gpg lock, we are guaranteed to be the only user of this container at any given time
 rm -f /root/.gnupg/public-keys.d/pubring.db.lock
 mkdir -p "$REPO_DIR"
+SHOULD_ADD=1
 for pkg in "${PACKAGES[@]}"; do
-	sign "$pkg"
-	add-repo "$pkg"
+	if [[ -f "$REPO_DIR/$pkg" ]]; then
+		echo "Package file already exists: $pkg"
+		SHOULD_ADD=0
+	fi
 done
-db-pkglist
+if [[ "$SHOULD_ADD" -eq 1 ]]; then
+	for pkg in "${PACKAGES[@]}"; do
+		sign "$pkg"
+		add-repo "$pkg"
+	done
+	db-pkglist
+fi
 post-deploy
