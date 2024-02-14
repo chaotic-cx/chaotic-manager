@@ -1,6 +1,5 @@
 
-import { Worker, Queue, Job } from 'bullmq';
-import RedisConnection from 'ioredis';
+import { Worker, Queue, Job, DelayedError } from 'bullmq';
 import fs from 'fs';
 import path from 'path';
 import { Client } from 'node-scp';
@@ -64,6 +63,69 @@ function requestRemoteConfig(manager: RedisConnectionManager, worker: Worker, do
     });
 }
 
+async function anyDependencyPending(data: BuildJobData, jobid: string, queue: Queue) {
+    if (!data.deptree)
+        return false;
+    var job_promises = [];
+    var state_promises = [];
+    for (const dep of data.deptree.dependencies) {
+        job_promises.push(queue.getJob(dep));
+        state_promises.push(queue.getJobState(dep));
+    }
+    const jobs = await Promise.allSettled(job_promises);
+    const states = await Promise.allSettled(state_promises);
+
+    var pending: number = 0;
+    var pending_know: number = 0;
+    for (const i in jobs) {
+        const job = jobs[i];
+        const state = states[i];
+        if (job.status === "fulfilled" && state.status === "fulfilled" && job.value && state.value !== "unknown") {
+            console.log(job, state)
+            const jobdata = job.value?.data as BuildJobData;
+            if (["completed", "failed"].includes(state.value))
+                continue;
+            pending++;
+            if (jobdata.deptree && jobdata.deptree.dependents.includes(jobid))
+                pending_know++;
+        }
+    }
+
+    return {
+        pending,
+        pending_know
+    };
+}
+
+async function promotePendingDependents(data: BuildJobData, queue: Queue, logger: BuildsRedisLogger) {
+    if (!data.deptree)
+        return;
+
+    var job_promises = [];
+    var state_promises = [];
+    for (const dep of data.deptree.dependents) {
+        job_promises.push(queue.getJob(dep));
+        state_promises.push(queue.getJobState(dep));
+    }
+    const jobs = await Promise.allSettled(job_promises);
+    const states = await Promise.allSettled(state_promises);
+
+    for (const i in jobs) {
+        const job = jobs[i];
+        const state = states[i];
+        if (job.status === "fulfilled" && state.status === "fulfilled" && job.value && state.value !== "unknown") {
+            const jobdata = job.value?.data as BuildJobData;
+            if (state.value !== "delayed")
+                continue;
+            const pending_deps = await anyDependencyPending(jobdata, job.value?.id as string, queue);
+            if (pending_deps && pending_deps.pending_know === 0) {
+                logger.log(`Promoting dependent job ${job.value?.id} from delayed state.`);
+                job.value?.promote();
+            }
+        }
+    }
+}
+
 export default function createBuilder(redis_connection_manager: RedisConnectionManager): Worker {
     const shared_pkgout: string = path.join(process.env.SHARED_PATH || '', 'pkgout');
     const shared_sources: string = path.join(process.env.SHARED_PATH || '', 'sources');
@@ -73,6 +135,7 @@ export default function createBuilder(redis_connection_manager: RedisConnectionM
 
     const docker_manager = new DockerManager();
     const database_queue = new Queue("database", { connection });
+    const builds_queue = new Queue("builds", { connection });
 
     const runtime_settings : { settings: RemoteSettings | null } = { settings: null };
 
@@ -87,8 +150,29 @@ export default function createBuilder(redis_connection_manager: RedisConnectionM
         logger.log(`Processing build job ${job.id} at ${new Date().toISOString()}`);
         // Copy settings
         const remote_settings: RemoteSettings = structuredClone(runtime_settings.settings) as RemoteSettings;
-
         const jobdata: BuildJobData = job.data;
+
+        {
+            const pending_deps = await anyDependencyPending(jobdata, job.id, builds_queue);
+            if (pending_deps && pending_deps.pending > 0) {
+                var logstring = `Job ${job.id} has ${pending_deps.pending} pending dependencies, of which ${pending_deps.pending_know} know about this job.`;
+                if (pending_deps.pending_know > 0)
+                {
+                    logstring += " Delaying job until dependencies are resolved.";
+                    logger.log(logstring);
+
+                    // 24 hours from now
+                    job.moveToDelayed(Date.now() + 24 * 60 * 60 * 1000, job.token);
+                    throw new DelayedError("Job delayed due to pending dependencies.");
+                }
+                else
+                {
+                    logstring += " Proceeding with build.";
+                    logger.log(logstring);
+                }
+            }
+        }
+
         const repo_manager: RepoManager = new RepoManager(undefined);
         repo_manager.repoFromObject(remote_settings.repos);
         repo_manager.targetRepoFromObject(remote_settings.target_repos);
@@ -145,6 +229,8 @@ export default function createBuilder(redis_connection_manager: RedisConnectionM
             removeOnFail: true,
         });
         logger.log(`Build job ${job.id} finished. Scheduled database job at ${new Date().toISOString()}...`);
+
+        setTimeout(promotePendingDependents.bind(null, jobdata, builds_queue, logger), 1000);
     }, { connection });
     worker.pause();
 

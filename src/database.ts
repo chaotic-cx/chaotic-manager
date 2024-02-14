@@ -52,7 +52,7 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
     {
         repo_manager.repoFromObject({
             "chaotic-aur": {
-                "url": "https://gitlab.com/garuda-linux/pkgsbuild-aur"
+                "url": "https://gitlab.com/chaotic-aur/pkgbuilds"
             },
         });
     }

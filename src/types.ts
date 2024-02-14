@@ -34,7 +34,11 @@ export type BuildJobData = {
     arch: string,
     srcrepo: string | undefined,
     timestamp: number,
-    commit: string | undefined
+    commit: string | undefined,
+    deptree?: { 
+        dependencies: string[],
+        dependents: string[],
+    },
 };
 
 export type DatabaseJobData = BuildJobData & {
