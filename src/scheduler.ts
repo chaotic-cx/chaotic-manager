@@ -1,10 +1,10 @@
 import { Queue, Job, JobsOptions } from 'bullmq';
 import RedisConnection from 'ioredis';
 import { BuildJobData } from './types';
-import { DepGraph } from 'dependency-graph';
+import { DepGraph, DepGraphCycleError } from 'dependency-graph';
 
 export default function schedulePackage(connection: RedisConnection, arch: string, repo: string, name: string, commit: string | undefined, deptree: string | undefined): Promise<void> {
-    return schedulePackages(connection, arch, repo, [ name ], commit, deptree);
+    return schedulePackages(connection, arch, repo, [name], commit, deptree);
 }
 
 export async function schedulePackages(connection: RedisConnection, arch: string, repo: string, packages: string[], commit: string | undefined, deptree: string | undefined): Promise<void> {
@@ -34,10 +34,19 @@ export async function schedulePackages(connection: RedisConnection, arch: string
 
         for (const [pkgbase, deps] of mapped_deps) {
             for (const dep of deps) {
+                const dep_pkgbase = mapped_pkgbases.get(dep)!;
+                graph.addDependency(pkgbase, dep_pkgbase);
+                // Check if we added a circular dependency and remove it
+                // HACKY
                 try {
-                    graph.addDependency(pkgbase, mapped_pkgbases.get(dep)!);
-                }
-                catch (e) {
+                    graph.dependenciesOf(pkgbase);
+                } catch (e) {
+                    if (e instanceof DepGraphCycleError) {
+                        /*e.cyclePath.forEach((cycle_pkgbase) => {
+                            graph.setNodeData(cycle_pkgbase, { circular: true });
+                        });*/
+                        graph.removeDependency(pkgbase, dep_pkgbase);
+                    }
                 }
             }
         }
