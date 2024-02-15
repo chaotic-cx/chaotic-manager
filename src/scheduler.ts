@@ -34,7 +34,10 @@ export async function schedulePackages(connection: RedisConnection, arch: string
 
         for (const [pkgbase, deps] of mapped_deps) {
             for (const dep of deps) {
-                const dep_pkgbase = mapped_pkgbases.get(dep)!;
+                const dep_pkgbase = mapped_pkgbases.get(dep);
+                // We do not know of this dependency, so we skip it
+                if (!dep_pkgbase)
+                    continue;
                 graph.addDependency(pkgbase, dep_pkgbase);
                 // Check if we added a circular dependency and remove it
                 // HACKY
