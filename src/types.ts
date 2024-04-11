@@ -35,7 +35,7 @@ export type BuildJobData = {
     srcrepo: string | undefined,
     timestamp: number,
     commit: string | undefined,
-    deptree?: { 
+    deptree?: {
         dependencies: string[],
         dependents: string[],
     },

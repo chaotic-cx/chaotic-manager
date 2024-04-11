@@ -8,7 +8,7 @@ export default function schedulePackage(connection: RedisConnection, arch: strin
 }
 
 export async function schedulePackages(connection: RedisConnection, arch: string, repo: string, packages: string[], commit: string | undefined, deptree: string | undefined): Promise<void> {
-    var graph = new DepGraph();
+    var graph = new DepGraph({ circular: true });
     if (deptree) {
         var mapped_deps = new Map<string, string[]>();
         var mapped_pkgbases = new Map<string, string>();
@@ -39,18 +39,6 @@ export async function schedulePackages(connection: RedisConnection, arch: string
                 if (!dep_pkgbase)
                     continue;
                 graph.addDependency(pkgbase, dep_pkgbase);
-                // Check if we added a circular dependency and remove it
-                // HACKY
-                try {
-                    graph.dependenciesOf(pkgbase);
-                } catch (e) {
-                    if (e instanceof DepGraphCycleError) {
-                        /*e.cyclePath.forEach((cycle_pkgbase) => {
-                            graph.setNodeData(cycle_pkgbase, { circular: true });
-                        });*/
-                        graph.removeDependency(pkgbase, dep_pkgbase);
-                    }
-                }
             }
         }
     }
@@ -68,8 +56,8 @@ export async function schedulePackages(connection: RedisConnection, arch: string
         var dependencies: string[] = [];
         var dependents: string[] = [];
         if (deptree) {
-            dependencies = graph.dependenciesOf(pkg_base).map((dep: string) => repo + "/" + dep);
-            dependents = graph.dependantsOf(pkg_base).map((dep: string) => repo + "/" + dep);
+            dependencies = graph.directDependenciesOf(pkg_base).map((dep: string) => repo + "/" + dep);
+            dependents = graph.directDependantsOf(pkg_base).map((dep: string) => repo + "/" + dep);
         }
 
         var jobdata: BuildJobData = {

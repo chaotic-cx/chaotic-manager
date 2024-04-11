@@ -6,6 +6,7 @@ import { BuildsRedisLogger } from './logging';
 import { RepoManager } from './repo-manager';
 import { RedisConnectionManager } from './redis-connection-manager';
 import { splitJobId } from './utils';
+import { promotePendingDependents } from './buildorder';
 
 async function publishSettingsObject(manager: RedisConnectionManager, settings: RemoteSettings): Promise<void> {
     const subscriber = manager.getSubscriber();
@@ -148,23 +149,28 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
     
             logger.log(`\r\nProcessing database job ${job.id} at ${new Date().toISOString()}`);
             const arch = job.data.arch;
-            const packages: string[] = job.data.packages;
-    
-            if (packages.length === 0) {
-                logger.log(`Job ${job.id} had no packages to add.`);
-                throw new UnrecoverableError('No packages to add.');
-            }
-    
-            const [err, out] = await docker_manager.run(settings.builder.image, ["repo-add", arch, "/landing_zone", "/repo_root", target_repo].concat(packages), [ `${landing_zone}:/landing_zone`, `${repo_root}:/repo_root`, `${gpg}:/root/.gnupg` ], [], logger.raw_log.bind(logger));
-    
-            if (err)
-                logger.error(err);
-    
-            if (err || out.StatusCode !== undefined) {
-                logger.log(`Job ${job.id} failed at ${new Date().toISOString()}`);
-                throw new Error('repo-add failed.');
-            } else {
-                logger.log(`Finished job ${job.id} at ${new Date().toISOString()}.`);
+            const jobdata: DatabaseJobData = job.data;
+            const packages: string[] = jobdata.packages;
+
+            try {
+                if (packages.length === 0) {
+                    logger.log(`Job ${job.id} had no packages to add.`);
+                    throw new UnrecoverableError('No packages to add.');
+                }
+        
+                const [err, out] = await docker_manager.run(settings.builder.image, ["repo-add", arch, "/landing_zone", "/repo_root", target_repo].concat(packages), [ `${landing_zone}:/landing_zone`, `${repo_root}:/repo_root`, `${gpg}:/root/.gnupg` ], [], logger.raw_log.bind(logger));
+        
+                if (err)
+                    logger.error(err);
+        
+                if (err || out.StatusCode !== undefined) {
+                    logger.log(`Job ${job.id} failed at ${new Date().toISOString()}`);
+                    throw new Error('repo-add failed.');
+                } else {
+                    logger.log(`Finished job ${job.id} at ${new Date().toISOString()}.`);
+                }
+            } finally {
+                setTimeout(promotePendingDependents.bind(null, jobdata, builds_queue, logger), 1000);
             }
         }
     }, { connection: connection });
