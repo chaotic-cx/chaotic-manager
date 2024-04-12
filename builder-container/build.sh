@@ -20,8 +20,12 @@ function print-if-failed {
 function setup-package-repo {
 	set -eo pipefail
 	if [ -z "$PACKAGE_REPO_ID" ] || [ -z "$PACKAGE_REPO_URL" ]; then
-		echo "FATAL: No package repository configured."
-		return 1
+		if [ ! -d /pkgbuilds ]; then
+			echo "FATAL: No package repository configured."
+			return 1
+		fi
+		PACKAGE_REPO_ID="."
+		return 0
 	fi
 	# Migration
 	if [ -d /pkgbuilds/.git ]; then find /pkgbuilds -mindepth 1 -delete; fi
