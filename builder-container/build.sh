@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 PKGOUT="/home/builder/pkgout/"
+PKGSRC="/home/builder/pkgsrc/"
 PACKAGE="$1"
 BUILDDIR="/home/builder/build/"
 
@@ -83,7 +84,7 @@ function setup-buildenv {
 function build-pkg {
 	set -eo pipefail
 	printf "\nBuilding package...\n"
-	sudo -D "${BUILDDIR}" -u builder PKGDEST="${PKGOUT}" makepkg --skippgpcheck -s --noconfirm || { echo "Failed to build package!" && return 1; }
+	sudo -D "${BUILDDIR}" -u builder PKGDEST="${PKGOUT}" SRCDEST="${PKGSRC}" makepkg --skippgpcheck -s --noconfirm || { echo "Failed to build package!" && return 1; }
 }
 
 function check-pkg {
