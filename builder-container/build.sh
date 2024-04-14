@@ -64,7 +64,7 @@ function setup-buildenv {
 	echo "PACKAGER=\"$PACKAGER\"" >>/etc/makepkg.conf
 	echo "MAKEFLAGS=$MAKEFLAGS" >>/etc/makepkg.conf
 
-	if [[ -v EXTRA_PACMAN_REPOS ]]; then echo "$EXTRA_PACMAN_REPOS" >>/etc/pacman.conf; fi
+	if [[ -n "$EXTRA_PACMAN_REPOS" ]]; then echo "$EXTRA_PACMAN_REPOS" >>/etc/pacman.conf; fi
 
 	if [[ ! -d "$PKGOUT" ]]; then mkdir -p "$PKGOUT"; fi
 	chown builder:builder "$PKGOUT"
@@ -78,7 +78,7 @@ function setup-buildenv {
 
 	pacman-key --init || return 1
     print-if-failed ./interfere.sh "$BUILDDIR" "$PACKAGE" || return 1
-	if [[ -v EXTRA_PACMAN_KEYRINGS ]]; then pacman -U --noconfirm ${EXTRA_PACMAN_KEYRINGS[@]} || return 1; fi
+	if [[ -n "$EXTRA_PACMAN_KEYRINGS" ]]; then pacman -U --noconfirm ${EXTRA_PACMAN_KEYRINGS[@]} || return 1; fi
 }
 
 function build-pkg {
