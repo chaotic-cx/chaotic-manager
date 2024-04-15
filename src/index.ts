@@ -46,7 +46,7 @@ async function main(): Promise<void> {
                 process.exit(1);
             }
             await connection.connect();
-            await scheduleAutoRepoRemove(connection, mainOptions.arch || 'x86_64', mainOptions.repo || 'chaotic-aur', mainOptions._unknown);
+            await scheduleAutoRepoRemove(connection, mainOptions.arch || 'x86_64', mainOptions['target-repo'] || 'chaotic-aur', mainOptions._unknown);
             connection.quit();
             return;
         case 'builder':
