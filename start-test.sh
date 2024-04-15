@@ -57,6 +57,7 @@ services:
         volumes:
             - ./sshkey:/app/sshkey
             - /var/run/docker.sock:/var/run/docker.sock
+            - ./temp/repo_root:/repo_root
         environment:
             - REPO_PATH=${REPO_PATH}
             - LANDING_ZONE_PATH=${LANDING_ZONE_PATH}

@@ -94,7 +94,8 @@ export async function scheduleAutoRepoRemove(connection: RedisConnection, arch: 
     }, {
         jobId: repo + "/repo-remove/internal",
         removeOnComplete: true,
-        removeOnFail: true
+        removeOnFail: true,
+        priority: 10,
     });
     await queue.close();
 }

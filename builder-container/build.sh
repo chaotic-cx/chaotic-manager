@@ -69,9 +69,6 @@ function setup-buildenv {
 	if [[ ! -d "$PKGOUT" ]]; then mkdir -p "$PKGOUT"; fi
 	chown builder:builder "$PKGOUT"
 	chmod 700 "$PKGOUT"
-	pushd "$PKGOUT"
-	find . -mindepth 1 -delete
-	popd
 
 	cp -rT "/pkgbuilds/${PACKAGE_REPO_ID}/${PACKAGE}" "${BUILDDIR}"
 	chown -R builder:builder "${BUILDDIR}"

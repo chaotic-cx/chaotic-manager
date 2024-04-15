@@ -1,5 +1,5 @@
 
-import { Worker, Queue, Job, DelayedError } from 'bullmq';
+import { Worker, Queue, Job, QueueEvents } from 'bullmq';
 import fs from 'fs';
 import path from 'path';
 import { Client } from 'node-scp';
@@ -62,6 +62,22 @@ function requestRemoteConfig(manager: RedisConnectionManager, worker: Worker, do
     });
 }
 
+// Request a list of files from the database server and fill the destination directory with empty files
+// Goal: stop pacman from building packages it has already built
+async function generateDestFillerFiles(database_queue: Queue, database_queue_listener: QueueEvents, repo: string, arch: string, destdir: string): Promise<void> {
+    var job = await database_queue.add(`${repo}/repo-list`, { arch: arch }, {
+        jobId: `${repo}/repo-list`,
+        removeOnFail: true,
+        priority: 1,
+    });
+    var lines = await job.waitUntilFinished(database_queue_listener, 60000);
+
+    for (const line of lines) {
+        const filepath = path.join(destdir, line);
+        fs.writeFileSync(filepath, "");
+    }
+}
+
 export default function createBuilder(redis_connection_manager: RedisConnectionManager): Worker {
     const shared_pkgout: string = path.join(process.env.SHARED_PATH || '', 'pkgout');
     const shared_sources: string = path.join(process.env.SHARED_PATH || '', 'sources');
@@ -71,6 +87,7 @@ export default function createBuilder(redis_connection_manager: RedisConnectionM
 
     const docker_manager = new DockerManager();
     const database_queue = new Queue("database", { connection });
+    const database_queue_listener = new QueueEvents("database", { connection });
     const builds_queue = new Queue("builds", { connection });
 
     const runtime_settings: { settings: RemoteSettings | null } = { settings: null };
@@ -97,6 +114,8 @@ export default function createBuilder(redis_connection_manager: RedisConnectionM
             const src_repo = repo_manager.getRepo(jobdata.srcrepo);
 
             ensurePathClean(mount);
+            generateDestFillerFiles(database_queue, database_queue_listener, target_repo, jobdata.arch, mount);
+
             const [err, out] = await docker_manager.run(remote_settings.builder.image, ["build", pkgbase], [shared_pkgout + ':/home/builder/pkgout', shared_sources + ':/pkgbuilds'], [
                 "PACKAGE_REPO_ID=" + src_repo.id,
                 "PACKAGE_REPO_URL=" + src_repo.getUrl(),
@@ -104,7 +123,8 @@ export default function createBuilder(redis_connection_manager: RedisConnectionM
                 "EXTRA_PACMAN_KEYRINGS=" + repo_manager.getTargetRepo(target_repo).keyringsToBashArray(),
             ], logger.raw_log.bind(logger));
 
-            const file_list = fs.readdirSync(mount);
+            // Remove any filler files from the equation
+            const file_list = fs.readdirSync(mount).filter((file) => { const stats = fs.statSync(path.join(mount, file)); return stats.isFile() && stats.size > 0; });
             if (err || out.StatusCode !== undefined || file_list.length === 0) {
                 logger.log(`Job ${job.id} failed`);
                 throw new Error('Building failed.');
@@ -145,6 +165,7 @@ export default function createBuilder(redis_connection_manager: RedisConnectionM
                 jobId: job.id,
                 removeOnComplete: true,
                 removeOnFail: true,
+                priority: 5,
             });
             logger.log(`Build job ${job.id} finished. Scheduled database job at ${new Date().toISOString()}...`);
         } catch (e) {

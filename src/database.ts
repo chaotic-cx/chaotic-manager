@@ -7,6 +7,8 @@ import { RepoManager } from './repo-manager';
 import { RedisConnectionManager } from './redis-connection-manager';
 import { splitJobId } from './utils';
 import { promotePendingDependents } from './buildorder';
+import fs from 'fs';
+import path from 'path';
 
 async function publishSettingsObject(manager: RedisConnectionManager, settings: RemoteSettings): Promise<void> {
     const subscriber = manager.getSubscriber();
@@ -25,6 +27,7 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
     const landing_zone_adv = process.env.LANDING_ZONE_ADVERTISED_PATH || null;
     const repo_root = process.env.REPO_PATH || '';
     const gpg = process.env.GPG_PATH || '';
+    const mount = "/repo_root"
 
     const database_host = process.env.DATABASE_HOST || 'localhost';
     const database_port = Number(process.env.DATABASE_PORT || 22);
@@ -122,7 +125,18 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
             throw new Error('Job ID is undefined');
 
         const { target_repo, pkgbase } = splitJobId(job.id);
-        if (pkgbase == "repo-remove") {
+        if (pkgbase == "repo-list") {
+            // Generate a list of file names in the repo
+            const arch = job.data.arch;
+            const directory = path.join(mount, target_repo, arch);
+
+            if (fs.existsSync(directory)) {
+                return fs.readdirSync(directory);
+            }
+            else {
+                return [];
+            }  
+        } else if (pkgbase == "repo-remove") {
             console.log(`\r\nProcessing repo-remove job for ${target_repo} at ${new Date().toISOString()}`);
             const arch = job.data.arch;
             const pkgbases: string[] = job.data.pkgbases;
