@@ -1,6 +1,6 @@
 import to from 'await-to-js';
 import Docker from 'dockerode';
-import {Mutex} from 'async-mutex';
+import { Mutex } from 'async-mutex';
 import { Stream } from 'stream';
 
 export class DockerManager {
@@ -58,7 +58,7 @@ export class DockerManager {
     } finally {
       this.pull_mutex.release();
     }
-  
+
     return imagename;
   }
 
@@ -73,15 +73,15 @@ export class DockerManager {
 
     const out = await to(this.docker.run(image, args, stream, {
       HostConfig: {
-          AutoRemove: true,
-          Binds: binds,
-          Ulimits: [
-              {
-                  Name: "nofile",
-                  Soft: 1024,
-                  Hard: 1048576
-              }
-          ],
+        AutoRemove: true,
+        Binds: binds,
+        Ulimits: [
+          {
+            Name: "nofile",
+            Soft: 1024,
+            Hard: 1048576
+          }
+        ],
       },
       Env: env,
       AttachStderr: true,

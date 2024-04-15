@@ -4,7 +4,7 @@
 */
 
 import { DelayedError, Job, Queue } from "bullmq";
-import { BuildJobData } from "./types";
+import { BuildJobData, DatabaseJobData } from "./types";
 import { BuildsRedisLogger } from "./logging";
 import Redlock from "redlock";
 import { DepGraph } from "dependency-graph";
@@ -185,7 +185,7 @@ export async function handleJobOrder(job: Job, buildsqueue: Queue, databasequeue
     }
 }
 
-export async function promotePendingDependents(data: BuildJobData, buildsqueue: Queue, logger: BuildsRedisLogger) {
+export async function promotePendingDependents(data: BuildJobData | DatabaseJobData, buildsqueue: Queue, logger: BuildsRedisLogger) {
     if (!data.deptree)
         return;
 

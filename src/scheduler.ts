@@ -1,13 +1,13 @@
-import { Queue, Job, JobsOptions } from 'bullmq';
+import { Queue } from 'bullmq';
 import RedisConnection from 'ioredis';
-import { BuildJobData } from './types';
-import { DepGraph, DepGraphCycleError } from 'dependency-graph';
+import { DispatchJobData } from './types';
+import { DepGraph } from 'dependency-graph';
 
-export default function schedulePackage(connection: RedisConnection, arch: string, repo: string, name: string, commit: string | undefined, deptree: string | undefined): Promise<void> {
-    return schedulePackages(connection, arch, repo, [name], commit, deptree);
+export default function schedulePackage(connection: RedisConnection, arch: string, target_repo: string, source_repo: string, name: string, commit: string | undefined, deptree: string | undefined): Promise<void> {
+    return schedulePackages(connection, arch, target_repo, source_repo, [name], commit, deptree);
 }
 
-export async function schedulePackages(connection: RedisConnection, arch: string, repo: string, packages: string[], commit: string | undefined, deptree: string | undefined): Promise<void> {
+export async function schedulePackages(connection: RedisConnection, arch: string, target_repo: string, source_repo: string, packages: string[], commit: string | undefined, deptree: string | undefined): Promise<void> {
     var graph = new DepGraph({ circular: true });
     if (deptree) {
         var mapped_deps = new Map<string, string[]>();
@@ -43,45 +43,36 @@ export async function schedulePackages(connection: RedisConnection, arch: string
         }
     }
 
-    const queue = new Queue("builds", { connection });
-    const list: { name: string, data: any, opts?: JobsOptions }[] = [];
-    const timestamp = Date.now();
-    packages.forEach((pkg) => {
-        // pkg is in the following format, where the repo part is optional:
-        // srcrepo:pkgbase
-        const pkg_split = pkg.split(':');
-        const src_repo = pkg_split.length > 1 ? pkg_split[0] : undefined;
-        const pkg_base = pkg_split.length > 1 ? pkg_split[1] : pkg_split[0];
+    const queue = new Queue("dispatch", { connection });
 
-        var dependencies: string[] = [];
-        var dependents: string[] = [];
-        if (deptree) {
-            dependencies = graph.directDependenciesOf(pkg_base).map((dep: string) => repo + "/" + dep);
-            dependents = graph.directDependantsOf(pkg_base).map((dep: string) => repo + "/" + dep);
-        }
 
-        var jobdata: BuildJobData = {
-            arch: arch,
-            srcrepo: src_repo,
-            timestamp: timestamp,
-            commit: commit,
-            deptree: {
-                dependencies: dependencies,
-                dependents: dependents
-            }
+    const list = packages.map((pkg) => {
+        var ret: any = {
+            pkgbase: pkg
         };
-
-        list.push({
-            name: `${pkg_base}-${timestamp}`,
-            data: jobdata,
-            opts: {
-                jobId: repo + "/" + pkg_base,
-                removeOnComplete: true,
-                removeOnFail: { age: 5 }
-            }
-        });
+        if (deptree)
+            ret.deptree = {
+                dependencies: graph.directDependenciesOf(pkg).map((dep: string) => target_repo + "/" + dep),
+                dependents: graph.directDependantsOf(pkg).map((dep: string) => target_repo + "/" + dep)
+            };
+        return ret;
     });
-    await queue.addBulk(list);
+
+    var disaptch_data: DispatchJobData = {
+        type: "add-job",
+        data: {
+            target_repo: target_repo,
+            source_repo: source_repo,
+            commit: commit,
+            arch: arch,
+            packages: list,
+        }
+    }
+
+    await queue.add("add-job", disaptch_data, {
+        removeOnComplete: true,
+        removeOnFail: true,
+    });
     await queue.close();
 }
 

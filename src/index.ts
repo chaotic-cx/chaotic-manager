@@ -13,7 +13,8 @@ import { RedisConnectionManager } from './redis-connection-manager';
 const mainDefinitions = [
     { name: 'command', defaultOption: true },
     { name: 'arch', type: String },
-    { name: 'repo', type: String },
+    { name: 'target-repo', type: String },
+    { name: 'source-repo', type: String },
     { name: 'web-port', type: Number },
     { name: 'commit', type: String },
     { name: 'deptree', type: String },
@@ -36,7 +37,7 @@ async function main(): Promise<void> {
                 process.exit(1);
             }
             await connection.connect();
-            await schedulePackages(connection, mainOptions.arch || 'x86_64', mainOptions.repo || 'chaotic-aur', mainOptions._unknown, mainOptions.commit, mainOptions.deptree);
+            await schedulePackages(connection, mainOptions.arch || 'x86_64', mainOptions['target-repo'] || 'chaotic-aur', mainOptions['source-repo'] || 'chaotic-aur', mainOptions._unknown, mainOptions.commit, mainOptions.deptree);
             connection.quit();
             return;
         case 'auto-repo-remove':

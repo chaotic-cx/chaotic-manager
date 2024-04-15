@@ -39,12 +39,30 @@ export type BuildJobData = {
         dependencies: string[],
         dependents: string[],
     },
+    repo_files: string[],
 };
 
-export type DatabaseJobData = BuildJobData & {
+export type DatabaseJobData = Omit<BuildJobData, "repo_files"> & {
     packages: string[],
 };
 
-export const current_version = 5;
+export type DispatchJobData = {
+    type: "add-job",
+    data: {
+        target_repo: string,
+        source_repo: string,
+        commit: string | undefined,
+        arch: string,
+        packages: {
+            pkgbase: string,
+            deptree?: {
+                dependencies: string[],
+                dependents: string[],
+            },
+        }[]
+    },
+};
+
+export const current_version = 6;
 
 export const SEVEN_DAYS = 60 * 60 * 24 * 7;

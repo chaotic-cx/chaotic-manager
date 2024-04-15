@@ -1,12 +1,13 @@
 
-import { Worker, Job, UnrecoverableError, QueueEvents, Queue } from 'bullmq';
-import { RemoteSettings, BuildJobData, current_version, DatabaseJobData } from './types';
+import { Worker, Job, UnrecoverableError, QueueEvents, Queue, BulkJobOptions } from 'bullmq';
+import { RemoteSettings, BuildJobData, current_version, DatabaseJobData, DispatchJobData } from './types';
 import { DockerManager } from './docker-manager';
 import { BuildsRedisLogger } from './logging';
 import { RepoManager } from './repo-manager';
 import { RedisConnectionManager } from './redis-connection-manager';
 import { splitJobId } from './utils';
 import { promotePendingDependents } from './buildorder';
+import Timeout from 'await-timeout';
 import fs from 'fs';
 import path from 'path';
 
@@ -22,7 +23,7 @@ async function publishSettingsObject(manager: RedisConnectionManager, settings: 
     connection.publish("config-response", JSON.stringify(settings));
 }
 
-export default function createDatabaseWorker(redis_connection_manager: RedisConnectionManager): Worker {
+export default function createDatabaseWorker(redis_connection_manager: RedisConnectionManager) {
     const landing_zone = process.env.LANDING_ZONE_PATH || '';
     const landing_zone_adv = process.env.LANDING_ZONE_ADVERTISED_PATH || null;
     const repo_root = process.env.REPO_PATH || '';
@@ -34,7 +35,7 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
     const database_user = process.env.DATABASE_USER || 'root';
 
     const builder_image = process.env.BUILDER_IMAGE || 'registry.gitlab.com/garuda-linux/tools/chaotic-manager/builder:latest';
-    
+
     const base_logs_url = process.env.LOGS_URL;
     var package_repos = process.env.PACKAGE_REPOS;
     var package_target_repos = process.env.PACKAGE_TARGET_REPOS;
@@ -42,8 +43,7 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
 
     var repo_manager = new RepoManager(base_logs_url ? new URL(base_logs_url) : undefined);
 
-    if (package_repos)
-    {
+    if (package_repos) {
         try {
             var obj = JSON.parse(package_repos);
             repo_manager.repoFromObject(obj);
@@ -52,8 +52,7 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
             throw new Error("Invalid package repos.");
         }
     }
-    if (!package_repos)
-    {
+    if (!package_repos) {
         repo_manager.repoFromObject({
             "chaotic-aur": {
                 "url": "https://gitlab.com/chaotic-aur/pkgbuilds"
@@ -61,8 +60,7 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
         });
     }
 
-    if (package_target_repos)
-    {
+    if (package_target_repos) {
         try {
             var obj = JSON.parse(package_target_repos);
             repo_manager.targetRepoFromObject(obj);
@@ -71,8 +69,7 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
             throw new Error("Invalid package repos.");
         }
     }
-    if (!package_target_repos)
-    {
+    if (!package_target_repos) {
         repo_manager.targetRepoFromObject({
             "chaotic-aur": {
                 "extra_repos": [
@@ -90,8 +87,7 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
         })
     }
 
-    if (package_repos_notifiers)
-    {
+    if (package_repos_notifiers) {
         try {
             var obj = JSON.parse(package_repos_notifiers);
             repo_manager.notifiersFromObject(obj);
@@ -120,23 +116,12 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
     const connection = redis_connection_manager.getClient();
 
     const docker_manager = new DockerManager();
-    const worker = new Worker("database", async (job: Job) => {
+    const database_worker = new Worker("database", async (job: Job) => {
         if (job.id === undefined)
             throw new Error('Job ID is undefined');
 
         const { target_repo, pkgbase } = splitJobId(job.id);
-        if (pkgbase == "repo-list") {
-            // Generate a list of file names in the repo
-            const arch = job.data.arch;
-            const directory = path.join(mount, target_repo, arch);
-
-            if (fs.existsSync(directory)) {
-                return fs.readdirSync(directory);
-            }
-            else {
-                return [];
-            }  
-        } else if (pkgbase == "repo-remove") {
+        if (pkgbase == "repo-remove") {
             console.log(`\r\nProcessing repo-remove job for ${target_repo} at ${new Date().toISOString()}`);
             const arch = job.data.arch;
             const pkgbases: string[] = job.data.pkgbases;
@@ -160,7 +145,7 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
         } else {
             const logger = new BuildsRedisLogger(connection);
             logger.fromJob(job);
-    
+
             logger.log(`\r\nProcessing database job ${job.id} at ${new Date().toISOString()}`);
             const arch = job.data.arch;
             const jobdata: DatabaseJobData = job.data;
@@ -174,9 +159,10 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
         
                 const [err, out] = await docker_manager.run(settings.builder.image, ["repo-add", arch, "/landing_zone", "/repo_root", target_repo].concat(packages), [ `${landing_zone}:/landing_zone`, `${repo_root}:/repo_root`, `${gpg}:/root/.gnupg` ], [], logger.raw_log.bind(logger));
         
+
                 if (err)
                     logger.error(err);
-        
+
                 if (err || out.StatusCode !== undefined) {
                     logger.log(`Job ${job.id} failed at ${new Date().toISOString()}`);
                     throw new Error('repo-add failed.');
@@ -188,30 +174,80 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
             }
         }
     }, { connection: connection });
-    worker.pause();
+    const dispatch_worker = new Worker("dispatch", async (job: Job) => {
+        if (job.id === undefined)
+            throw new Error('Job ID is undefined');
+
+        const data = job.data as DispatchJobData;
+
+        if (data.type === "add-job") {
+            const add_job_data = data.data;
+
+            // Generate a file list to avoid adding packages that are already in the repository
+            const directory = path.join(mount, add_job_data.target_repo, add_job_data.arch);
+            var file_list: string[] = [];
+            if (fs.existsSync(directory)) {
+                file_list = fs.readdirSync(directory);
+            }
+
+            const timestamp = Date.now();
+
+            var out: {
+                name: string;
+                data: BuildJobData;
+                opts: BulkJobOptions;
+            }[] = add_job_data.packages.map((pkg) => {
+                const id = `${add_job_data.target_repo}/${pkg.pkgbase}`;
+                return {
+                    name: `${id}-${timestamp}`,
+                    data: {
+                        arch: add_job_data.arch,
+                        srcrepo: add_job_data.source_repo,
+                        timestamp: timestamp,
+                        commit: add_job_data.commit,
+                        deptree: pkg.deptree,
+                        repo_files: file_list,
+                    },
+                    opts: {
+                        jobId: id,
+                        removeOnComplete: true,
+                        removeOnFail: true,
+                        priority: 5,
+                    }
+                }
+            })
+
+
+            var jobs = await builds_queue.addBulk(out);
+
+            for (const job of jobs) {
+                const logger = new BuildsRedisLogger(connection);
+                logger.fromJob(job);
+                logger.setDefault();
+                logger.log(`Added to build queue at ${new Date().toISOString()}. Waiting for builder...`);
+            }
+
+            setTimeout(async () => {
+                try {
+                    const repo = repo_manager.getRepo(add_job_data.source_repo);
+                    for (const job of jobs) {
+
+                        await Timeout.set(200);
+                        if ((await job.getState()) == "waiting")
+                            await repo.notify(job, "pending", "Waiting for builder...");
+                    }
+                } catch (error) {
+                    console.error(error);
+                }
+            }, 3000);
+        }
+    }, { connection: connection, concurrency: 1 });
+    database_worker.pause();
+    dispatch_worker.pause();
 
     const builds_queue_events = new QueueEvents("builds", { connection });
     const builds_queue = new Queue("builds", { connection });
 
-    builds_queue_events.on("added", async ({ jobId, name }) => {
-        try {
-            const logger = new BuildsRedisLogger(connection);
-            var job = await logger.fromJobID(jobId, builds_queue);
-            logger.setDefault();
-            logger.log(`Added to build queue at ${new Date().toISOString()}. Waiting for builder...`);
-            if (job) {
-                const jobdata: BuildJobData = job.data;
-                const repo = repo_manager.getRepo(jobdata.srcrepo);
-                // Wait 3 seconds before we make a request to the notifier. No point in changing the status within a few seconds.
-                await new Promise(resolve => setTimeout(resolve, 3000));
-                // There is a chance the job could disappear before we get here
-                if ((await job.getState()) == "waiting")
-                    await repo.notify(job, "pending", "Waiting for builder...");
-            }
-        } catch (error) {
-            console.error(error);
-        }
-    });
     builds_queue_events.on("stalled", async ({ jobId }) => {
         try {
             const logger = new BuildsRedisLogger(connection);
@@ -255,7 +291,7 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
         }
     });
 
-    worker.on('completed', async (job: Job) => {
+    database_worker.on('completed', async (job: Job) => {
         try {
             const jobdata: DatabaseJobData = job.data;
             const repo = repo_manager.getRepo(jobdata.srcrepo);
@@ -264,7 +300,7 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
             console.error(error);
         }
     });
-    worker.on('failed', async (job: Job | undefined) => {
+    database_worker.on('failed', async (job: Job | undefined) => {
         try {
             if (!job)
                 return;
@@ -279,12 +315,13 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
     publishSettingsObject(redis_connection_manager, settings);
 
     docker_manager.scheduledPull(settings.builder.image).then(() => {
-        worker.resume();
+        database_worker.resume();
+        dispatch_worker.resume();
         console.log("Ready to deploy packages.");
     }).catch((err) => {
         console.error(err);
         process.exit(1);
     });
 
-    return worker;
+    return { database_worker, dispatch_worker };
 }

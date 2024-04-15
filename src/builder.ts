@@ -64,15 +64,8 @@ function requestRemoteConfig(manager: RedisConnectionManager, worker: Worker, do
 
 // Request a list of files from the database server and fill the destination directory with empty files
 // Goal: stop pacman from building packages it has already built
-async function generateDestFillerFiles(database_queue: Queue, database_queue_listener: QueueEvents, repo: string, arch: string, destdir: string): Promise<void> {
-    var job = await database_queue.add(`${repo}/repo-list`, { arch: arch }, {
-        jobId: `${repo}/repo-list`,
-        removeOnFail: true,
-        priority: 1,
-    });
-    var lines = await job.waitUntilFinished(database_queue_listener, 60000);
-
-    for (const line of lines) {
+async function generateDestFillerFiles(repo_files: string[], destdir: string): Promise<void> {
+    for (const line of repo_files) {
         const filepath = path.join(destdir, line);
         fs.writeFileSync(filepath, "");
     }
@@ -104,17 +97,16 @@ export default function createBuilder(redis_connection_manager: RedisConnectionM
         // Copy settings
         const remote_settings: RemoteSettings = structuredClone(runtime_settings.settings) as RemoteSettings;
         const jobdata: BuildJobData = job.data;
-
-        await handleJobOrder(job, builds_queue, database_queue, logger);
-        
         try {
+            await handleJobOrder(job, builds_queue, database_queue, logger);
+
             const repo_manager: RepoManager = new RepoManager(undefined);
             repo_manager.repoFromObject(remote_settings.repos);
             repo_manager.targetRepoFromObject(remote_settings.target_repos);
             const src_repo = repo_manager.getRepo(jobdata.srcrepo);
 
             ensurePathClean(mount);
-            generateDestFillerFiles(database_queue, database_queue_listener, target_repo, jobdata.arch, mount);
+            generateDestFillerFiles(jobdata.repo_files, mount);
 
             const [err, out] = await docker_manager.run(remote_settings.builder.image, ["build", pkgbase], [shared_pkgout + ':/home/builder/pkgout', shared_sources + ':/pkgbuilds'], [
                 "PACKAGE_REPO_ID=" + src_repo.id,
@@ -172,7 +164,7 @@ export default function createBuilder(redis_connection_manager: RedisConnectionM
             setTimeout(promotePendingDependents.bind(null, jobdata, builds_queue, logger), 1000);
             throw e;
         }
-    }, { connection });
+    }, { connection, concurrency: 10 });
     worker.pause();
 
     requestRemoteConfig(redis_connection_manager, worker, docker_manager, runtime_settings).then(async () => {
