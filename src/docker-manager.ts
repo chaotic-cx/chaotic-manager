@@ -62,6 +62,62 @@ export class DockerManager {
     return imagename;
   }
 
+  async create(imagename: string, args: string[], binds: string[] = [], env: string[] = []) {
+    const image = await this.getImage(imagename);
+
+    const [err, out] = await to(this.docker.createContainer({
+      Image: image,
+      Cmd: args,
+      HostConfig: {
+        AutoRemove: true,
+        Binds: binds,
+        Ulimits: [
+          {
+            Name: "nofile",
+            Soft: 1024,
+            Hard: 1048576
+          }
+        ],
+      },
+      Env: env,
+      AttachStderr: true,
+      AttachStdout: true,
+    }));
+
+    if (err)
+      throw err;
+
+    return out;
+  }
+
+  // Manually re-implementing the dockerode run function because we need better lifecycle control
+  async start(container: Docker.Container, logfunc: (arg: Buffer) => void = console.log) {
+    const stream = new Stream.Writable();
+    stream._write = (chunk, encoding, next) => {
+      logfunc(chunk.toString());
+      next();
+    };
+
+    var out = undefined;
+    var err = undefined;
+
+    [err, out] = await to(container.attach({
+      stream: true,
+      stdout: true,
+      stderr: true
+    }));
+    if (err || !out)
+      throw err;
+    container.modem.demuxStream(out, stream, stream);
+    [err, out] = await to(container.start());
+    if (err)
+      throw err;
+    [err, out] = await to(container.wait({ condition: "removed" }));
+    if (err)
+      throw err;
+    return out;
+  }
+
   async run(imagename: string, args: string[], binds: string[] = [], env: string[] = [], logfunc: (arg: Buffer) => void = console.log) {
     const image = await this.getImage(imagename);
 
@@ -91,6 +147,10 @@ export class DockerManager {
     if (out[0])
       console.error(out[0]);
     return out;
+  }
+
+  async kill(container: Docker.Container) {
+    await container.remove({ force: true });
   }
 
   async scheduledPull(imagename: string) {

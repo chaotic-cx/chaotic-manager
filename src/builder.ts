@@ -10,6 +10,8 @@ import { RepoManager } from './repo-manager';
 import { splitJobId } from './utils';
 import { RedisConnectionManager } from './redis-connection-manager';
 import { promotePendingDependents, handleJobOrder } from './buildorder';
+import Docker from 'dockerode';
+import to from 'await-to-js';
 
 function ensurePathClean(dir: string): void {
     if (fs.existsSync(dir))
@@ -77,10 +79,11 @@ export default function createBuilder(redis_connection_manager: RedisConnectionM
     const mount = "/shared/pkgout"
 
     const connection = redis_connection_manager.getClient();
+    const subscriber = redis_connection_manager.getSubscriber();
+    subscriber.subscribe("cancel-job");
 
     const docker_manager = new DockerManager();
     const database_queue = new Queue("database", { connection });
-    const database_queue_listener = new QueueEvents("database", { connection });
     const builds_queue = new Queue("builds", { connection });
 
     const runtime_settings: { settings: RemoteSettings | null } = { settings: null };
@@ -97,7 +100,22 @@ export default function createBuilder(redis_connection_manager: RedisConnectionM
         // Copy settings
         const remote_settings: RemoteSettings = structuredClone(runtime_settings.settings) as RemoteSettings;
         const jobdata: BuildJobData = job.data;
+
+        var cancelled = false;
+        var listener = null;
+        var docker: Docker.Container | null = null;
+        async function on_cancel(channel: string, message: string) {
+            if (channel === "cancel-job" && message === job.id) {
+                logger.log(`Job ${job.id} cancelled.`);
+                cancelled = true;
+                subscriber.off("message", on_cancel);
+                if (docker !== null)
+                    await docker_manager.kill(docker).catch((e) => { console.error(e) });
+            }
+        }
         try {
+            listener = subscriber.on("message", on_cancel);
+
             await handleJobOrder(job, builds_queue, database_queue, logger);
 
             const repo_manager: RepoManager = new RepoManager(undefined);
@@ -108,16 +126,26 @@ export default function createBuilder(redis_connection_manager: RedisConnectionM
             ensurePathClean(mount);
             generateDestFillerFiles(jobdata.repo_files, mount);
 
-            const [err, out] = await docker_manager.run(remote_settings.builder.image, ["build", pkgbase], [shared_pkgout + ':/home/builder/pkgout', shared_sources + ':/pkgbuilds'], [
+            if (cancelled) {
+                throw new Error('Job cancelled.');
+            }
+            const container = await docker_manager.create(remote_settings.builder.image, ["build", pkgbase], [shared_pkgout + ':/home/builder/pkgout', shared_sources + ':/pkgbuilds'], [
                 "PACKAGE_REPO_ID=" + src_repo.id,
                 "PACKAGE_REPO_URL=" + src_repo.getUrl(),
                 "EXTRA_PACMAN_REPOS=" + repo_manager.getTargetRepo(target_repo).repoToString(),
                 "EXTRA_PACMAN_KEYRINGS=" + repo_manager.getTargetRepo(target_repo).keyringsToBashArray(),
-            ], logger.raw_log.bind(logger));
+            ]);
+            if (cancelled) {
+                await docker_manager.kill(container).catch((e) => { console.error(e) });
+                throw new Error('Job cancelled.');
+            }
+            docker = container;
+            const [err, out] = await to(docker_manager.start(docker, logger.raw_log.bind(logger)));
+            docker = null;
 
             // Remove any filler files from the equation
             const file_list = fs.readdirSync(mount).filter((file) => { const stats = fs.statSync(path.join(mount, file)); return stats.isFile() && stats.size > 0; });
-            if (err || out.StatusCode !== undefined || file_list.length === 0) {
+            if (err || out.StatusCode !== 0 || file_list.length === 0) {
                 logger.log(`Job ${job.id} failed`);
                 throw new Error('Building failed.');
             }
@@ -163,6 +191,9 @@ export default function createBuilder(redis_connection_manager: RedisConnectionM
         } catch (e) {
             setTimeout(promotePendingDependents.bind(null, jobdata, builds_queue, logger), 1000);
             throw e;
+        } finally {
+            if (listener !== null)
+                subscriber.off("message", on_cancel);
         }
     }, { connection, concurrency: 10 });
     worker.pause();

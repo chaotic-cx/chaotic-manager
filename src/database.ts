@@ -131,7 +131,7 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
                 throw new UnrecoverableError('Intended package list is empty. Assuming this is in error.');
             }
 
-            const [err, out] = await docker_manager.run(settings.builder.image, ["auto-repo-remove", arch, "/repo_root", target_repo].concat(pkgbases), [ `${repo_root}:/repo_root` ], [], process.stdout.write.bind(process.stdout));
+            const [err, out] = await docker_manager.run(settings.builder.image, ["auto-repo-remove", arch, "/repo_root", target_repo].concat(pkgbases), [`${repo_root}:/repo_root`], [], process.stdout.write.bind(process.stdout));
 
             if (err)
                 console.log(err);
@@ -156,9 +156,8 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
                     logger.log(`Job ${job.id} had no packages to add.`);
                     throw new UnrecoverableError('No packages to add.');
                 }
-        
-                const [err, out] = await docker_manager.run(settings.builder.image, ["repo-add", arch, "/landing_zone", "/repo_root", target_repo].concat(packages), [ `${landing_zone}:/landing_zone`, `${repo_root}:/repo_root`, `${gpg}:/root/.gnupg` ], [], logger.raw_log.bind(logger));
-        
+
+                const [err, out] = await docker_manager.run(settings.builder.image, ["repo-add", arch, "/landing_zone", "/repo_root", target_repo].concat(packages), [`${landing_zone}:/landing_zone`, `${repo_root}:/repo_root`, `${gpg}:/root/.gnupg`], [], logger.raw_log.bind(logger));
 
                 if (err)
                     logger.error(err);
@@ -190,6 +189,7 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
                 file_list = fs.readdirSync(directory);
             }
 
+            var remove_promise_list: Promise<number>[] = [];
             const timestamp = Date.now();
 
             var out: {
@@ -198,6 +198,7 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
                 opts: BulkJobOptions;
             }[] = add_job_data.packages.map((pkg) => {
                 const id = `${add_job_data.target_repo}/${pkg.pkgbase}`;
+                remove_promise_list.push(builds_queue.remove(id));
                 return {
                     name: `${id}-${timestamp}`,
                     data: {
@@ -217,6 +218,32 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
                 }
             })
 
+            // Cancel running jobs
+            {
+                const remove_promise_list_results = await Promise.allSettled(remove_promise_list);
+                var job_state_list: Promise<string>[] = [];
+
+                for (const i in remove_promise_list_results) {
+                    const result = remove_promise_list_results[i];
+                    if (result.status === "fulfilled" && result.value === 0)
+                        job_state_list.push(builds_queue.getJobState(out[i].opts.jobId!));
+                    else
+                        job_state_list.push(Promise.resolve("unknown"));
+                }
+
+                const job_state_list_results = await Promise.allSettled(job_state_list);
+                var wait_for_finished_list: Promise<any>[] = [];
+
+                for (const i in job_state_list_results) {
+                    const result = job_state_list_results[i];
+                    if (result.status === "fulfilled" && result.value === "active") {
+                        var to_wait = new Job(builds_queue, "", undefined, undefined, out[i].opts.jobId);
+                        wait_for_finished_list.push(to_wait.waitUntilFinished(builds_queue_events));
+                        connection.publish("cancel-job", out[i].opts.jobId!);
+                    }
+                }
+                await Promise.allSettled(wait_for_finished_list);
+            }
 
             var jobs = await builds_queue.addBulk(out);
 
