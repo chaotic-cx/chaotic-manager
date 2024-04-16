@@ -212,8 +212,7 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
                     opts: {
                         jobId: id,
                         removeOnComplete: true,
-                        removeOnFail: true,
-                        priority: 5,
+                        removeOnFail: { age: 5 },
                     }
                 }
             })
@@ -243,6 +242,8 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
                     }
                 }
                 await Promise.allSettled(wait_for_finished_list);
+                // For safety, wait a second to ensure the job is removed from the queue (we don't want to add a job that is still in the queue)
+                await Timeout.set(1000);
             }
 
             var jobs = await builds_queue.addBulk(out);
@@ -258,7 +259,6 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
                 try {
                     const repo = repo_manager.getRepo(add_job_data.source_repo);
                     for (const job of jobs) {
-
                         await Timeout.set(200);
                         if ((await job.getState()) == "waiting")
                             await repo.notify(job, "pending", "Waiting for builder...");
@@ -268,7 +268,7 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
                 }
             }, 3000);
         }
-    }, { connection: connection, concurrency: 1 });
+    }, { connection: connection });
     database_worker.pause();
     dispatch_worker.pause();
 

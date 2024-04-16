@@ -82,6 +82,10 @@ export class DockerManager {
       Env: env,
       AttachStderr: true,
       AttachStdout: true,
+      OpenStdin: false,
+      Tty: true,
+      StdinOnce: false,
+      AttachStdin: false,
     }));
 
     if (err)
@@ -108,7 +112,10 @@ export class DockerManager {
     }));
     if (err || !out)
       throw err;
-    container.modem.demuxStream(out, stream, stream);
+    out.setEncoding('utf8');
+    out.pipe(stream, {
+      end: true
+    });
     [err, out] = await to(container.start());
     if (err)
       throw err;

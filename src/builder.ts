@@ -185,7 +185,6 @@ export default function createBuilder(redis_connection_manager: RedisConnectionM
                 jobId: job.id,
                 removeOnComplete: true,
                 removeOnFail: true,
-                priority: 5,
             });
             logger.log(`Build job ${job.id} finished. Scheduled database job at ${new Date().toISOString()}...`);
         } catch (e) {
@@ -195,7 +194,7 @@ export default function createBuilder(redis_connection_manager: RedisConnectionM
             if (listener !== null)
                 subscriber.off("message", on_cancel);
         }
-    }, { connection, concurrency: 10 });
+    }, { connection });
     worker.pause();
 
     requestRemoteConfig(redis_connection_manager, worker, docker_manager, runtime_settings).then(async () => {

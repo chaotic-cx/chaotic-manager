@@ -63,6 +63,6 @@ export type DispatchJobData = {
     },
 };
 
-export const current_version = 6;
+export const current_version = 7;
 
 export const SEVEN_DAYS = 60 * 60 * 24 * 7;
