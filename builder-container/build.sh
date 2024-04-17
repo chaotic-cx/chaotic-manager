@@ -81,7 +81,7 @@ function setup-buildenv {
 function build-pkg {
 	set -eo pipefail
 	printf "\nBuilding package...\n"
-	sudo -D "${BUILDDIR}" -u builder PKGDEST="${PKGOUT}" SRCDEST="${PKGSRC}" makepkg --skippgpcheck -s --noconfirm || { echo "Failed to build package!" && return 1; }
+	sudo -D "${BUILDDIR}" -u builder PKGDEST="${PKGOUT}" SRCDEST="${PKGSRC}" makepkg --skippgpcheck -s --noconfirm || { local ret=$? && echo "Failed to build package!" >&2 && return $ret; }
 }
 
 function check-pkg {
