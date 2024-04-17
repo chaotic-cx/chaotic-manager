@@ -1,9 +1,9 @@
 
-import { Worker, Queue, Job, QueueEvents } from 'bullmq';
+import { Worker, Queue, Job } from 'bullmq';
 import fs from 'fs';
 import path from 'path';
 import { Client } from 'node-scp';
-import { RemoteSettings, current_version, BuildJobData, DatabaseJobData } from './types';
+import { RemoteSettings, current_version, BuildJobData, DatabaseJobData, BuildStatus } from './types';
 import { DockerManager } from './docker-manager';
 import { BuildsRedisLogger, SshLogger } from './logging';
 import { RepoManager } from './repo-manager';
@@ -88,7 +88,7 @@ export default function createBuilder(redis_connection_manager: RedisConnectionM
 
     const runtime_settings: { settings: RemoteSettings | null } = { settings: null };
 
-    const worker = new Worker("builds", async (job: Job) => {
+    const worker = new Worker("builds", async (job: Job): Promise<BuildStatus> => {
         if (job.id === undefined)
             throw new Error('Job ID is undefined');
 
@@ -146,8 +146,15 @@ export default function createBuilder(redis_connection_manager: RedisConnectionM
             // Remove any filler files from the equation
             const file_list = fs.readdirSync(mount).filter((file) => { const stats = fs.statSync(path.join(mount, file)); return stats.isFile() && stats.size > 0; });
             if (err || out.StatusCode !== 0 || file_list.length === 0) {
-                logger.log(`Job ${job.id} failed`);
-                throw new Error('Building failed.');
+                if (!err && out.StatusCode === 13) {
+                    logger.log(`Job ${job.id} skipped because all packages were already built.`);
+                    setTimeout(promotePendingDependents.bind(null, jobdata, builds_queue, logger), 1000);
+                    return BuildStatus.ALREADY_BUILT;
+                }
+                else {
+                    logger.log(`Job ${job.id} failed`);
+                    throw new Error('Building failed.');
+                }
             }
             else
                 logger.log(`Finished build ${job.id}. Uploading...`);
@@ -194,6 +201,7 @@ export default function createBuilder(redis_connection_manager: RedisConnectionM
             if (listener !== null)
                 subscriber.off("message", on_cancel);
         }
+        return BuildStatus.SUCCESS;
     }, { connection });
     worker.pause();
 

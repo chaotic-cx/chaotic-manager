@@ -1,6 +1,6 @@
 
 import { Worker, Job, UnrecoverableError, QueueEvents, Queue, BulkJobOptions } from 'bullmq';
-import { RemoteSettings, BuildJobData, current_version, DatabaseJobData, DispatchJobData } from './types';
+import { RemoteSettings, BuildJobData, current_version, DatabaseJobData, DispatchJobData, BuildStatus } from './types';
 import { DockerManager } from './docker-manager';
 import { BuildsRedisLogger } from './logging';
 import { RepoManager } from './repo-manager';
@@ -10,6 +10,7 @@ import { promotePendingDependents } from './buildorder';
 import Timeout from 'await-timeout';
 import fs from 'fs';
 import path from 'path';
+import to from 'await-to-js';
 
 async function publishSettingsObject(manager: RedisConnectionManager, settings: RemoteSettings): Promise<void> {
     const subscriber = manager.getSubscriber();
@@ -211,7 +212,7 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
                     },
                     opts: {
                         jobId: id,
-                        removeOnComplete: true,
+                        removeOnComplete: { age: 5 },
                         removeOnFail: { age: 5 },
                     }
                 }
@@ -310,8 +311,25 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
             if (job) {
                 const jobdata: BuildJobData = job.data;
                 const repo = repo_manager.getRepo(jobdata.srcrepo);
-                await repo.notify(job, "failed", "Build failed.");
                 job.remove();
+                await repo.notify(job, "failed", "Build failed.");
+            }
+        } catch (error) {
+            console.error(error);
+        }
+    });
+    builds_queue_events.on("completed", async ({ jobId }) => {
+        try {
+            const logger = new BuildsRedisLogger(connection);
+            var job = await logger.fromJobID(jobId, builds_queue);
+            if (job) {
+                const jobdata: BuildJobData = job.data;
+                const repo = repo_manager.getRepo(jobdata.srcrepo);
+                const [err, out] = await to(job.waitUntilFinished(builds_queue_events));
+                job.remove();
+                if (!err && out === BuildStatus.ALREADY_BUILT) {
+                    await repo.notify(job, "canceled", "Build skipped because package was already built.");
+                }
             }
         } catch (error) {
             console.error(error);

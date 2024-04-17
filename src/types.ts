@@ -63,6 +63,11 @@ export type DispatchJobData = {
     },
 };
 
+export enum BuildStatus {
+    SUCCESS,
+    ALREADY_BUILT
+}
+
 export const current_version = 7;
 
 export const SEVEN_DAYS = 60 * 60 * 24 * 7;
