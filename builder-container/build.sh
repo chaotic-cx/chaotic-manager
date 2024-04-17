@@ -82,6 +82,7 @@ function build-pkg {
 	set -eo pipefail
 	printf "\nBuilding package...\n"
 	sudo -D "${BUILDDIR}" -u builder PKGDEST="${PKGOUT}" SRCDEST="${PKGSRC}" makepkg --skippgpcheck -s --noconfirm || { local ret=$? && echo "Failed to build package!" >&2 && return $ret; }
+	find "${PKGOUT}" -type f -empty -delete || return 1
 }
 
 function check-pkg {

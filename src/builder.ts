@@ -13,10 +13,11 @@ import { promotePendingDependents, handleJobOrder } from './buildorder';
 import Docker from 'dockerode';
 import to from 'await-to-js';
 
-function ensurePathClean(dir: string): void {
+function ensurePathClean(dir: string, create: boolean = true): void {
     if (fs.existsSync(dir))
         fs.rmSync(dir, { recursive: true });
-    fs.mkdirSync(dir);
+    if (create)
+        fs.mkdirSync(dir);
 }
 
 function requestRemoteConfig(manager: RedisConnectionManager, worker: Worker, docker: DockerManager, config: any): Promise<void> {
@@ -180,6 +181,7 @@ export default function createBuilder(redis_connection_manager: RedisConnectionM
                 console.log("End of ssh log.");
                 throw new Error('Upload failed.');
             }
+            ensurePathClean(mount, false);
             logger.log(`Finished upload ${job.id}.`);
             const db_job_data: DatabaseJobData = {
                 arch: jobdata.arch,
