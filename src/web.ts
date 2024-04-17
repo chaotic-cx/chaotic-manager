@@ -1,25 +1,12 @@
 import express, { Request, Response } from 'express';
-import { Queue, QueueEvents } from 'bullmq';
+import { Queue } from 'bullmq';
 import to from 'await-to-js';
-import EventEmitter from 'events';
 import { RedisConnectionManager } from './redis-connection-manager';
-import { splitJobId } from './utils';
+import Timeout from 'await-timeout';
 
 export async function startWebServer(port: number, manager: RedisConnectionManager) {
-    const emitter = new EventEmitter();
-
     const connection = manager.getClient();
     const subscriber = manager.getSubscriber();
-    
-    const database_queue_events = new QueueEvents("database", { connection });
-    database_queue_events.on('completed', ({ jobId }) => {
-        var { target_repo, pkgbase } = splitJobId(jobId);
-        emitter.emit('ended', pkgbase);
-    });
-    database_queue_events.on('failed', ({ jobId }) => {
-        var { target_repo, pkgbase } = splitJobId(jobId);
-        emitter.emit('ended', pkgbase);
-    });
 
     const builder_queue = new Queue("builds", { connection });
     const database_queue = new Queue("database", { connection });
@@ -43,13 +30,13 @@ export async function startWebServer(port: number, manager: RedisConnectionManag
     
         const subscribable = "build-logs." + id + "." + timestamp;
     
-        const closer =  () => {
+        const closer = () => {
+            console.log("closing???");
             subscriber.unsubscribe(subscribable);
             for (const unrefable of unref) {
                 res.removeListener('close', unrefable);
                 res.removeListener('finish', unrefable);
                 subscriber.removeListener("message", unrefable);
-                emitter.removeListener('ended', unrefable);
             }
         };
         unref.push(closer);
@@ -63,22 +50,23 @@ export async function startWebServer(port: number, manager: RedisConnectionManag
         }
     
         res.write(out[0]);
-    
-        const forwarder = (channel: string, message: string) => {
-            if (channel === subscribable)
-                res.write(message);
+
+        const forwarder = async (channel: string, message: string) => {
+            if (channel === subscribable) {
+                if (message == "END") {
+                    await Timeout.set(1000);
+                    try {
+                        res.end();
+                    } catch (e) {
+                    }
+                }
+                else
+                    res.write(message.substring(3));
+            }
         }
-    
-        const emitter_listener = (jobId: string) => {
-            // Delay by 1 second to ensure the gather the last logs before we end the connection
-            if (jobId === id)
-                setTimeout(() => res.end(), 1000);
-        }
-    
+
         unref.push(forwarder);
-        unref.push(emitter_listener);
         subscriber.on("message", forwarder);
-        emitter.once('ended', emitter_listener);
 
         var busy: boolean = false;
         var [err, active] = await to(connection.keys(`bull:[^:]*:[^:]*/${id}`));

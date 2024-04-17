@@ -95,7 +95,7 @@ export class DockerManager {
   }
 
   // Manually re-implementing the dockerode run function because we need better lifecycle control
-  async start(container: Docker.Container, logfunc: (arg: Buffer) => void = console.log) {
+  async start(container: Docker.Container, logfunc: (arg: string) => void = console.log) {
     const stream = new Stream.Writable();
     stream._write = (chunk, encoding, next) => {
       logfunc(chunk.toString());
@@ -125,7 +125,7 @@ export class DockerManager {
     return out;
   }
 
-  async run(imagename: string, args: string[], binds: string[] = [], env: string[] = [], logfunc: (arg: Buffer) => void = console.log) {
+  async run(imagename: string, args: string[], binds: string[] = [], env: string[] = [], logfunc: (arg: string) => void = console.log) {
     const image = await this.getImage(imagename);
 
     const stream = new Stream.Writable();

@@ -61,12 +61,12 @@ export class BuildsRedisLogger {
         }
     }
 
-    private internal_log(arg: Buffer, err: boolean = false): void {
+    private internal_log(arg: string, err: boolean = false): void {
         if (this.init === false)
             return console.warn("Logger not initialized");
         // Pipelining results in a single roundtrip to the server and this prevents requests from getting out of order
         var pipeline = this.connection.pipeline();
-        pipeline.publish(this.channel, arg);
+        pipeline.publish(this.channel, "LOG" + arg);
         pipeline.append(this.key, arg);
         pipeline.expire(this.key, 60 * 60 * 24 * 7); // 7 days
         pipeline.exec().catch(() => {});
@@ -77,16 +77,20 @@ export class BuildsRedisLogger {
             process.stdout.write(arg);
     }
 
+    async end_log(): Promise<void> {
+        await this.connection.publish(this.channel, "END");
+    }
+
     raw_log = this.internal_log;
 
     log(arg: any): void {
         // Convert to buffer
-        this.internal_log(Buffer.from(arg + "\r\n"));
+        this.internal_log(arg + "\r\n");
     }
 
     error(arg: any): void {
         // Convert to buffer
-        this.internal_log(Buffer.from(arg + "\r\n"), true);
+        this.internal_log(arg + "\r\n", true);
     }
 
     public async setDefault() {

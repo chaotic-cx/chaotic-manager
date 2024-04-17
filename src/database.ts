@@ -313,6 +313,7 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
                 const repo = repo_manager.getRepo(jobdata.srcrepo);
                 job.remove();
                 await repo.notify(job, "failed", "Build failed.");
+                await logger.end_log();
             }
         } catch (error) {
             console.error(error);
@@ -329,6 +330,7 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
                 job.remove();
                 if (!err && out === BuildStatus.ALREADY_BUILT) {
                     await repo.notify(job, "canceled", "Build skipped because package was already built.");
+                    await logger.end_log();
                 }
             }
         } catch (error) {
@@ -341,6 +343,9 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
             const jobdata: DatabaseJobData = job.data;
             const repo = repo_manager.getRepo(jobdata.srcrepo);
             await repo.notify(job, "success", "Package successfully deployed.");
+            const logger = new BuildsRedisLogger(connection);
+            logger.fromJob(job);
+            await logger.end_log();
         } catch (error) {
             console.error(error);
         }
@@ -352,6 +357,9 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
             const jobdata: DatabaseJobData = job.data;
             const repo = repo_manager.getRepo(jobdata.srcrepo);
             await repo.notify(job, "failed", "Error adding package to database.");
+            const logger = new BuildsRedisLogger(connection);
+            logger.fromJob(job);
+            await logger.end_log();
         } catch (error) {
             console.error(error);
         }
