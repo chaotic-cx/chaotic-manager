@@ -31,7 +31,6 @@ export async function startWebServer(port: number, manager: RedisConnectionManag
         const subscribable = "build-logs." + id + "." + timestamp;
     
         const closer = () => {
-            console.log("closing???");
             subscriber.unsubscribe(subscribable);
             for (const unrefable of unref) {
                 res.removeListener('close', unrefable);
