@@ -35,10 +35,10 @@ export type BuildJobData = {
     srcrepo: string | undefined,
     timestamp: number,
     commit: string | undefined,
-    deptree?: {
+    deptree: {
         dependencies: string[],
         dependents: string[],
-    },
+    } | null,
     repo_files: string[],
 };
 
@@ -55,10 +55,10 @@ export type DispatchJobData = {
         arch: string,
         packages: {
             pkgbase: string,
-            deptree?: {
+            deptree: {
                 dependencies: string[],
                 dependents: string[],
-            },
+            } | null,
         }[]
     },
 };
@@ -68,6 +68,6 @@ export enum BuildStatus {
     ALREADY_BUILT
 }
 
-export const current_version = 7;
+export const current_version = 8;
 
 export const SEVEN_DAYS = 60 * 60 * 24 * 7;

@@ -1,5 +1,5 @@
 
-import { Worker, Queue, Job } from 'bullmq';
+import { Worker, Queue, Job, UnrecoverableError } from 'bullmq';
 import fs from 'fs';
 import path from 'path';
 import { Client } from 'node-scp';
@@ -114,10 +114,11 @@ export default function createBuilder(redis_connection_manager: RedisConnectionM
                     await docker_manager.kill(docker).catch((e) => { console.error(e) });
             }
         }
+
+        await handleJobOrder(job, builds_queue, database_queue, logger);
+
         try {
             listener = subscriber.on("message", on_cancel);
-
-            await handleJobOrder(job, builds_queue, database_queue, logger);
 
             const repo_manager: RepoManager = new RepoManager(undefined);
             repo_manager.repoFromObject(remote_settings.repos);
@@ -128,7 +129,7 @@ export default function createBuilder(redis_connection_manager: RedisConnectionM
             generateDestFillerFiles(jobdata.repo_files, mount);
 
             if (cancelled) {
-                throw new Error('Job cancelled.');
+                throw new UnrecoverableError('Job cancelled.');
             }
             const container = await docker_manager.create(remote_settings.builder.image, ["build", pkgbase], [shared_pkgout + ':/home/builder/pkgout', shared_sources + ':/pkgbuilds'], [
                 "PACKAGE_REPO_ID=" + src_repo.id,
@@ -189,6 +190,7 @@ export default function createBuilder(redis_connection_manager: RedisConnectionM
                 timestamp: jobdata.timestamp,
                 commit: jobdata.commit,
                 srcrepo: jobdata.srcrepo,
+                deptree: jobdata.deptree,
             };
             await database_queue.add("database", db_job_data, {
                 jobId: job.id,

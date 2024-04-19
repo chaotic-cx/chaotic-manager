@@ -117,15 +117,13 @@ async function shouldExecute(job: Job, buildsqueue: Queue, databasequeue: Queue 
     if (!data.deptree)
         return DependencyState.CAN_EXECUTE;
 
-    var pending = 0;
-
     // Quick and dirty check of pending database jobs
     if (databasequeue != null) {
         const promises = data.deptree.dependencies.map(dep => getJobData(databasequeue, dep));
         const results = await Promise.allSettled(promises);
         for (const result of results) {
             if (result.status === "fulfilled" && result.value && !["completed", "failed"].includes(result.value.state)) {
-                pending++;
+                return DependencyState.MUST_WAIT;
             }
         }
     }
