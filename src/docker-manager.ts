@@ -50,7 +50,7 @@ export class DockerManager {
     try {
       try {
         var image = this.docker.getImage(imagename)
-        await image.get();
+        await image.inspect();
       }
       catch {
         await this.pullImage(imagename, true);
