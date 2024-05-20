@@ -1,5 +1,5 @@
 
-import { Worker, Job, UnrecoverableError, QueueEvents, Queue, BulkJobOptions } from 'bullmq';
+import { Worker, Job, UnrecoverableError, MetricsTime, QueueEvents, Queue, BulkJobOptions } from 'bullmq';
 import { RemoteSettings, BuildJobData, current_version, DatabaseJobData, DispatchJobData, BuildStatus } from './types';
 import { DockerManager } from './docker-manager';
 import { BuildsRedisLogger } from './logging';
@@ -173,7 +173,10 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
                 setTimeout(promotePendingDependents.bind(null, jobdata, builds_queue, logger), 1000);
             }
         }
-    }, { connection: connection });
+    }, { connection: connection, metrics: {
+            // https://docs.bullmq.io/guide/metrics
+            maxDataPoints: MetricsTime.ONE_WEEK * 4,
+        }});
     const dispatch_worker = new Worker("dispatch", async (job: Job) => {
         if (job.id === undefined)
             throw new Error('Job ID is undefined');

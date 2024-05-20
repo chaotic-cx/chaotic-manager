@@ -1,5 +1,5 @@
 
-import { Worker, Queue, Job, UnrecoverableError } from 'bullmq';
+import { Worker, Queue, MetricsTime,  Job, UnrecoverableError } from 'bullmq';
 import fs from 'fs';
 import path from 'path';
 import { Client } from 'node-scp';
@@ -206,7 +206,11 @@ export default function createBuilder(redis_connection_manager: RedisConnectionM
                 subscriber.off("message", on_cancel);
         }
         return BuildStatus.SUCCESS;
-    }, { connection });
+    }, { connection,
+        metrics: {
+            // https://docs.bullmq.io/guide/metrics
+            maxDataPoints: MetricsTime.ONE_WEEK * 4,
+        },});
     worker.pause();
 
     requestRemoteConfig(redis_connection_manager, worker, docker_manager, runtime_settings).then(async () => {

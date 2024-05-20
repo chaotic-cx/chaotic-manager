@@ -113,7 +113,6 @@ export async function startWebServer(port: number, manager: RedisConnectionManag
                 }
             } catch (err) {
                 console.error(err);
-                return res.status(500).send("The server exploded!");
             }
         }
         return stats;
@@ -142,7 +141,6 @@ export async function startWebServer(port: number, manager: RedisConnectionManag
                 }
             } catch (err) {
                 console.error(err);
-                return res.status(500).send("The server exploded!");
             }
         }
         return packages;
@@ -163,27 +161,52 @@ export async function startWebServer(port: number, manager: RedisConnectionManag
         return await getOrStreamLog(req, res);
     });
 
-    app.get("/api/queue/stats", async (res: Response) => {
+    app.get("/api/queue/stats", async (req: Request, res: Response) => {
         try {
-            console.log("Querying API via /queue/stats")
             const stats = await buildStatsObject(res);
-            console.log(JSON.stringify(stats))
             return res.json(stats);
         } catch (err) {
             console.error(err);
-            return res.status(500).send("The server exploded!");
+            res.setHeader("Cache-Control", "no-cache");
+            res.setHeader("Content-Type", "text/plain");
+            res.status(500).send("The server exploded!");
+            return
         }
     });
 
-    app.get("/api/queue/packages", async (res: Response) => {
+    app.get("/api/queue/packages", async (req: Request, res: Response) => {
         try {
-            console.log("Querying API via /queue/packages")
             const packages = await buildPackagesObject(res);
-            console.log(JSON.stringify(packages))
             return res.json(packages);
         } catch (err) {
             console.error(err);
-            return res.status(500).send("The server exploded!");
+            res.setHeader("Cache-Control", "no-cache");
+            res.setHeader("Content-Type", "text/plain");
+            res.status(500).send("The server exploded!");
+            return
+        }
+    });
+
+    app.get("/api/queue/metrics", async (req: Request, res: Response) => {
+        try {
+            const metricsBuilderCompleted = await builder_queue.getMetrics('completed');
+            const metricsBuilderFailed = await builder_queue.getMetrics('failed');
+            const metricsDbCompleted = await database_queue.getMetrics('completed');
+            const metricsDbFailed = await database_queue.getMetrics('failed');
+            return res.json({
+                builder_queue: {
+                    completed: metricsBuilderCompleted.count,
+                failed: metricsBuilderFailed.count,
+                },
+                database_queue: {
+                    completed: metricsDbCompleted.count,
+                    failed: metricsDbFailed.count,
+                }
+            });
+        } catch (err) {
+            console.error(err);
+            res.status(500).send("The server exploded!");
+            return
         }
     });
 
