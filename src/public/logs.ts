@@ -1,15 +1,40 @@
-import { Terminal } from 'xterm';
-import { FitAddon } from 'xterm-addon-fit';
-import 'xterm/css/xterm.css';
+import {Terminal} from '@xterm/xterm';
+import {FitAddon} from '@xterm/addon-fit';
+import '@xterm/xterm/css/xterm.css';
 
 async function setup() {
-    var termdiv = document.getElementById('terminal');
+    const termdiv = document.getElementById('terminal');
     if (!termdiv) {
         console.error("Terminal div not found");
         return;
     }
 
-    var term = new Terminal({ scrollback: 9999999, disableStdin: true });
+    const term = new Terminal({
+        disableStdin: true,
+        scrollback: 9999999,
+        theme: {
+            background: '#1e1e2e',
+            black: '#45475a',
+            blue: '#89b4fa',
+            brightBlack: '#585b70',
+            brightBlue: '#89b4fa',
+            brightCyan: '#94e2d5',
+            brightGreen: '#a6e3a1',
+            brightMagenta: '#f5c2e7',
+            brightRed: '#f38ba8',
+            brightWhite: '#a6adc8',
+            brightYellow: '#f9e2af',
+            cursor: '#f5e0dc',
+            cursorAccent: '#f5e0dc',
+            cyan: '#94e2d5',
+            foreground: '#cdd6f4',
+            green: '#a6e3a1',
+            magenta: '#f5c2e7',
+            red: '#f38ba8',
+            white: '#bac2de',
+            yellow: '#f9e2af',
+        }
+    });
     const fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
     term.open(termdiv);
@@ -35,33 +60,33 @@ async function setup() {
     fitAddon.fit();
 
     // Parse querystring
-    var query = new URLSearchParams(window.location.search);
+    const query = new URLSearchParams(window.location.search);
 
-    var id: string;
+    let id: string;
     // Print error if there is no ID 
     if (!query.has('id') || !/^[a-zA-Z0-9-_]+$/.test(id = query.get("id") as string)) {
         term.writeln('\x1B[1;3;31mID is invalid or no ID provided. Did you copy the querystring?\x1B[0m ')
         return;
     }
 
-    var url = "api/logs/" + id;
-    var timestamp: string;
+    let url = "api/logs/" + id;
+    let timestamp: string;
     if (query.has("timestamp") && /^\d+$/.test(timestamp = query.get("timestamp") as string))
         url += "/" + timestamp;
 
-    var is_finishd = false;
+    let is_finished = false;
     await fetch(url).then(async (response) => {
         if (!response.body) {
             term.writeln('\x1B[1;3;31mError: No response body\x1B[0m ');
-            is_finishd = true;
+            is_finished = true;
             return;
         }
         const reader = response.body.getReader();
-        var err = false;
-        while (!is_finishd && !err) {
-            await reader.read().then(({ done, value }) => {
+        let err = false;
+        while (!is_finished && !err) {
+            await reader.read().then(({done, value}) => {
                 if (done) {
-                    is_finishd = true;
+                    is_finished = true;
                 }
                 if (value)
                     term.write(value);
