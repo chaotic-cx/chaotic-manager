@@ -1,3 +1,5 @@
+.direnv
+.env
 .idea
 /temp
 /node_modules

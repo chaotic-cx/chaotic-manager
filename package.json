@@ -33,8 +33,9 @@
     "webpack-cli": "^5.1.4"
   },
   "scripts": {
+    "build": "tsc && webpack",
     "start": "tsc && node dist/index.js",
-    "build": "tsc && webpack"
+    "test": "tsc && node --env-file=.env dist/index.js database --web-port 8080"
   },
   "devDependencies": {
     "ts-loader": "^9.5.1"
