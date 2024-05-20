@@ -1,7 +1,7 @@
-import express, { Request, Response } from 'express';
-import { Queue } from 'bullmq';
+import express, {Request, Response} from 'express';
+import {JobType, Queue} from 'bullmq';
 import to from 'await-to-js';
-import { RedisConnectionManager } from './redis-connection-manager';
+import {RedisConnectionManager} from './redis-connection-manager';
 import Timeout from 'await-timeout';
 
 export async function startWebServer(port: number, manager: RedisConnectionManager) {
@@ -17,7 +17,7 @@ export async function startWebServer(port: number, manager: RedisConnectionManag
         res.setHeader('Cache-Control', 'no-cache');
         res.setHeader('Content-Type', 'text/plain');
         res.setHeader('Connection', 'keep-alive');
-    
+
         const id: string = req.params.id;
         var timestamp: string = req.params.timestamp;
         // Verify if timestamp is a number and if id is alphanumerical or -/_ via regex
@@ -25,11 +25,11 @@ export async function startWebServer(port: number, manager: RedisConnectionManag
             res.status(400).send("Invalid timestamp");
             return;
         }
-    
+
         var unref: any[] = [];
-    
+
         const subscribable = "build-logs." + id + "." + timestamp;
-    
+
         const closer = () => {
             subscriber.unsubscribe(subscribable);
             for (const unrefable of unref) {
@@ -41,13 +41,13 @@ export async function startWebServer(port: number, manager: RedisConnectionManag
         unref.push(closer);
         res.once('close', closer);
         res.once('finish', closer);
-    
+
         var [err, out] = await to(Promise.all([connection.get("build-logs:" + id + ":" + timestamp), subscriber.subscribe(subscribable)]));
         if (err || !out || !out[0]) {
             res.status(404).send("Not found");
             return;
         }
-    
+
         res.write(out[0]);
 
         const forwarder = async (channel: string, message: string) => {
@@ -92,18 +92,69 @@ export async function startWebServer(port: number, manager: RedisConnectionManag
                 }
             }
         }
-    
+
         if (!busy)
             res.end();
     }
 
-    app.get('/api/logs/:id/:timestamp', getOrStreamLog);
+    async function buildStatsObject(res: Response): Promise<Object> {
+        const validJobTypes: JobType[] = ['completed', 'failed', 'active', 'delayed', 'prioritized', 'waiting', 'waiting-children', 'paused', 'repeat'];
+        let stats = [];
+        for (const currType of validJobTypes) {
+            try {
+                const jobs = await builder_queue.getJobs([currType])
+                if (jobs.length !== 0) {
+                    stats.push({
+                        [currType]: {
+                            count: jobs.length,
+                            packages: jobs.map((job) => job.id),
+                        }
+                    });
+                }
+            } catch (err) {
+                console.error(err);
+                return res.status(500).send("The server exploded!");
+            }
+        }
+        return stats;
+    }
 
-    app.get('/api/logs/:id', async (req: Request, res: Response) => {
+    async function buildPackagesObject(res: Response): Promise<Object> {
+        const validJobTypes: JobType[] = ['completed', 'failed', 'active', 'delayed', 'prioritized', 'waiting', 'waiting-children', 'paused', 'repeat'];
+        let packages = [];
+        for (const currType of validJobTypes) {
+            try {
+                const jobs = await builder_queue.getJobs(currType)
+                if (jobs.length !== 0) {
+                    for (let i = 0; i < jobs.length; i++) {
+                        const job = jobs[i];
+                        if (job.opts.jobId !== undefined) {
+                            packages.push({
+                                [job.opts.jobId.toString()]: {
+                                    arch: job.data.arch,
+                                    srcrepo: job.data.srcrepo,
+                                    timestamp: job.data.timestamp,
+                                    repo_files: job.data.repo_files,
+                                }
+                            });
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error(err);
+                return res.status(500).send("The server exploded!");
+            }
+        }
+        return packages;
+    }
+
+    app.get("/api/logs/:id/:timestamp", getOrStreamLog);
+
+    app.get("/api/logs/:id", async (req: Request, res: Response) => {
         const [err, out] = await to(connection.get("build-logs:" + req.params.id + ":default"));
         if (err || !out) {
-            res.setHeader('Cache-Control', 'no-cache');
-            res.setHeader('Content-Type', 'text/plain');
+            res.setHeader("Cache-Control", "no-cache");
+            res.setHeader("Content-Type", "text/plain");
             res.status(404).send("Not found");
             return;
         }
@@ -112,7 +163,31 @@ export async function startWebServer(port: number, manager: RedisConnectionManag
         return await getOrStreamLog(req, res);
     });
 
-    app.use(express.static('public', {
+    app.get("/api/queue/stats", async (res: Response) => {
+        try {
+            console.log("Querying API via /queue/stats")
+            const stats = await buildStatsObject(res);
+            console.log(JSON.stringify(stats))
+            return res.json(stats);
+        } catch (err) {
+            console.error(err);
+            return res.status(500).send("The server exploded!");
+        }
+    });
+
+    app.get("/api/queue/packages", async (res: Response) => {
+        try {
+            console.log("Querying API via /queue/packages")
+            const packages = await buildPackagesObject(res);
+            console.log(JSON.stringify(packages))
+            return res.json(packages);
+        } catch (err) {
+            console.error(err);
+            return res.status(500).send("The server exploded!");
+        }
+    });
+
+    app.use(express.static("public", {
         // 1 day in milliseconds
         maxAge: 1000 * 60 * 60 * 24
     }));
