@@ -94,7 +94,7 @@ export class BuildsRedisLogger {
     }
 
     public async setDefault() {
-        if (this.init === false)
+        if (!this.init)
             return console.warn("Logger not initialized");
         await this.connection.setex(this.default_key, SEVEN_DAYS, this.timestamp);
     }

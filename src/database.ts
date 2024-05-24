@@ -11,6 +11,7 @@ import Timeout from 'await-timeout';
 import fs from 'fs';
 import path from 'path';
 import to from 'await-to-js';
+import Notifier from "./notifier";
 
 async function publishSettingsObject(manager: RedisConnectionManager, settings: RemoteSettings): Promise<void> {
     const subscriber = manager.getSubscriber();
@@ -43,6 +44,8 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
     const package_repos_notifiers = process.env.PACKAGE_REPOS_NOTIFIERS;
 
     var repo_manager = new RepoManager(base_logs_url ? new URL(base_logs_url) : undefined);
+
+    const notifier: Notifier = new Notifier();
 
     if (package_repos) {
         try {
@@ -316,6 +319,7 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
                 const repo = repo_manager.getRepo(jobdata.srcrepo);
                 job.remove();
                 await repo.notify(job, "failed", "Build failed.");
+                await notifier.notify(`Error during build phase of ${job.id}.`);
                 await logger.end_log();
             }
         } catch (error) {
@@ -346,8 +350,11 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
             const jobdata: DatabaseJobData = job.data;
             const repo = repo_manager.getRepo(jobdata.srcrepo);
             await repo.notify(job, "success", "Package successfully deployed.");
-            const logger = new BuildsRedisLogger(connection);
+            await notifier.notify(`${jobdata.packages} successfully deployed to ${jobdata.srcrepo}.`);
+            const logger: BuildsRedisLogger = new BuildsRedisLogger(connection);
             logger.fromJob(job);
+
+
             await logger.end_log();
         } catch (error) {
             console.error(error);
@@ -363,6 +370,7 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
             const logger = new BuildsRedisLogger(connection);
             logger.fromJob(job);
             await logger.end_log();
+            await notifier.notify(`Error adding ${jobdata.packages} to database of repository ${jobdata.srcrepo}.`);
         } catch (error) {
             console.error(error);
         }

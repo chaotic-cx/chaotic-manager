@@ -1,3 +1,4 @@
+import {JobType} from "bullmq";
 
 export type PacmanRepo = {
     name: string,
@@ -68,6 +69,23 @@ export enum BuildStatus {
     ALREADY_BUILT
 }
 
-export const current_version = 8;
+// The object the API should return on /api/packages calls
+export interface PackagesReturnObject {
+    [x: string]: {
+        arch: string,
+        srcrepo: string,
+        timestamp: string,
+        repo_files: string
+    }
+}
 
-export const SEVEN_DAYS = 60 * 60 * 24 * 7;
+export type StatsReturnObject = {
+    [x in JobType]?: {
+        count: string;
+        packages: string;
+    };
+};
+
+export const current_version: number = 8;
+
+export const SEVEN_DAYS: number = 60 * 60 * 24 * 7;
