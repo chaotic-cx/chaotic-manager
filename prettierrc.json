@@ -1,0 +1,24 @@
+{
+	"arrowParens": "avoid",
+	"bracketSpacing": true,
+	"endOfLine": "auto",
+	"eslintIntegration": true,
+	"htmlWhitespaceSensitivity": "strict",
+	"insertPragma": false,
+	"jsxBracketSameLine": false,
+	"jsxSingleQuote": false,
+	"parser": "typescript",
+	"plugins": [
+		"prettier-plugin-organize-imports"
+	],
+	"printWidth": 80,
+	"proseWrap": "always",
+	"quoteProps": "as-needed",
+	"requirePragma": false,
+	"semi": false,
+	"singleQuote": true,
+	"tabWidth": 4,
+	"trailingComma": "none",
+	"useTabs": false,
+	"vueIndentScriptAndStyle": false
+}
