@@ -84,7 +84,7 @@ async function populateDepGraph(job: Job, queue: Queue) {
         }
     }
 
-    // Check if reverse depdendencies match forward dependencies
+    // Check if reverse dependencies match forward dependencies
     for (const node of graph.overallOrder()) {
         const data = graph.getNodeData(node);
         // Remove nodes without data (ones that have no relation to the job)
