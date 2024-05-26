@@ -26,10 +26,13 @@ class Notifier {
     async notify(message: string): Promise<void> {
         try {
             if (this.bot !== undefined) {
-                // While MarkdownV2 is the non-legacy parse mode, it is annoying to work with because
-                // some characters like "-" in package names need to be escaped. We don't need the extra
-                // features, so lets go with the simpler Markdown parse mode.
-                await this.bot.sendMessage(this.chatId, message, {parse_mode: "Markdown"});
+                // Properly escape markdown characters used in messages, because API requires it
+                message = message.replaceAll(/-/g, '\\-')
+                    .replaceAll(/>/g, '\\>')
+                    .replaceAll(/\./g, '\\.')
+                    .replaceAll(/=/g, '\\=')
+                console.log(message)
+                await this.bot.sendMessage(this.chatId, message, {parse_mode: "MarkdownV2"});
             }
         } catch (e) {
             console.error("An error occurred:", e)

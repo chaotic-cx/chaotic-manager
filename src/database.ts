@@ -47,6 +47,38 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
 
     const notifier: Notifier = new Notifier();
 
+    /**
+     *
+     * @param packages The array of packages to notify about
+     * @param srcRepo The source repository to notify about
+     * @param event The event to notify about, "New deployment" or "Failed deploying"
+     * @param timestamp The timestamp of the failed build
+     * @returns Promise<void> A promise that resolves when the notification is sent
+     */
+    async function createNotificationText(
+      packages: string[] | string,
+      srcRepo: string,
+      event: string,
+      timestamp?: number
+    ): Promise<void> {
+        let text: string = `*${event}:*\n`;
+        if (packages instanceof Array) {
+            for (let pkg of packages) {
+                // If we get passed an array, it is definitely a list of file names passed after a deployment.
+                // We don't need to know the extension of that.
+                text += ` > ${pkg.replace(/\.pkg.tar.zst$/, "")}\n`;
+            }
+        }
+        else {
+            // Otherwise, it is a jobId which contains the source repo as well. Let's remove that.
+            // We can also be sure that this a notification about a failed build in this case.
+            const pkgname: string = packages.replace(srcRepo, "").replace(/\//, "")
+            const logUrl: string = base_logs_url + "?timestamp=" + timestamp + "&?id=" + pkgname
+            text += ` > ${pkgname} - [logs](${logUrl})`;
+        }
+        await notifier.notify(text);
+    }
+
     if (package_repos) {
         try {
             var obj = JSON.parse(package_repos);
@@ -319,7 +351,7 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
                 const repo = repo_manager.getRepo(jobdata.srcrepo);
                 job.remove();
                 await repo.notify(job, "failed", "Build failed.");
-                await notifier.notify(`Error during build phase of ${job.id}.`);
+                await createNotificationText(jobId, jobdata.srcrepo ?? "", `🚫 Build for ${jobdata.srcrepo} failed`, jobdata.timestamp);
                 await logger.end_log();
             }
         } catch (error) {
@@ -350,10 +382,9 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
             const jobdata: DatabaseJobData = job.data;
             const repo = repo_manager.getRepo(jobdata.srcrepo);
             await repo.notify(job, "success", "Package successfully deployed.");
-            await notifier.notify(`${jobdata.packages} successfully deployed to ${jobdata.srcrepo}.`);
+            await createNotificationText(jobdata.packages, jobdata.srcrepo ?? "",`🚨 New deployment to ${jobdata.srcrepo}`);
             const logger: BuildsRedisLogger = new BuildsRedisLogger(connection);
             logger.fromJob(job);
-
 
             await logger.end_log();
         } catch (error) {
@@ -370,7 +401,7 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
             const logger = new BuildsRedisLogger(connection);
             logger.fromJob(job);
             await logger.end_log();
-            await notifier.notify(`Error adding ${jobdata.packages} to database of repository ${jobdata.srcrepo}.`);
+            await createNotificationText(jobdata.packages,jobdata.srcrepo ?? "",`🚨 Failed deploying to ${jobdata.srcrepo}`);
         } catch (error) {
             console.error(error);
         }

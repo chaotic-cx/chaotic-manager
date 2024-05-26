@@ -1,6 +1,6 @@
 {
 	"compilerOptions": {
-		"target": "es2020",
+		"target": "es2022",
 		/* Set the JavaScript language version for emitted JavaScript and include compatible library declarations. */
 		"module": "commonjs",
 		/* Specify what module code is generated. */
