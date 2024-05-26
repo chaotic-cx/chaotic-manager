@@ -31,7 +31,6 @@ class Notifier {
                     .replaceAll(/>/g, '\\>')
                     .replaceAll(/\./g, '\\.')
                     .replaceAll(/=/g, '\\=')
-                console.log(message)
                 await this.bot.sendMessage(this.chatId, message, {parse_mode: "MarkdownV2"});
             }
         } catch (e) {

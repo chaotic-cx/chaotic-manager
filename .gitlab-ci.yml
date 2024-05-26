@@ -1,5 +1,5 @@
 ---
-stages: [checks, build]
+stages: [ checks, build ]
 
 check-lint:
   # Check all files for common anti-patterns and issues
@@ -9,13 +9,12 @@ check-lint:
     variables: false
   script:
     - apk add --no-cache --upgrade bash npm py3-pip shellcheck shfmt
-    # Pass --break-system-packages since since this containers sole purpose is
-    # running 2 applications. If we get to advance this, implement a proper venv
     - pip install --break-system-packages yamllint
     - npm install -g markdownlint-cli
     - bash .ci/lint.sh || true # be graceful for now
   rules:
-  - if: $UPDATE_BUILDER != "1"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $UPDATE_BUILDER != "1"
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
 
 check-pr-commitizen:
   # Check the current commit message for compliance with commitizen
@@ -25,13 +24,12 @@ check-pr-commitizen:
     variables: false
   script:
     - apk add --no-cache --upgrade py3-pip
-    # Pass --break-system-packages since since this containers sole purpose is
-    # running 2 applications. If we get to advance this, implement a proper venv
     - pip install --break-system-packages commitizen
-    - cz check --message "$CI_COMMIT_MESSAGE" >/tmp/cz_check || true # why does it return 1 if its actually 0?
-    - grep "successful" /tmp/cz_check # ugly hack to workaround the above issue
+    - cz check --message "$CI_COMMIT_MESSAGE" >/tmp/cz_check || true
+    - grep "successful" /tmp/cz_check
   rules:
-  - if: $UPDATE_BUILDER != "1"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $UPDATE_BUILDER != "1"
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
 
 build-builder:
   # Used to deploy a new base Docker image for building purposes
@@ -45,11 +43,13 @@ build-builder:
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
     - docker build -t "$CI_REGISTRY_IMAGE/builder:latest" ./builder-container
     - docker push "$CI_REGISTRY_IMAGE/builder:latest"
-  tags: ["dind"]
+  tags: [ "dind" ]
   variables:
     DOCKER_DRIVER: overlay2
     DOCKER_HOST: tcp://docker-daemon:2375/
     DOCKER_TLS_CERTDIR: ""
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $UPDATE_BUILDER == "1"
 
 build-manager:
   stage: build
@@ -61,10 +61,10 @@ build-manager:
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
     - docker build -t "$CI_REGISTRY_IMAGE/manager:latest" .
     - docker push "$CI_REGISTRY_IMAGE/manager:latest"
-  tags: ["dind"]
+  tags: [ "dind" ]
   variables:
     DOCKER_DRIVER: overlay2
     DOCKER_HOST: tcp://docker-daemon:2375/
     DOCKER_TLS_CERTDIR: ""
   rules:
-  - if: $UPDATE_BUILDER != "1"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $UPDATE_BUILDER != "1"
