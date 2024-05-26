@@ -158,7 +158,7 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
 
         const { target_repo, pkgbase } = splitJobId(job.id);
         if (pkgbase == "repo-remove") {
-            console.log(`\r\nProcessing repo-remove job for ${target_repo} at ${new Date().toISOString()}`);
+            console.log(`\r\nProcessing repo-remove job for ${target_repo} at ${new Date().toLocaleString("en-GB", {timeZone: 'UTC'})} UTC...`);
             const arch = job.data.arch;
             const pkgbases: string[] = job.data.pkgbases;
 
@@ -173,16 +173,16 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
                 console.log(err);
 
             if (err || out.StatusCode !== undefined) {
-                console.log(`Repo remove job for ${target_repo} failed at ${new Date().toISOString()}`);
+                console.log(`Repo remove job for ${target_repo} failed at ${new Date().toLocaleString("en-GB", {timeZone: 'UTC'})} UTC.`);
                 throw new Error('auto-repo-remove failed.');
             }
-            console.log(`Finished repo-remove job for ${target_repo} at ${new Date().toISOString()}.`)
+            console.log(`Finished repo-remove job for ${target_repo} at ${new Date().toLocaleString("en-GB", {timeZone: 'UTC'})} UTC.`)
 
         } else {
             const logger = new BuildsRedisLogger(connection);
             logger.fromJob(job);
 
-            logger.log(`\r\nProcessing database job ${job.id} at ${new Date().toISOString()}`);
+            logger.log(`\r\nProcessing database job ${job.id} at ${new Date().toLocaleString("en-GB", {timeZone: 'UTC'})} UTC...`);
             const arch = job.data.arch;
             const jobdata: DatabaseJobData = job.data;
             const packages: string[] = jobdata.packages;
@@ -199,10 +199,10 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
                     logger.error(err);
 
                 if (err || out.StatusCode !== undefined) {
-                    logger.log(`Job ${job.id} failed at ${new Date().toISOString()}`);
+                    logger.log(`Job ${job.id} failed at ${new Date().toLocaleString("en-GB", {timeZone: 'UTC'})} UTC.`);
                     throw new Error('repo-add failed.');
                 } else {
-                    logger.log(`Finished job ${job.id} at ${new Date().toISOString()}.`);
+                    logger.log(`Finished job ${job.id} at ${new Date().toLocaleString("en-GB", {timeZone: 'UTC'})} UTC.`);
                 }
             } finally {
                 setTimeout(promotePendingDependents.bind(null, jobdata, builds_queue, logger), 1000);
@@ -291,7 +291,7 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
                 const logger = new BuildsRedisLogger(connection);
                 logger.fromJob(job);
                 logger.setDefault();
-                logger.log(`Added to build queue at ${new Date().toISOString()}. Waiting for builder...`);
+                logger.log(`Added to build queue at ${new Date().toLocaleString("en-GB", {timeZone: 'UTC'})} UTC. Waiting for builder...`);
             }
 
             setTimeout(async () => {
@@ -318,7 +318,7 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
         try {
             const logger = new BuildsRedisLogger(connection);
             var job = await logger.fromJobID(jobId, builds_queue);
-            logger.log(`Job stalled at ${new Date().toISOString()}`);
+            logger.log(`Job stalled at ${new Date().toLocaleString("en-GB", {timeZone: 'UTC'})} UTC.`);
             if (job) {
                 const jobdata: BuildJobData = job.data;
                 const repo = repo_manager.getRepo(jobdata.srcrepo);

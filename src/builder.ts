@@ -97,7 +97,7 @@ export default function createBuilder(redis_connection_manager: RedisConnectionM
         const logger = new BuildsRedisLogger(connection);
         logger.fromJob(job);
 
-        logger.log(`Processing build job ${job.id} at ${new Date().toISOString()}`);
+        logger.log(`Processing build job ${job.id} at ${new Date().toLocaleString("en-GB", {timeZone: 'UTC'})} UTC.`)
         // Copy settings
         const remote_settings: RemoteSettings = structuredClone(runtime_settings.settings) as RemoteSettings;
         const jobdata: BuildJobData = job.data;
@@ -197,7 +197,7 @@ export default function createBuilder(redis_connection_manager: RedisConnectionM
                 removeOnComplete: true,
                 removeOnFail: true,
             });
-            logger.log(`Build job ${job.id} finished. Scheduled database job at ${new Date().toISOString()}...`);
+            logger.log(`Build job ${job.id} finished. Scheduled database job at ${new Date().toLocaleString("en-GB", {timeZone: 'UTC'})} UTC...`);
         } catch (e) {
             setTimeout(promotePendingDependents.bind(null, jobdata, builds_queue, logger), 1000);
             throw e;
