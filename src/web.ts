@@ -97,6 +97,11 @@ export async function startWebServer(port: number, manager: RedisConnectionManag
             res.end();
     }
 
+    /**
+     * Builds a stats object for the queue, which contains the count of each job type and the packages associated with them.
+     * @param res The response object to send the stats object to.
+     * @returns A promise that resolves to the stats object.
+     */
     async function buildStatsObject(res: Response): Promise<Object> {
         const validJobTypes: JobType[] = ['completed', 'failed', 'active', 'delayed', 'prioritized', 'waiting', 'waiting-children', 'paused', 'repeat'];
         let stats = [];
@@ -118,6 +123,12 @@ export async function startWebServer(port: number, manager: RedisConnectionManag
         return stats;
     }
 
+    /**
+     * Builds a packages object which contains the all packages currently queued up and corresponding information like
+     * architecture and target repository.
+     * @param res The response object to send the packages object to.
+     * @returns A promise that resolves to the packages object.
+     */
     async function buildPackagesObject(res: Response): Promise<Object> {
         const validJobTypes: JobType[] = ['completed', 'failed', 'active', 'delayed', 'prioritized', 'waiting', 'waiting-children', 'paused', 'repeat'];
         let packages = [];
