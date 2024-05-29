@@ -14,6 +14,7 @@ export interface RemoteSettings {
     };
     builder: {
         image: string;
+        name?: string;
     };
     repos: Record<
         string,

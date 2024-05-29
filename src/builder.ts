@@ -27,6 +27,7 @@ function requestRemoteConfig(
         const database_host = process.env.DATABASE_HOST || null;
         const database_port = Number(process.env.DATABASE_PORT || 22);
         const database_user = process.env.DATABASE_USER || null;
+        const builder_hostname = process.env.BUILDER_HOSTNAME || null;
         let init = true;
 
         const subscriber = manager.getSubscriber();
@@ -42,6 +43,9 @@ function requestRemoteConfig(
                     console.log("Worker received incompatible config from master. Worker paused.");
                     return;
                 } else {
+                    if (builder_hostname !== null) {
+                        remote_config.builder.name = builder_hostname;
+                    }
                     if (database_host !== null) {
                         remote_config.database.ssh.host = database_host;
                         remote_config.database.ssh.port = database_port;
@@ -216,7 +220,7 @@ export default function createBuilder(redis_connection_manager: RedisConnectionM
         },
         { connection },
     );
-    worker.pause();
+    void worker.pause();
 
     requestRemoteConfig(redis_connection_manager, worker, docker_manager, runtime_settings)
         .then(async () => {

@@ -91,6 +91,7 @@ function check-pkg {
 	printf "\n"
 }
 
+printf "\nExecuting build on host %s.\n" "$BUILDER_HOSTNAME"
 echo "Setting up package repository..."
 print-if-failed setup-package-repo
 echo "Setting up build environment..."

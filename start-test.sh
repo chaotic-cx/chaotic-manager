@@ -13,6 +13,7 @@ GPG_PATH="$(pwd)/gpg"
 DATABASE_HOST="127.0.0.1"
 DATABASE_PORT=2891
 DATABASE_USER="package-deployer"
+BUILDER_HOSTNAME="chaotic-dev"
 
 chmod 600 sshkey
 sshkey="$(ssh-keygen -y -t ed25519 -f ./sshkey)"
@@ -50,6 +51,7 @@ services:
             - REDIS_SSH_PORT=${DATABASE_PORT}
             - REDIS_SSH_USER=${DATABASE_USER}
             - NODE_ENV=development
+            - BUILDER_HOSTNAME=${BUILDER_HOSTNAME}
         image: registry.gitlab.com/garuda-linux/tools/chaotic-manager/manager
         command: builder
     chaotic-database:
