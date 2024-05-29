@@ -14,6 +14,12 @@ export async function startWebServer(port: number, manager: RedisConnectionManag
 
     const app = express();
 
+    function serverError(res: Response, code: number, message: string): void {
+        res.setHeader("Cache-Control", "no-cache");
+        res.setHeader("Content-Type", "text/plain");
+        res.status(code).send(message);
+    }
+
     async function getOrStreamLog(req: Request, res: Response): Promise<any> {
         res.setHeader("Cache-Control", "no-cache");
         res.setHeader("Content-Type", "text/plain");
@@ -47,7 +53,7 @@ export async function startWebServer(port: number, manager: RedisConnectionManag
             Promise.all([connection.get("build-logs:" + id + ":" + timestamp), subscriber.subscribe(subscribable)]),
         );
         if (err || !out || !out[0]) {
-            res.status(404).send("Not found");
+            serverError(res, 404, "Not found");
             return;
         }
 
@@ -101,9 +107,7 @@ export async function startWebServer(port: number, manager: RedisConnectionManag
     app.get("/api/logs/:id", async (req: Request, res: Response) => {
         const [err, out] = await to(connection.get("build-logs:" + req.params.id + ":default"));
         if (err || !out) {
-            res.setHeader("Cache-Control", "no-cache");
-            res.setHeader("Content-Type", "text/plain");
-            res.status(404).send("Not found");
+            serverError(res, 404, "Not found");
             return;
         }
 
