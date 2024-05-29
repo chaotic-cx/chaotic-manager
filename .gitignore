@@ -1,8 +1,10 @@
+.env
 .direnv
 .idea
-/temp
+/dist
+/dump.rdb
+/gpg
 /node_modules
 /sshkey
-/gpg
-/dump.rdb
-/dist
+/temp
+docker-compose.yml
