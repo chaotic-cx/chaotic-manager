@@ -1,15 +1,15 @@
-import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
+import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 
-async function setup() {
-    const termdiv = document.getElementById("terminal");
+async function setup(): Promise<void> {
+    const termdiv: HTMLElement | null = document.getElementById("terminal");
     if (!termdiv) {
         console.error("Terminal div not found");
         return;
     }
 
-    const term = new Terminal({
+    const term: Terminal = new Terminal({
         disableStdin: true,
         scrollback: 9999999,
         theme: {
@@ -35,67 +35,69 @@ async function setup() {
             yellow: "#f9e2af",
         },
     });
-    const fitAddon = new FitAddon();
+    const fitAddon: FitAddon = new FitAddon();
     term.loadAddon(fitAddon);
     term.open(termdiv);
 
     if ("ontouchstart" in window) {
-        term.element!.addEventListener("focusin", () => {
+        term.element!.addEventListener("focusin", (): void => {
             term.blur();
         });
-        term.element!.addEventListener("focus", () => {
+        term.element!.addEventListener("focus", (): void => {
             term.blur();
         });
     }
 
     // Disable all key events
-    term.attachCustomKeyEventHandler(() => {
+    term.attachCustomKeyEventHandler((): boolean => {
         return false;
     });
 
-    const xterm_resize_ob = new ResizeObserver(function (entries) {
+    const xterm_resize_ob: ResizeObserver = new ResizeObserver(function (): void {
         fitAddon.fit();
     });
     xterm_resize_ob.observe(termdiv);
     fitAddon.fit();
 
     // Parse querystring
-    const query = new URLSearchParams(window.location.search);
-
+    const query: URLSearchParams = new URLSearchParams(window.location.search);
     let id: string;
+
     // Print error if there is no ID
     if (!query.has("id") || !/^[a-zA-Z0-9-_]+$/.test((id = query.get("id") as string))) {
+        document.title = "Chaotic logs: invalid ID";
         term.writeln("\x1B[1;3;31mID is invalid or no ID provided. Did you copy the querystring?\x1B[0m ");
         return;
     }
 
-    let url = "api/logs/" + id;
+    let url: string = "api/logs/" + id;
     let timestamp: string;
     if (query.has("timestamp") && /^\d+$/.test((timestamp = query.get("timestamp") as string))) url += "/" + timestamp;
 
-    let is_finished = false;
-    await fetch(url).then(async (response) => {
+    let is_finished: boolean = false;
+    await fetch(url).then(async (response: Response): Promise<void> => {
+        document.title = `Chaotic logs: ${id} - ${timestamp}`;
         if (!response.body) {
             term.writeln("\x1B[1;3;31mError: No response body\x1B[0m ");
             is_finished = true;
             return;
         }
-        const reader = response.body.getReader();
-        let err = false;
+        const reader: ReadableStreamDefaultReader = response.body.getReader();
+        let err: boolean = false;
         while (!is_finished && !err) {
             await reader
                 .read()
-                .then(({ done, value }) => {
+                .then(({ done, value }): void => {
                     if (done) {
                         is_finished = true;
                     }
                     if (value) term.write(value);
                 })
-                .catch((e) => {
+                .catch(() => {
                     err = true;
                 });
         }
     });
 }
 
-setup();
+void setup();
