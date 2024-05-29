@@ -8,3 +8,11 @@ export function splitJobId(jobId: string): {
         pkgbase: split[1],
     };
 }
+
+/**
+ * Returns the current time in UTC following en-GB formatting.
+ * @returns {string} The current time in UTC.
+ */
+export function currentTime(): string {
+    return `${new Date().toLocaleString("en-GB", { timeZone: "UTC" })} UTC`;
+}

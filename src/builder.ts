@@ -2,15 +2,15 @@ import { Job, Queue, UnrecoverableError, Worker } from "bullmq";
 import fs from "fs";
 import path from "path";
 import { Client } from "node-scp";
-import { BuildJobData, BuildStatus, current_version, DatabaseJobData, RemoteSettings } from "./types";
-import { DockerManager } from "./docker-manager";
-import { BuildsRedisLogger, SshLogger } from "./logging";
-import { RepoManager } from "./repo-manager";
-import { splitJobId } from "./utils";
-import { RedisConnectionManager } from "./redis-connection-manager";
-import { handleJobOrder, promotePendingDependents } from "./buildorder";
 import Docker from "dockerode";
 import to from "await-to-js";
+import { BuildJobData, BuildStatus, current_version, DatabaseJobData, RemoteSettings } from "./types";
+import { BuildsRedisLogger, SshLogger } from "./logging";
+import { DockerManager } from "./docker-manager";
+import { RedisConnectionManager } from "./redis-connection-manager";
+import { RepoManager } from "./repo-manager";
+import { currentTime, splitJobId } from "./utils";
+import { handleJobOrder, promotePendingDependents } from "./buildorder";
 
 function ensurePathClean(dir: string, create = true): void {
     if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true });
@@ -99,7 +99,7 @@ export default function createBuilder(redis_connection_manager: RedisConnectionM
             const logger = new BuildsRedisLogger(connection);
             logger.fromJob(job);
 
-            logger.log(`Processing build job ${job.id} at ${new Date().toISOString()}`);
+            logger.log(`Processing build job ${job.id} at ${currentTime()}`);
             // Copy settings
             const remote_settings: RemoteSettings = structuredClone(runtime_settings.settings) as RemoteSettings;
             const jobdata: BuildJobData = job.data;
@@ -205,7 +205,7 @@ export default function createBuilder(redis_connection_manager: RedisConnectionM
                     removeOnComplete: true,
                     removeOnFail: true,
                 });
-                logger.log(`Build job ${job.id} finished. Scheduled database job at ${new Date().toISOString()}...`);
+                logger.log(`Build job ${job.id} finished. Scheduled database job at ${currentTime()}...`);
             } catch (e) {
                 setTimeout(promotePendingDependents.bind(null, jobdata, builds_queue, logger), 1000);
                 throw e;
