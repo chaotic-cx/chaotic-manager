@@ -1,6 +1,7 @@
 import Timeout from "await-timeout";
 import express, { Request, Response } from "express";
 import to from "await-to-js";
+import { ONE_DAY } from "./types";
 import { Queue } from "bullmq";
 import { RedisConnectionManager } from "./redis-connection-manager";
 
@@ -42,7 +43,7 @@ export async function startWebServer(port: number, manager: RedisConnectionManag
         res.once("close", closer);
         res.once("finish", closer);
 
-        var [err, out] = await to(
+        const [err, out] = await to(
             Promise.all([connection.get("build-logs:" + id + ":" + timestamp), subscriber.subscribe(subscribable)]),
         );
         if (err || !out || !out[0]) {
@@ -58,7 +59,9 @@ export async function startWebServer(port: number, manager: RedisConnectionManag
                     await Timeout.set(1000);
                     try {
                         res.end();
-                    } catch (e) {}
+                    } catch {
+                        /* empty */
+                    }
                 } else res.write(message.substring(3));
             }
         };
@@ -67,7 +70,7 @@ export async function startWebServer(port: number, manager: RedisConnectionManag
         subscriber.on("message", forwarder);
 
         let busy = false;
-        var [err, active] = await to(connection.keys(`bull:[^:]*:[^:]*/${id}`));
+        const [, active] = await to(connection.keys(`bull:[^:]*:[^:]*/${id}`));
         if (active && active.length > 0) {
             let full_key;
             for (const key of active) {
@@ -110,8 +113,7 @@ export async function startWebServer(port: number, manager: RedisConnectionManag
 
     app.use(
         express.static("public", {
-            // 1 day in milliseconds
-            maxAge: 1000 * 60 * 60 * 24,
+            maxAge: ONE_DAY,
         }),
     );
 

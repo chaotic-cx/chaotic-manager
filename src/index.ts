@@ -67,16 +67,17 @@ async function main(): Promise<void> {
             );
             connection.quit();
             return;
-        case "builder":
+        case "builder": {
             if (!process.env.SHARED_PATH) {
                 console.error("Config variables incomplete");
                 return process.exit(1);
             }
             await connection.connect();
-            var redis_connection_manager = new RedisConnectionManager(connection);
+            const redis_connection_manager = new RedisConnectionManager(connection);
             workers.push(createBuilder(redis_connection_manager));
             break;
-        case "database":
+        }
+        case "database": {
             if (
                 !process.env.LANDING_ZONE_PATH ||
                 !process.env.REPO_PATH ||
@@ -89,21 +90,23 @@ async function main(): Promise<void> {
                 return process.exit(1);
             }
             await connection.connect();
-            var redis_connection_manager = new RedisConnectionManager(connection);
+            const redis_connection_manager = new RedisConnectionManager(connection);
             if (typeof mainOptions["web-port"] !== "undefined") {
-                startWebServer(Number(mainOptions["web-port"]), redis_connection_manager);
+                void startWebServer(Number(mainOptions["web-port"]), redis_connection_manager);
             }
             createDatabaseWorker(redis_connection_manager);
             break;
-        case "web":
+        }
+        case "web": {
             await connection.connect();
-            var redis_connection_manager = new RedisConnectionManager(connection);
-            startWebServer(Number(mainOptions["web-port"]) || 8080, redis_connection_manager);
+            const redis_connection_manager = new RedisConnectionManager(connection);
+            void startWebServer(Number(mainOptions["web-port"]) || 8080, redis_connection_manager);
             break;
+        }
         default:
             console.error("Invalid command");
             return process.exit(1);
     }
 }
 
-main();
+void main();

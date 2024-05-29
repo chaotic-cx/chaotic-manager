@@ -142,7 +142,7 @@ export class RepoManager {
 
     constructor(public base_log_url: URL | undefined) {}
 
-    repoFromObject(obj: Object) {
+    repoFromObject(obj: object) {
         for (const [key, value] of Object.entries(obj)) {
             if (typeof value.url !== "string") {
                 throw new Error("Invalid repo object");
@@ -151,7 +151,7 @@ export class RepoManager {
         }
     }
 
-    targetRepoFromObject(obj: Object) {
+    targetRepoFromObject(obj: object) {
         for (const [key, value] of Object.entries(obj)) {
             const repo = (this.target_repos[key] = new TargetRepo(key));
             repo.fromObject(value);
@@ -182,7 +182,7 @@ export class RepoManager {
         return out;
     }
 
-    notifiersFromObject(obj: Object) {
+    notifiersFromObject(obj: object) {
         if (!this.base_log_url) {
             console.warn("No base log url set, gitlab notifiers disabled");
             return;
@@ -196,7 +196,7 @@ export class RepoManager {
                 throw new Error("Invalid notifier object");
             }
             if (typeof this.repos[key] === "undefined") {
-                console.warn(`Notifier for non-existant repo ${key}`);
+                console.warn(`Notifier for non-existent repo ${key}`);
                 continue;
             }
             this.repos[key].setNotifier(

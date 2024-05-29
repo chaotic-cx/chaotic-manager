@@ -4,7 +4,7 @@ import { BuildJobData, SEVEN_DAYS } from "./types";
 import { Job, Queue } from "bullmq";
 import { splitJobId } from "./utils";
 
-// Console.log immitation that saves to a variable instead of stdout
+// Console.log imitation that saves to a variable instead of stdout
 export class SshLogger {
     logs: string[] = [];
 
@@ -40,12 +40,12 @@ export class BuildsRedisLogger {
     }
 
     public async fromJobID(job_id: string, queue: Queue): Promise<Job | undefined> {
-        var [err, job] = await to(queue.getJob(job_id));
+        const [err, job] = await to(queue.getJob(job_id));
         if (err || !job) {
             const { target_repo, pkgbase } = splitJobId(job_id);
             this.default_key = "build-logs:" + pkgbase + ":default";
 
-            var [err, out] = await to(this.connection.get(this.default_key));
+            const [err, out] = await to(this.connection.get(this.default_key));
             if (err || !out) {
                 throw new Error("Job not found");
             } else {
@@ -68,7 +68,7 @@ export class BuildsRedisLogger {
         pipeline.publish(this.channel, "LOG" + arg);
         pipeline.append(this.key, arg);
         pipeline.expire(this.key, 60 * 60 * 24 * 7); // 7 days
-        pipeline.exec().catch(() => {});
+        void pipeline.exec();
 
         if (err) process.stderr.write(arg);
         else process.stdout.write(arg);

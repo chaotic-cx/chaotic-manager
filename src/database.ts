@@ -24,6 +24,7 @@ async function publishSettingsObject(manager: RedisConnectionManager, settings: 
 }
 
 export default function createDatabaseWorker(redis_connection_manager: RedisConnectionManager) {
+    let obj;
     const landing_zone = process.env.LANDING_ZONE_PATH || "";
     const landing_zone_adv = process.env.LANDING_ZONE_ADVERTISED_PATH || null;
     const repo_root = process.env.REPO_PATH || "";
@@ -46,7 +47,7 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
 
     if (package_repos) {
         try {
-            var obj = JSON.parse(package_repos);
+            obj = JSON.parse(package_repos);
             repo_manager.repoFromObject(obj);
         } catch (error) {
             console.error(error);
@@ -63,7 +64,7 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
 
     if (package_target_repos) {
         try {
-            var obj = JSON.parse(package_target_repos);
+            obj = JSON.parse(package_target_repos);
             repo_manager.targetRepoFromObject(obj);
         } catch (error) {
             console.error(error);
@@ -86,7 +87,7 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
 
     if (package_repos_notifiers) {
         try {
-            var obj = JSON.parse(package_repos_notifiers);
+            obj = JSON.parse(package_repos_notifiers);
             repo_manager.notifiersFromObject(obj);
         } catch (error) {
             console.error(error);
@@ -260,7 +261,7 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
                 for (const job of jobs) {
                     const logger = new BuildsRedisLogger(connection);
                     logger.fromJob(job);
-                    logger.setDefault();
+                    void logger.setDefault();
                     logger.log(`Added to build queue at ${new Date().toISOString()}. Waiting for builder...`);
                 }
 
@@ -280,8 +281,8 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
         },
         { connection: connection },
     );
-    database_worker.pause();
-    dispatch_worker.pause();
+    void database_worker.pause();
+    void dispatch_worker.pause();
 
     const builds_queue_events = new QueueEvents("builds", { connection });
     const builds_queue = new Queue("builds", { connection });
@@ -321,7 +322,7 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
             if (job) {
                 const jobdata: BuildJobData = job.data;
                 const repo = repo_manager.getRepo(jobdata.srcrepo);
-                job.remove();
+                void job.remove();
                 await repo.notify(job, "failed", "Build failed.");
                 await logger.end_log();
             }
@@ -337,7 +338,7 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
                 const jobdata: BuildJobData = job.data;
                 const repo = repo_manager.getRepo(jobdata.srcrepo);
                 const [err, out] = await to(job.waitUntilFinished(builds_queue_events));
-                job.remove();
+                void job.remove();
                 if (!err && out === BuildStatus.ALREADY_BUILT) {
                     await repo.notify(job, "canceled", "Build skipped because package was already built.");
                     await logger.end_log();
@@ -374,7 +375,7 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
         }
     });
 
-    publishSettingsObject(redis_connection_manager, settings);
+    void publishSettingsObject(redis_connection_manager, settings);
 
     docker_manager
         .scheduledPull(settings.builder.image)

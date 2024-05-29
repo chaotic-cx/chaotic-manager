@@ -71,4 +71,5 @@ export enum BuildStatus {
 
 export const current_version = 8;
 
-export const SEVEN_DAYS = 60 * 60 * 24 * 7;
+export const SEVEN_DAYS: number = 60 * 60 * 24 * 7;
+export const ONE_DAY: number = 1000 * 60 * 60 * 24;

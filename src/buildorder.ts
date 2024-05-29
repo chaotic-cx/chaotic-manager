@@ -167,10 +167,10 @@ export async function handleJobOrder(job: Job, buildsqueue: Queue, databasequeue
         await job.moveToDelayed(Date.now() + 24 * 60 * 60 * 1000, job.token);
         throw new DelayedError("Job delayed due to pending dependencies.");
     } else if (state === DependencyState.REQUIRES_EXCLUSIVE_LOOPBREAK) {
-        let out = false;
+        let out;
         try {
             out = await exclusiveLoopbreak(job, buildsqueue, databasequeue);
-        } catch (e) {
+        } catch {
             out = false;
         }
         if (out) {
@@ -207,7 +207,7 @@ export async function promotePendingDependents(
             if (state !== "delayed") continue;
             if ((await shouldExecute(job, buildsqueue, null)) !== DependencyState.MUST_WAIT) {
                 logger.log(`Promoting dependent job ${job.id} from delayed state.`);
-                job.promote();
+                void job.promote();
             }
         }
     }

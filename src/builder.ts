@@ -35,7 +35,7 @@ function requestRemoteConfig(
             if (channel === "config-response") {
                 if (!worker.isPaused()) {
                     console.log("Pausing worker for incoming config...");
-                    worker.pause();
+                    void worker.pause();
                 }
                 const remote_config: RemoteSettings = JSON.parse(message);
                 if (remote_config.version !== current_version) {
@@ -130,7 +130,7 @@ export default function createBuilder(redis_connection_manager: RedisConnectionM
                 const src_repo = repo_manager.getRepo(jobdata.srcrepo);
 
                 ensurePathClean(mount);
-                generateDestFillerFiles(jobdata.repo_files, mount);
+                void generateDestFillerFiles(jobdata.repo_files, mount);
 
                 if (cancelled) {
                     throw new UnrecoverableError("Job cancelled.");

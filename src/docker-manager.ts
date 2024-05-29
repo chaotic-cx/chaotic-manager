@@ -8,7 +8,6 @@ export class DockerManager {
     pull_schedule: NodeJS.Timeout | null = null;
     pull_mutex = new Mutex();
 
-    constructor() {}
     destroy() {
         if (this.pull_schedule) {
             clearTimeout(this.pull_schedule);
@@ -97,8 +96,8 @@ export class DockerManager {
             next();
         };
 
-        let out = undefined;
-        let err = undefined;
+        let out;
+        let err;
 
         [err, out] = await to(
             container.attach({
@@ -173,6 +172,6 @@ export class DockerManager {
             console.error(err);
         }
         this.pull_schedule = setTimeout(this.scheduledPull.bind(this, imagename), 7200000);
-        await this.pull_mutex.release();
+        this.pull_mutex.release();
     }
 }
