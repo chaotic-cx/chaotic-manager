@@ -1,9 +1,10 @@
-import eslint from '@eslint/js';
-import eslintConfigPrettier from 'eslint-config-prettier';
+import eslint from "@eslint/js";
+import eslintConfigPrettier from "eslint-config-prettier";
 import eslintPluginDeprecation from "@eslint/js";
 import tseslint from "typescript-eslint";
 
-export default tseslint.config({
+export default tseslint.config(
+    {
         files: ["src/*.ts"],
         extends: [
             eslint.configs.recommended,
@@ -27,12 +28,12 @@ export default tseslint.config({
         },
         rules: {
             ...eslintPluginDeprecation.configs.recommended.rules,
-            'no-undef': 'off',
+            "no-undef": "off",
         },
     },
     {
         // disable type-aware linting on JS files
-        files: ['**/*.js'],
+        files: ["**/*.js"],
         ...tseslint.configs.disableTypeChecked,
     },
     {
@@ -43,10 +44,10 @@ export default tseslint.config({
             "jest/no-focused-tests": "error",
             "jest/no-identical-title": "error",
             "jest/valid-expect": "error",
-            "jest/max-expects": ["error", {"max": 5}],
+            "jest/max-expects": ["error", { max: 5 }],
             "jest/no-disabled-tests": "warn",
             "jest/prefer-to-have-length": "warn",
-            "jest/prefer-expect-assertions": "off"
-        }
+            "jest/prefer-expect-assertions": "off",
+        },
     },
 );

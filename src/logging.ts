@@ -1,8 +1,8 @@
-import { Job, Queue } from 'bullmq';
-import RedisConnection from 'ioredis';
-import { splitJobId } from './utils';
-import { BuildJobData, SEVEN_DAYS } from './types';
-import to from 'await-to-js';
+import RedisConnection from "ioredis";
+import to from "await-to-js";
+import { BuildJobData, SEVEN_DAYS } from "./types";
+import { Job, Queue } from "bullmq";
+import { splitJobId } from "./utils";
 
 // Console.log immitation that saves to a variable instead of stdout
 export class SshLogger {
@@ -12,24 +12,24 @@ export class SshLogger {
         this.logs.push(arg);
     }
     dump(): string {
-        return this.logs.join('\n');
+        return this.logs.join("\n");
     }
 }
 
 export class BuildsRedisLogger {
     private init = false;
     private connection: RedisConnection;
-    private channel: string = "";
-    private key: string = "";
-    private default_key: string = "";
-    private timestamp: number = 0;
+    private channel = "";
+    private key = "";
+    private default_key = "";
+    private timestamp = 0;
 
     constructor(connection: RedisConnection) {
         this.connection = connection;
     }
 
     public fromJob(job: Job) {
-        var job_data = job.data as BuildJobData;
+        const job_data = job.data as BuildJobData;
         const { target_repo, pkgbase } = splitJobId(job.id as string);
 
         this.channel = "build-logs." + pkgbase + "." + job_data.timestamp;
@@ -61,20 +61,17 @@ export class BuildsRedisLogger {
         }
     }
 
-    private internal_log(arg: string, err: boolean = false): void {
-        if (this.init === false)
-            return console.warn("Logger not initialized");
+    private internal_log(arg: string, err = false): void {
+        if (!this.init) return console.warn("Logger not initialized");
         // Pipelining results in a single roundtrip to the server and this prevents requests from getting out of order
-        var pipeline = this.connection.pipeline();
+        const pipeline = this.connection.pipeline();
         pipeline.publish(this.channel, "LOG" + arg);
         pipeline.append(this.key, arg);
         pipeline.expire(this.key, 60 * 60 * 24 * 7); // 7 days
         pipeline.exec().catch(() => {});
 
-        if (err)
-            process.stderr.write(arg);
-        else
-            process.stdout.write(arg);
+        if (err) process.stderr.write(arg);
+        else process.stdout.write(arg);
     }
 
     async end_log(): Promise<void> {
@@ -94,8 +91,7 @@ export class BuildsRedisLogger {
     }
 
     public async setDefault() {
-        if (this.init === false)
-            return console.warn("Logger not initialized");
+        if (!this.init) return console.warn("Logger not initialized");
         await this.connection.setex(this.default_key, SEVEN_DAYS, this.timestamp);
     }
 }

@@ -1,9 +1,8 @@
-import RedisConnection from 'ioredis';
+import RedisConnection from "ioredis";
 
 export class RedisConnectionManager {
     private subscriber: RedisConnection | undefined;
-    constructor(private client: RedisConnection) {
-    }
+    constructor(private client: RedisConnection) {}
 
     public getClient(): RedisConnection {
         return this.client;
@@ -19,4 +18,4 @@ export class RedisConnectionManager {
     public getNewClient(redisopts: any): RedisConnection {
         return this.client.duplicate(redisopts);
     }
-};
+}
