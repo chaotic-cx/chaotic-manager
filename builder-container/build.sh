@@ -4,6 +4,7 @@ PKGOUT="/home/builder/pkgout/"
 PKGSRC="/home/builder/pkgsrc/"
 PACKAGE="$1"
 BUILDDIR="/home/builder/build/"
+[[ -z $BUILDER_HOSTNAME ]] && BUILDER_HOSTNAME="unknown builder (please supply BUILDER_HOSTNAME via Docker environment)"
 
 set -eo pipefail
 

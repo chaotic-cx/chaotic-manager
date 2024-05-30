@@ -144,6 +144,7 @@ export default function createBuilder(redis_connection_manager: RedisConnectionM
                     ["build", pkgbase],
                     [shared_pkgout + ":/home/builder/pkgout", shared_sources + ":/pkgbuilds"],
                     [
+                        "BUILDER_HOSTNAME=" + remote_settings.builder.name,
                         "PACKAGE_REPO_ID=" + src_repo.id,
                         "PACKAGE_REPO_URL=" + src_repo.getUrl(),
                         "EXTRA_PACMAN_REPOS=" + repo_manager.getTargetRepo(target_repo).repoToString(),
