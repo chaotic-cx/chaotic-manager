@@ -70,7 +70,36 @@ export enum BuildStatus {
     ALREADY_BUILT,
 }
 
-export const current_version = 8;
+// The object the API should return on /api/packages calls
+export type PackagesReturnObject = Record<
+    string,
+    {
+        arch: string;
+        srcrepo: string;
+        timestamp: string;
+        repo_files: string;
+    }
+>[];
 
-export const SEVEN_DAYS: number = 60 * 60 * 24 * 7;
-export const ONE_DAY: number = 1000 * 60 * 60 * 24;
+export type QueueStats = Record<
+    string,
+    {
+        count: number;
+        packages: (string | undefined)[];
+    }
+>;
+
+export type StatsReturnObject = QueueStats[];
+
+export interface MetricsReturnObject {
+    builder_queue: {
+        completed: number;
+        failed: number;
+    };
+    database_queue: {
+        completed: number;
+        failed: number;
+    };
+}
+
+export const current_version = 8;
