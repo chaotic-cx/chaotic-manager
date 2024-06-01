@@ -1,4 +1,4 @@
-import { Job, Queue, UnrecoverableError, Worker } from "bullmq";
+import { Job, MetricsTime, Queue, UnrecoverableError, Worker } from "bullmq";
 import fs from "fs";
 import path from "path";
 import { Client } from "node-scp";
@@ -219,7 +219,12 @@ export default function createBuilder(redis_connection_manager: RedisConnectionM
             }
             return BuildStatus.SUCCESS;
         },
-        { connection },
+        {
+            connection,
+            metrics: {
+                maxDataPoints: MetricsTime.ONE_WEEK * 4,
+            },
+        },
     );
     void worker.pause();
 

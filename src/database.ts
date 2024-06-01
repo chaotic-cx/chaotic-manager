@@ -4,7 +4,7 @@ import path from "path";
 import to from "await-to-js";
 import { BuildJobData, BuildStatus, current_version, DatabaseJobData, DispatchJobData, RemoteSettings } from "./types";
 import { BuildsRedisLogger } from "./logging";
-import { BulkJobOptions, Job, Queue, QueueEvents, UnrecoverableError, Worker } from "bullmq";
+import { BulkJobOptions, Job, MetricsTime, Queue, QueueEvents, UnrecoverableError, Worker } from "bullmq";
 import { DockerManager } from "./docker-manager";
 import { RedisConnectionManager } from "./redis-connection-manager";
 import { RepoManager } from "./repo-manager";
@@ -279,7 +279,12 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
                 }, 3000);
             }
         },
-        { connection: connection },
+        {
+            connection: connection,
+            metrics: {
+                maxDataPoints: MetricsTime.ONE_WEEK * 4,
+            },
+        },
     );
     void database_worker.pause();
     void dispatch_worker.pause();
