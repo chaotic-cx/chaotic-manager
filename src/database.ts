@@ -90,7 +90,6 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
 
         // If we have a package_repos object, as well as a commit hash, we can add a link to the commit.
         // But only if it is either a GitHub or a GitLab repo as of now.
-        console.log(buildJobData);
         if (package_repos !== undefined && buildJobData.commit !== undefined) {
             if (repo.getUrl().includes("gitlab.com")) {
                 const commitUrl = `${repo.getUrl()}/-/commit/${buildJobData.commit}}`;

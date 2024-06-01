@@ -115,7 +115,6 @@ export async function startWebServer(port: number, manager: RedisConnectionManag
             serverError(res, 404, "Not found");
             return;
         }
-
         req.params.timestamp = out;
         return await getOrStreamLog(req, res);
     });
@@ -126,6 +125,7 @@ export async function startWebServer(port: number, manager: RedisConnectionManag
             serverError(res, 500, "Internal server error");
             return res;
         }
+        res.setHeader('Access-Control-Allow-Origin', '*');
         return res.json(out);
     });
 
@@ -135,6 +135,7 @@ export async function startWebServer(port: number, manager: RedisConnectionManag
             serverError(res, 500, "Internal server error");
             return res;
         }
+        res.setHeader('Access-Control-Allow-Origin', '*');
         return res.json(out);
     });
 
@@ -144,9 +145,9 @@ export async function startWebServer(port: number, manager: RedisConnectionManag
             serverError(res, 500, "Internal server error");
             return res;
         }
+        res.setHeader('Access-Control-Allow-Origin', '*');
         return res.json(out);
     });
-
     app.use(
         express.static("public", {
             maxAge: MetricsTime.ONE_HOUR * 24,
