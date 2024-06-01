@@ -1,4 +1,4 @@
-import { JobType, Metrics, Queue } from "bullmq";
+import { Metrics, Queue } from "bullmq";
 import { MetricsReturnObject, PackagesReturnObject, StatsReturnObject } from "./types";
 
 /**
@@ -9,15 +9,6 @@ import { MetricsReturnObject, PackagesReturnObject, StatsReturnObject } from "./
 export class ChaoticApi {
     private readonly builderQueue: Queue;
     private readonly databaseQueue: Queue;
-    private readonly validJobTypes: JobType[] = [
-        "active",
-        "delayed",
-        "paused",
-        "prioritized",
-        "repeat",
-        "waiting",
-        "waiting-children",
-    ];
 
     /**
      * Creates a new ChaoticApi instance.
@@ -36,15 +27,20 @@ export class ChaoticApi {
      */
     async buildStatsObject(): Promise<StatsReturnObject> {
         const stats: StatsReturnObject = [];
-        for (const currType of this.validJobTypes) {
-            const jobs = await this.builderQueue.getJobs([currType]);
-            if (jobs.length !== 0) {
+        const jobs = await this.builderQueue.getJobs();
+        for (const job of jobs) {
+            const jobState = await job.getState();
+            const existingStat = stats.find((stat) => stat[jobState]);
+            if (!existingStat) {
                 stats.push({
-                    [currType]: {
-                        count: jobs.length,
-                        packages: jobs.map((job) => job.id),
+                    [jobState]: {
+                        count: 1,
+                        packages: [job.id],
                     },
                 });
+            } else {
+                existingStat[jobState].count += 1;
+                existingStat[jobState].packages.push(job.id);
             }
         }
         return stats;
@@ -58,19 +54,17 @@ export class ChaoticApi {
      */
     async buildPackagesObject(): Promise<PackagesReturnObject> {
         const packages = [];
-        for (const currType of this.validJobTypes) {
-            const jobs = await this.builderQueue.getJobs(currType);
-            for (const job of jobs) {
-                if (job.id !== undefined) {
-                    packages.push({
-                        [job.id.toString()]: {
-                            arch: job.data.arch,
-                            srcrepo: job.data.srcrepo,
-                            timestamp: job.data.timestamp,
-                            repo_files: job.data.repo_files,
-                        },
-                    });
-                }
+        const jobs = await this.builderQueue.getJobs();
+        for (const job of jobs) {
+            if (job.id !== undefined) {
+                packages.push({
+                    [job.id.toString()]: {
+                        arch: job.data.arch,
+                        srcrepo: job.data.srcrepo,
+                        timestamp: job.data.timestamp,
+                        repo_files: job.data.repo_files,
+                    },
+                });
             }
         }
         return packages;

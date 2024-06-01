@@ -81,15 +81,13 @@ export type PackagesReturnObject = Record<
     }
 >[];
 
-export type QueueStats = Record<
+export type StatsReturnObject = Record<
     string,
     {
         count: number;
         packages: (string | undefined)[];
     }
->;
-
-export type StatsReturnObject = QueueStats[];
+>[];
 
 export interface MetricsReturnObject {
     builder_queue: {
