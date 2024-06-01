@@ -1,7 +1,7 @@
 import RedisConnection from "ioredis";
 import to from "await-to-js";
-import { BuildJobData, SEVEN_DAYS } from "./types";
-import { Job, Queue } from "bullmq";
+import { BuildJobData } from "./types";
+import { Job, MetricsTime, Queue } from "bullmq";
 import { splitJobId } from "./utils";
 
 // Console.log imitation that saves to a variable instead of stdout
@@ -92,6 +92,6 @@ export class BuildsRedisLogger {
 
     public async setDefault() {
         if (!this.init) return console.warn("Logger not initialized");
-        await this.connection.setex(this.default_key, SEVEN_DAYS, this.timestamp);
+        await this.connection.setex(this.default_key, MetricsTime.ONE_WEEK, this.timestamp);
     }
 }
