@@ -23,9 +23,11 @@ export default class ChaoticTelegramBot {
         this.telegramChatId = telegramChatId;
         this.validChatIds = validChatIds ?? [];
         this.bot = new TelegramBot(telegramToken, { polling: true });
+        console.log("Telegram bot initialized");
 
         if (this.validChatIds.length > 0) {
             void this.setupListeners();
+            console.log("Set up Telegram bot listeners");
         }
     }
 
