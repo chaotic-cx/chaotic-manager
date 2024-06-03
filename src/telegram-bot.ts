@@ -23,11 +23,11 @@ export default class ChaoticTelegramBot {
         this.telegramChatId = telegramChatId;
         this.validChatIds = validChatIds ?? [];
         this.bot = new TelegramBot(telegramToken, { polling: true });
-        console.log("Telegram bot initialized");
+        console.log("Telegram bot initialized.");
 
         if (this.validChatIds.length > 0) {
             void this.setupListeners();
-            console.log("Set up Telegram bot listeners");
+            console.log("Set up Telegram bot listeners.");
         }
     }
 
@@ -38,7 +38,12 @@ export default class ChaoticTelegramBot {
      * @returns The MarkdownV2 compliant string
      */
     private formatMarkdownV2(message: string): string {
-        return message.replaceAll(/-/g, "\\-").replaceAll(/>/g, "\\>").replaceAll(/\./g, "\\.").replaceAll(/=/g, "\\=");
+        return message
+            .replaceAll(/-/g, "\\-")
+            .replaceAll(/>/g, "\\>")
+            .replaceAll(/\./g, "\\.")
+            .replaceAll(/=/g, "\\=")
+            .replaceAll(/_/g, "\\_");
     }
 
     /**
