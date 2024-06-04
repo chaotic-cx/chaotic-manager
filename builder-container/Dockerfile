@@ -18,6 +18,7 @@ COPY ./entry_point.sh /entry_point.sh
 COPY ./build.sh /build.sh
 COPY ./interfere.sh /interfere.sh
 COPY ./add-database.sh /add-database.sh
+COPY ./util.shlib /util.shlib
 COPY ./auto-database-remove.sh /auto-database-remove.sh
 COPY ./parse-database.awk /parse-database.awk
 RUN chmod +x /entry_point.sh /build.sh /add-database.sh /interfere.sh /auto-database-remove.sh

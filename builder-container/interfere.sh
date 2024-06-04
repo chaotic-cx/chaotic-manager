@@ -1,16 +1,7 @@
 #!/usr/bin/env bash
-
 set -euo pipefail
 
-function UTIL_READ_VARIABLES_FROM_FILE() {
-    local file=$1
-    local -n READ_ASSOC_ARRAY=${2:-VARIABLES}
-    while IFS= read -r line || [ -n "$line" ]; do
-        if [[ "$line" =~ ^[[:space:]]*([a-zA-Z0-9_]+)[[:space:]]*=[[:space:]]*(.*)[[:space:]]*$ ]]; then
-            READ_ASSOC_ARRAY["${BASH_REMATCH[1]}"]="${BASH_REMATCH[2]}"
-        fi
-    done < "$file"
-}
+source ./util.shlib
 
 function interference-generic() {
 	set -euo pipefail -o functrace

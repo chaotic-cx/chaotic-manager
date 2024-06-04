@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
+set -eo pipefail
+
+source ./util.shlib
 
 PKGOUT="/home/builder/pkgout/"
-PKGSRC="/home/builder/pkgsrc/"
+SRCDEST="/home/builder/srcdest/"
+SRCDEST_CACHED="/home/builder/srcdest_cached/"
+
 PACKAGE="$1"
 BUILDDIR="/home/builder/build/"
 [[ -z $BUILDER_HOSTNAME ]] && BUILDER_HOSTNAME="unknown builder (please supply BUILDER_HOSTNAME via Docker environment)"
-
-set -eo pipefail
 
 function print-if-failed {
 	local output=""
@@ -56,6 +59,25 @@ function setup-package-repo {
 	popd
 }
 
+function setup-build-configs {
+    declare -A CONFIG
+    if [ -f "/pkgbuilds/${PACKAGE_REPO_ID}/${PACKAGE}/.CI/config" ]; then
+    	UTIL_READ_VARIABLES_FROM_FILE "/pkgbuilds/${PACKAGE_REPO_ID}/${PACKAGE}/.CI/config" CONFIG
+        # In case we want to cache sources for heavier packages. This should be used only if really needed.
+        if [ -v "CONFIG[BUILDER_CACHE_SOURCES]" ] && [ "${CONFIG[BUILDER_CACHE_SOURCES]}" == "true" ] && [ -d "$SRCDEST_CACHED" ]; then
+            echo "Will cache sources..."
+
+			# Make sure we have the appropriate permissions to modify the mounted directory
+			chown builder:builder "$SRCDEST_CACHED"
+
+            SRCDEST="${SRCDEST_CACHED}"
+            if [[ ! -f "$SRCDEST/.timestamp" ]]; then
+                touch "$SRCDEST/.timestamp"
+            fi
+        fi
+    fi
+}
+
 function setup-buildenv {
 	set -eo pipefail
 	if [[ -z $PACKAGER ]]; then PACKAGER="Garuda Builder <team@garudalinux.org>"; fi
@@ -81,8 +103,8 @@ function setup-buildenv {
 
 function build-pkg {
 	set -eo pipefail
-	printf "\nBuilding package...\n"
-	sudo -D "${BUILDDIR}" -u builder PKGDEST="${PKGOUT}" SRCDEST="${PKGSRC}" makepkg --skippgpcheck -s --noconfirm || { local ret=$? && echo "Failed to build package!" >&2 && return $ret; }
+	printf "Building package...\n"
+	sudo -D "${BUILDDIR}" -u builder PKGDEST="${PKGOUT}" SRCDEST="${SRCDEST}" makepkg --skippgpcheck -s --noconfirm || { local ret=$? && echo "Failed to build package!" >&2 && return $ret; }
 	find "${PKGOUT}" -type f -empty -delete || return 1
 }
 
@@ -98,5 +120,6 @@ print-if-failed setup-package-repo
 echo "Setting up build environment..."
 # Apply interference, this also does a pacman -Syu, which is why it's under setup-buildenv
 print-if-failed setup-buildenv
+setup-build-configs
 build-pkg
 check-pkg

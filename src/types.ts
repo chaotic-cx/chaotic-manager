@@ -101,3 +101,9 @@ export interface MetricsReturnObject {
 }
 
 export const current_version = 8;
+
+const ONE_UNIX_DAY: number = 1000 * 60 * 60 * 24;
+const ONE_UNIX_MONTH = 1000 * 60 * 60 * 24 * 30;
+
+export const SOURCECACHE_MAX_LIFETIME = ONE_UNIX_MONTH;
+export const HTTP_CACHE_MAX_AGE = ONE_UNIX_DAY;

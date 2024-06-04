@@ -2,8 +2,9 @@ import Timeout from "await-timeout";
 import express, { Request, Response } from "express";
 import to from "await-to-js";
 import { ChaoticApi } from "./api";
-import { MetricsTime, Queue } from "bullmq";
+import { Queue } from "bullmq";
 import { RedisConnectionManager } from "./redis-connection-manager";
+import { HTTP_CACHE_MAX_AGE } from "./types";
 
 export async function startWebServer(port: number, manager: RedisConnectionManager) {
     const connection = manager.getClient();
@@ -150,7 +151,7 @@ export async function startWebServer(port: number, manager: RedisConnectionManag
     });
     app.use(
         express.static("public", {
-            maxAge: MetricsTime.ONE_HOUR * 24,
+            maxAge: HTTP_CACHE_MAX_AGE,
         }),
     );
 
