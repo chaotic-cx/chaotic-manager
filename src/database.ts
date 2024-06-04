@@ -92,7 +92,8 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
         // But only if it is either a GitHub or a GitLab repo as of now.
         if (package_repos !== undefined && buildJobData.commit !== undefined) {
             if (repo.getUrl().includes("gitlab.com")) {
-                const commitUrl = `${repo.getUrl()}/-/commit/${buildJobData.commit}}`;
+                const commit = buildJobData.commit.split(":")[0];
+                const commitUrl = `${repo.getUrl()}/-/commit/${commit}`;
                 text += ` - [commit](${commitUrl})\n`;
             } else if (repo.getUrl().includes("github.com")) {
                 const commitUrl = `${repo.getUrl()}/commit/${buildJobData.commit}`;
