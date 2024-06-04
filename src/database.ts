@@ -344,9 +344,6 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
         },
         {
             connection: connection,
-            metrics: {
-                maxDataPoints: MetricsTime.ONE_WEEK * 4,
-            },
         },
     );
     void database_worker.pause();

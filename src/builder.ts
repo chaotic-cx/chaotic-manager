@@ -1,10 +1,10 @@
-import { Job, MetricsTime, Queue, UnrecoverableError, Worker } from "bullmq";
+import { Job, Queue, UnrecoverableError, Worker } from "bullmq";
 import fs from "fs";
 import path from "path";
 import { Client } from "node-scp";
 import Docker from "dockerode";
 import to from "await-to-js";
-import { BuildJobData, BuildStatus, current_version, DatabaseJobData, RemoteSettings } from "./types";
+import { BuildJobData, BuildStatus, current_version, DatabaseJobData, SOURCECACHE_MAX_LIFETIME, RemoteSettings } from "./types";
 import { BuildsRedisLogger, SshLogger } from "./logging";
 import { DockerManager } from "./docker-manager";
 import { RedisConnectionManager } from "./redis-connection-manager";
@@ -21,9 +21,11 @@ function requestRemoteConfig(
     manager: RedisConnectionManager,
     worker: Worker,
     docker: DockerManager,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     config: any,
 ): Promise<void> {
-    return new Promise<void>(async (resolve, reject) => {
+    // eslint-disable-next-line no-async-promise-executor
+    return new Promise<void>(async (resolve) => {
         const database_host = process.env.DATABASE_HOST || null;
         const database_port = Number(process.env.DATABASE_PORT || 22);
         const database_user = process.env.DATABASE_USER || null;
@@ -70,17 +72,46 @@ function requestRemoteConfig(
 
 // Request a list of files from the database server and fill the destination directory with empty files
 // Goal: stop pacman from building packages it has already built
-async function generateDestFillerFiles(repo_files: string[], destdir: string): Promise<void> {
+function generateDestFillerFiles(repo_files: string[], destdir: string): void {
     for (const line of repo_files) {
         const filepath = path.join(destdir, line);
         fs.writeFileSync(filepath, "");
     }
 }
 
+/**
+ * Ensure that the source cache is cleared after one month, also for no longer existing packages
+ * @param mountSrcdest The path of the shared sources directory inside the container
+ * @param target_repo The target repository, which is the name of the directory in the shared sources directory
+ */
+function clearSourceCache(mountSrcdest: string, target_repo: string): void {
+    const now = new Date().getTime();
+    const sourceCacheDir = path.join(mountSrcdest, target_repo);
+
+    if (!fs.existsSync(sourceCacheDir))
+        return;
+
+    const directory = fs.readdirSync(sourceCacheDir, { withFileTypes: true });
+    
+    directory.filter((dirent) => dirent.isDirectory()).map((dirent) => dirent.name);
+    for (const dir of directory) {
+        const filePath = path.join(sourceCacheDir, `${dir.name}`);
+        if (fs.existsSync(`${filePath}/.timestamp`)) {
+            const timestamp = fs.statSync(`${filePath}/.timestamp`);
+            const mtime = new Date(timestamp.mtime).getTime();
+            if (now - mtime <= SOURCECACHE_MAX_LIFETIME)
+                continue;
+        }
+        fs.rmSync(filePath, { recursive: true, force: true });
+    }
+}
+
 export default function createBuilder(redis_connection_manager: RedisConnectionManager): Worker {
+    const shared_srcdest_cache: string = path.join(process.env.SHARED_PATH || "", "srcdest_cache");
     const shared_pkgout: string = path.join(process.env.SHARED_PATH || "", "pkgout");
     const shared_sources: string = path.join(process.env.SHARED_PATH || "", "sources");
-    const mount = "/shared/pkgout";
+    const mountPkgout = "/shared/pkgout";
+    const mountSrcdest = "/shared/srcdest_cache";
 
     const connection = redis_connection_manager.getClient();
     const subscriber = redis_connection_manager.getSubscriber();
@@ -133,22 +164,31 @@ export default function createBuilder(redis_connection_manager: RedisConnectionM
                 repo_manager.targetRepoFromObject(remote_settings.target_repos);
                 const src_repo = repo_manager.getRepo(jobdata.srcrepo);
 
-                ensurePathClean(mount);
-                void generateDestFillerFiles(jobdata.repo_files, mount);
+                ensurePathClean(mountPkgout);
+                generateDestFillerFiles(jobdata.repo_files, mountPkgout);
+                clearSourceCache(mountSrcdest, target_repo);
 
                 if (cancelled) {
                     throw new UnrecoverableError("Job cancelled.");
                 }
+
+                // Generate the folder path for the specific package source cache
+                const srcdest_package_path = path.join(shared_srcdest_cache, target_repo, pkgbase);
+
                 const container = await docker_manager.create(
                     remote_settings.builder.image,
                     ["build", pkgbase],
-                    [shared_pkgout + ":/home/builder/pkgout", shared_sources + ":/pkgbuilds"],
+                    [
+                        srcdest_package_path + ":/home/builder/srcdest_cached",
+                        shared_pkgout + ":/home/builder/pkgout",
+                        shared_sources + ":/pkgbuilds",
+                    ],
                     [
                         "BUILDER_HOSTNAME=" + remote_settings.builder.name,
-                        "PACKAGE_REPO_ID=" + src_repo.id,
-                        "PACKAGE_REPO_URL=" + src_repo.getUrl(),
                         "EXTRA_PACMAN_REPOS=" + repo_manager.getTargetRepo(target_repo).repoToString(),
                         "EXTRA_PACMAN_KEYRINGS=" + repo_manager.getTargetRepo(target_repo).keyringsToBashArray(),
+                        "PACKAGE_REPO_ID=" + src_repo.id,
+                        "PACKAGE_REPO_URL=" + src_repo.getUrl(),
                     ],
                 );
                 if (cancelled) {
@@ -162,8 +202,8 @@ export default function createBuilder(redis_connection_manager: RedisConnectionM
                 docker = null;
 
                 // Remove any filler files from the equation
-                const file_list = fs.readdirSync(mount).filter((file) => {
-                    const stats = fs.statSync(path.join(mount, file));
+                const file_list = fs.readdirSync(mountPkgout).filter((file) => {
+                    const stats = fs.statSync(path.join(mountPkgout, file));
                     return stats.isFile() && stats.size > 0;
                 });
                 if (err || out.StatusCode !== 0 || file_list.length === 0) {
@@ -186,7 +226,7 @@ export default function createBuilder(redis_connection_manager: RedisConnectionM
                         privateKey: fs.readFileSync("sshkey"),
                         debug: sshlogger.log.bind(sshlogger),
                     });
-                    await client.uploadDir(mount, remote_settings.database.landing_zone);
+                    await client.uploadDir(mountPkgout, remote_settings.database.landing_zone);
                     client.close();
                 } catch (e) {
                     logger.error(`Failed to upload ${job.id}: ${e}`);
@@ -195,7 +235,7 @@ export default function createBuilder(redis_connection_manager: RedisConnectionM
                     console.log("End of ssh log.");
                     throw new Error("Upload failed.");
                 }
-                ensurePathClean(mount, false);
+                ensurePathClean(mountPkgout, false);
                 logger.log(`Finished upload ${job.id}.`);
                 const db_job_data: DatabaseJobData = {
                     arch: jobdata.arch,
@@ -221,9 +261,6 @@ export default function createBuilder(redis_connection_manager: RedisConnectionM
         },
         {
             connection,
-            metrics: {
-                maxDataPoints: MetricsTime.ONE_WEEK * 4,
-            },
         },
     );
     void worker.pause();
