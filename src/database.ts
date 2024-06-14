@@ -12,6 +12,12 @@ import { RedisConnectionManager } from "./redis-connection-manager";
 import { Repo, RepoManager } from "./repo-manager";
 import { createLogUrl, currentTime, splitJobId } from "./utils";
 import { promotePendingDependents } from "./buildorder";
+import {
+    builderMetricsTime,
+    increaseBuildCountMetrics,
+    increaseBuildElapsedTimeMetrics,
+    registerMetrics,
+} from "./prometheus";
 
 async function publishSettingsObject(manager: RedisConnectionManager, settings: RemoteSettings): Promise<void> {
     const subscriber = manager.getSubscriber();
@@ -50,6 +56,7 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
 
     const repo_manager = new RepoManager(base_logs_url ? new URL(base_logs_url) : undefined);
     const notifier = new Notifier();
+    registerMetrics();
 
     /**
      * Creates a notification text for a deployment event.
@@ -352,6 +359,9 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
     const builds_queue_events = new QueueEvents("builds", { connection });
     const builds_queue = new Queue("builds", { connection });
 
+    // eslint-disable-next-line @typescript-eslint/ban-types
+    let end: Function;
+
     builds_queue_events.on("stalled", async ({ jobId }): Promise<void> => {
         try {
             const logger = new BuildsRedisLogger(connection);
@@ -369,6 +379,8 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
     });
     builds_queue_events.on("active", async ({ jobId }): Promise<void> => {
         try {
+            end = builderMetricsTime.startTimer({ jobId });
+            console.log(end);
             const logger = new BuildsRedisLogger(connection);
             const job: Job | undefined = await logger.fromJobID(jobId, builds_queue);
             if (job) {
@@ -390,6 +402,8 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
                 void job.remove();
                 await repo.notify(job, "failed", "Build failed.");
                 void createFailedBuildNotification(repo, jobId, jobdata, `🚫 Build for ${jobdata.srcrepo} failed`);
+                increaseBuildCountMetrics(jobdata.srcrepo ? jobdata.srcrepo : "unknown", "failed-build");
+                increaseBuildElapsedTimeMetrics(jobId, end());
                 await logger.end_log();
             }
         } catch (error) {
@@ -407,6 +421,8 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
                 void job.remove();
                 if (!err && out === BuildStatus.ALREADY_BUILT) {
                     await repo.notify(job, "canceled", "Build skipped because package was already built.");
+                    increaseBuildCountMetrics(jobdata.srcrepo ? jobdata.srcrepo : "unknown", "failed-build");
+                    increaseBuildElapsedTimeMetrics(jobId, end());
                     await logger.end_log();
                 }
             }
@@ -423,6 +439,13 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
             void createDeploymentNotification(jobdata.packages, `📣 New deployment to ${jobdata.srcrepo}`);
             const logger = new BuildsRedisLogger(connection);
             logger.fromJob(job);
+
+            const totalTime = end();
+            console.log(`Total time: ${totalTime}`);
+
+            increaseBuildCountMetrics(jobdata.srcrepo ? jobdata.srcrepo : "unknown", "successful");
+            increaseBuildElapsedTimeMetrics(job.id ? job.id : "unknown", end());
+
             await logger.end_log();
         } catch (error) {
             console.error(error);
@@ -437,6 +460,8 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
             void createDeploymentNotification(jobdata.packages, `🚨 Failed deploying to ${jobdata.srcrepo}`);
             const logger = new BuildsRedisLogger(connection);
             logger.fromJob(job);
+            increaseBuildCountMetrics(jobdata.srcrepo ? jobdata.srcrepo : "unknown", "failed-database");
+            increaseBuildElapsedTimeMetrics(job.data.id, end());
             await logger.end_log();
         } catch (error) {
             console.error(error);

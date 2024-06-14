@@ -27,6 +27,7 @@
         "ioredis": "^5.4.1",
         "node-scp": "^0.0.23",
         "node-telegram-bot-api": "^0.66.0",
+        "prom-client": "^15.1.2",
         "redlock": "^5.0.0-beta.2",
         "style-loader": "^4.0.0",
         "typescript": "^5.4.5",
