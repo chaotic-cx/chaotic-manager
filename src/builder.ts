@@ -4,7 +4,14 @@ import path from "path";
 import { Client } from "node-scp";
 import Docker from "dockerode";
 import to from "await-to-js";
-import { BuildJobData, BuildStatus, current_version, DatabaseJobData, SOURCECACHE_MAX_LIFETIME, RemoteSettings } from "./types";
+import {
+    BuildJobData,
+    BuildStatus,
+    current_version,
+    DatabaseJobData,
+    SOURCECACHE_MAX_LIFETIME,
+    RemoteSettings,
+} from "./types";
 import { BuildsRedisLogger, SshLogger } from "./logging";
 import { DockerManager } from "./docker-manager";
 import { RedisConnectionManager } from "./redis-connection-manager";
@@ -88,19 +95,17 @@ function clearSourceCache(mountSrcdest: string, target_repo: string): void {
     const now = new Date().getTime();
     const sourceCacheDir = path.join(mountSrcdest, target_repo);
 
-    if (!fs.existsSync(sourceCacheDir))
-        return;
+    if (!fs.existsSync(sourceCacheDir)) return;
 
     const directory = fs.readdirSync(sourceCacheDir, { withFileTypes: true });
-    
+
     directory.filter((dirent) => dirent.isDirectory()).map((dirent) => dirent.name);
     for (const dir of directory) {
         const filePath = path.join(sourceCacheDir, `${dir.name}`);
         if (fs.existsSync(`${filePath}/.timestamp`)) {
             const timestamp = fs.statSync(`${filePath}/.timestamp`);
             const mtime = new Date(timestamp.mtime).getTime();
-            if (now - mtime <= SOURCECACHE_MAX_LIFETIME)
-                continue;
+            if (now - mtime <= SOURCECACHE_MAX_LIFETIME) continue;
         }
         fs.rmSync(filePath, { recursive: true, force: true });
     }

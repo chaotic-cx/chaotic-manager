@@ -8,6 +8,7 @@ import { RedisConnectionManager } from "./redis-connection-manager";
 import { Worker } from "bullmq";
 import { scheduleAutoRepoRemove, schedulePackages } from "./scheduler";
 import { startWebServer } from "./web";
+import * as Prometheus from "prom-client";
 
 const mainDefinitions = [
     { name: "command", defaultOption: true },
@@ -27,6 +28,8 @@ const redisPort = Number(process.env.REDIS_PORT) || 6379;
 const redisPassword = process.env.REDIS_PASSWORD || "";
 
 const workers: Worker[] = [];
+
+Prometheus.collectDefaultMetrics();
 
 async function main(): Promise<void> {
     const connection = new IORedis(redisPort, redisHost, {

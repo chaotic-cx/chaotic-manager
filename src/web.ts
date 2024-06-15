@@ -5,6 +5,8 @@ import { ChaoticApi } from "./api";
 import { Queue } from "bullmq";
 import { RedisConnectionManager } from "./redis-connection-manager";
 import { HTTP_CACHE_MAX_AGE } from "./types";
+import { getMetrics } from "./prometheus";
+import { register } from "prom-client";
 
 export async function startWebServer(port: number, manager: RedisConnectionManager) {
     const connection = manager.getClient();
@@ -126,7 +128,7 @@ export async function startWebServer(port: number, manager: RedisConnectionManag
             serverError(res, 500, "Internal server error");
             return res;
         }
-        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader("Access-Control-Allow-Origin", "*");
         return res.json(out);
     });
 
@@ -136,7 +138,7 @@ export async function startWebServer(port: number, manager: RedisConnectionManag
             serverError(res, 500, "Internal server error");
             return res;
         }
-        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader("Access-Control-Allow-Origin", "*");
         return res.json(out);
     });
 
@@ -146,9 +148,21 @@ export async function startWebServer(port: number, manager: RedisConnectionManag
             serverError(res, 500, "Internal server error");
             return res;
         }
-        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader("Access-Control-Allow-Origin", "*");
         return res.json(out);
     });
+
+    app.get("/metrics", async (req: Request, res: Response): Promise<Response> => {
+        const [err, out] = await to(getMetrics(builder_queue, database_queue));
+        if (err || !out) {
+            serverError(res, 500, "Internal server error");
+            return res;
+        }
+        res.setHeader("Content-Type", register.contentType);
+        res.setHeader("Access-Control-Allow-Origin", "*");
+        return res.send(out);
+    });
+
     app.use(
         express.static("public", {
             maxAge: HTTP_CACHE_MAX_AGE,
