@@ -153,7 +153,7 @@ export async function startWebServer(port: number, manager: RedisConnectionManag
     });
 
     app.get("/metrics", async (req: Request, res: Response): Promise<Response> => {
-        const [err, out] = await to(getMetrics());
+        const [err, out] = await to(getMetrics(builder_queue, database_queue));
         if (err || !out) {
             serverError(res, 500, "Internal server error");
             return res;

@@ -6,16 +6,18 @@ import path from "path";
 import to from "await-to-js";
 import { BuildJobData, BuildStatus, current_version, DatabaseJobData, DispatchJobData, RemoteSettings } from "./types";
 import { BuildsRedisLogger } from "./logging";
-import { BulkJobOptions, Job, MetricsTime, Queue, QueueEvents, UnrecoverableError, Worker } from "bullmq";
+import { BulkJobOptions, Job, Queue, QueueEvents, UnrecoverableError, Worker } from "bullmq";
 import { DockerManager } from "./docker-manager";
 import { RedisConnectionManager } from "./redis-connection-manager";
 import { Repo, RepoManager } from "./repo-manager";
 import { createLogUrl, currentTime, splitJobId } from "./utils";
 import { promotePendingDependents } from "./buildorder";
 import {
-    builderMetricsTime,
+    buildMetricsTime,
+    buildToDeployMetricsTime,
     increaseBuildCountMetrics,
     increaseBuildElapsedTimeMetrics,
+    increaseBuildToDeployElapsedTimeMetrics,
     registerMetrics,
 } from "./prometheus";
 
@@ -359,8 +361,8 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
     const builds_queue_events = new QueueEvents("builds", { connection });
     const builds_queue = new Queue("builds", { connection });
 
-    // eslint-disable-next-line @typescript-eslint/ban-types
-    let end: Function;
+    let endTimer: () => number;
+    let endDeployTimer: () => number;
 
     builds_queue_events.on("stalled", async ({ jobId }): Promise<void> => {
         try {
@@ -379,8 +381,10 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
     });
     builds_queue_events.on("active", async ({ jobId }): Promise<void> => {
         try {
-            end = builderMetricsTime.startTimer({ jobId });
-            console.log(end);
+            // Start the timer for the build
+            endTimer = buildMetricsTime.startTimer({ jobId });
+            endDeployTimer = buildToDeployMetricsTime.startTimer({ jobId });
+
             const logger = new BuildsRedisLogger(connection);
             const job: Job | undefined = await logger.fromJobID(jobId, builds_queue);
             if (job) {
@@ -402,8 +406,12 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
                 void job.remove();
                 await repo.notify(job, "failed", "Build failed.");
                 void createFailedBuildNotification(repo, jobId, jobdata, `🚫 Build for ${jobdata.srcrepo} failed`);
+
+                // In case of a failed build, we may also end the buildToDeploy timer as it would otherwise never be ended.
                 increaseBuildCountMetrics(jobdata.srcrepo ? jobdata.srcrepo : "unknown", "failed-build");
-                increaseBuildElapsedTimeMetrics(jobId, end());
+                increaseBuildElapsedTimeMetrics(jobId, "failed-build", endTimer());
+                increaseBuildToDeployElapsedTimeMetrics(jobId, "failed-build", endDeployTimer());
+
                 await logger.end_log();
             }
         } catch (error) {
@@ -421,8 +429,11 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
                 void job.remove();
                 if (!err && out === BuildStatus.ALREADY_BUILT) {
                     await repo.notify(job, "canceled", "Build skipped because package was already built.");
-                    increaseBuildCountMetrics(jobdata.srcrepo ? jobdata.srcrepo : "unknown", "failed-build");
-                    increaseBuildElapsedTimeMetrics(jobId, end());
+
+                    increaseBuildCountMetrics(jobdata.srcrepo ? jobdata.srcrepo : "unknown", "already-built");
+                    increaseBuildElapsedTimeMetrics(jobId, "already-built", endTimer());
+                    increaseBuildToDeployElapsedTimeMetrics(jobId, "already-built", endDeployTimer());
+
                     await logger.end_log();
                 }
             }
@@ -440,11 +451,8 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
             const logger = new BuildsRedisLogger(connection);
             logger.fromJob(job);
 
-            const totalTime = end();
-            console.log(`Total time: ${totalTime}`);
-
             increaseBuildCountMetrics(jobdata.srcrepo ? jobdata.srcrepo : "unknown", "successful");
-            increaseBuildElapsedTimeMetrics(job.id ? job.id : "unknown", end());
+            increaseBuildToDeployElapsedTimeMetrics(job.id ? job.id : "unknown", "successful", endDeployTimer());
 
             await logger.end_log();
         } catch (error) {
@@ -460,8 +468,10 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
             void createDeploymentNotification(jobdata.packages, `🚨 Failed deploying to ${jobdata.srcrepo}`);
             const logger = new BuildsRedisLogger(connection);
             logger.fromJob(job);
+
             increaseBuildCountMetrics(jobdata.srcrepo ? jobdata.srcrepo : "unknown", "failed-database");
-            increaseBuildElapsedTimeMetrics(job.data.id, end());
+            increaseBuildToDeployElapsedTimeMetrics(job.data.id, "failed-database", endDeployTimer());
+
             await logger.end_log();
         } catch (error) {
             console.error(error);
