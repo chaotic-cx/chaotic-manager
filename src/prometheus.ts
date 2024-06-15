@@ -44,7 +44,7 @@ const amountActiveBuildJobs = new Prometheus.Gauge({
  * Creates a new Prometheus metric for showing a gauge of the currently active database jobs.
  */
 const amountActiveDatabaseJobs = new Prometheus.Gauge({
-    name: "chaotic_manager_running_builds",
+    name: "chaotic_manager_active_database_jobs",
     help: "Shows the amount of currently active database jobs",
 });
 
@@ -52,7 +52,7 @@ const amountActiveDatabaseJobs = new Prometheus.Gauge({
  * Creates a Prometheus metric for showing the number of currently waiting build jobs.
  */
 const amountWaitingBuildJobs = new Prometheus.Gauge({
-    name: "chaotic_manager_active_build_jobs",
+    name: "chaotic_manager_waiting_build_jobs",
     help: "Shows the amount of currently waiting build jobs",
 });
 
@@ -60,7 +60,7 @@ const amountWaitingBuildJobs = new Prometheus.Gauge({
  * Creates a Prometheus metric for showing the number of currently waiting database jobs.
  */
 const amountWaitingDatabaseJobs = new Prometheus.Gauge({
-    name: "chaotic_manager_active_build_jobs",
+    name: "chaotic_manager_waiting_database_jobs",
     help: "Shows the amount of currently waiting database jobs",
 });
 
@@ -68,6 +68,7 @@ const amountWaitingDatabaseJobs = new Prometheus.Gauge({
  * Register the metrics with the Prometheus client and start the timer.
  */
 export function registerMetrics(): void {
+    console.log("Registering Prometheus metrics.");
     Prometheus.register.registerMetric(buildMetricsCount);
     Prometheus.register.registerMetric(buildMetricsTime);
     Prometheus.register.registerMetric(buildToDeployMetricsTime);
@@ -102,31 +103,35 @@ export function increaseBuildToDeployElapsedTimeMetrics(jobId: string, outcome: 
 }
 
 /**
- * Increase the amount of running builds. This function should be called at the
- * start of a build process.
+ * Set the amount of active and waiting build jobs. This function gets called whenever new metrics are scraped.
  */
 async function setBuilderQueueMetrics(builderQueue: Queue): Promise<void> {
-    builderQueue.getJobCounts("active").then((currentJobs) => {
-        amountActiveBuildJobs.set(currentJobs.length);
-    });
-    builderQueue.getJobCounts("waiting").then((currentJobs) => {
-        amountWaitingBuildJobs.set(currentJobs.length);
-    });
+    const active = (await builderQueue.getJobCounts("active"))[0];
+    const waiting: number = (await builderQueue.getJobCounts("waiting"))[0];
+    amountActiveBuildJobs.set(active ? active : 0);
+    amountWaitingBuildJobs.set(waiting ? waiting : 0);
 }
+
+/**
+ * Set the amount of active and waiting database jobs. This function gets called whenever new metrics are scraped.
+ */
 async function setDatabaseQueueMetrics(databaseQueue: Queue): Promise<void> {
-    databaseQueue.getJobCounts("active").then((currentJobs) => {
-        amountActiveDatabaseJobs.set(currentJobs.length);
-    });
-    databaseQueue.getJobCounts("waiting").then((currentJobs) => {
-        amountWaitingDatabaseJobs.set(currentJobs.length);
-    });
+    const active: number = (await databaseQueue.getJobCounts("active"))[0];
+    const waiting: number = (await databaseQueue.getJobCounts("waiting"))[0];
+    amountActiveDatabaseJobs.set(active ? active : 0);
+    amountWaitingDatabaseJobs.set(waiting ? waiting : 0);
 }
 
 /**
  * Get the current metrics from the Prometheus client.
  */
 export async function getMetrics(builderQueue: Queue, databaseQueue: Queue): Promise<string> {
-    await setBuilderQueueMetrics(builderQueue);
-    await setDatabaseQueueMetrics(databaseQueue);
-    return Prometheus.register.metrics();
+    try {
+        await setBuilderQueueMetrics(builderQueue);
+        await setDatabaseQueueMetrics(databaseQueue);
+        return Prometheus.register.metrics();
+    } catch (err) {
+        console.error("Error while generating Prometheus metrics:", err);
+        return "Error while generating Prometheus metrics";
+    }
 }
