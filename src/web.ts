@@ -4,9 +4,10 @@ import to from "await-to-js";
 import { ChaoticApi } from "./api";
 import { Queue } from "bullmq";
 import { RedisConnectionManager } from "./redis-connection-manager";
-import { HTTP_CACHE_MAX_AGE } from "./types";
+import { corsOptions, HTTP_CACHE_MAX_AGE } from "./types";
 import { getMetrics } from "./prometheus";
 import { register } from "prom-client";
+import cors from "cors";
 
 export async function startWebServer(port: number, manager: RedisConnectionManager) {
     const connection = manager.getClient();
@@ -122,44 +123,40 @@ export async function startWebServer(port: number, manager: RedisConnectionManag
         return await getOrStreamLog(req, res);
     });
 
-    app.get("/api/queue/stats", async (req: Request, res: Response): Promise<Response> => {
+    app.get("/api/queue/stats", cors(corsOptions), async (req: Request, res: Response): Promise<Response> => {
         const [err, out] = await to(chaoticApi.buildStatsObject());
         if (err || !out) {
             serverError(res, 500, "Internal server error");
             return res;
         }
-        res.setHeader("Access-Control-Allow-Origin", "*");
         return res.json(out);
     });
 
-    app.get("/api/queue/packages", async (req: Request, res: Response): Promise<Response> => {
+    app.get("/api/queue/packages", cors(corsOptions), async (req: Request, res: Response): Promise<Response> => {
         const [err, out] = await to(chaoticApi.buildPackagesObject());
         if (err || !out) {
             serverError(res, 500, "Internal server error");
             return res;
         }
-        res.setHeader("Access-Control-Allow-Origin", "*");
         return res.json(out);
     });
 
-    app.get("/api/queue/metrics", async (req: Request, res: Response): Promise<Response> => {
+    app.get("/api/queue/metrics", cors(corsOptions), async (req: Request, res: Response): Promise<Response> => {
         const [err, out] = await to(chaoticApi.buildMetricsObject());
         if (err || !out) {
             serverError(res, 500, "Internal server error");
             return res;
         }
-        res.setHeader("Access-Control-Allow-Origin", "*");
         return res.json(out);
     });
 
-    app.get("/metrics", async (req: Request, res: Response): Promise<Response> => {
+    app.get("/metrics", cors(corsOptions), async (req: Request, res: Response): Promise<Response> => {
         const [err, out] = await to(getMetrics(builder_queue, database_queue));
         if (err || !out) {
             serverError(res, 500, "Internal server error");
             return res;
         }
         res.setHeader("Content-Type", register.contentType);
-        res.setHeader("Access-Control-Allow-Origin", "*");
         return res.send(out);
     });
 

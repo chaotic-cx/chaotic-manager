@@ -1,3 +1,5 @@
+import { CorsOptions } from "cors";
+
 export interface PacmanRepo {
     name: string;
     servers: string[];
@@ -102,8 +104,15 @@ export interface MetricsReturnObject {
 
 export const current_version = 8;
 
-const ONE_UNIX_DAY: number = 1000 * 60 * 60 * 24;
+const ONE_UNIX_DAY = 1000 * 60 * 60 * 24;
 const ONE_UNIX_MONTH = 1000 * 60 * 60 * 24 * 30;
 
 export const SOURCECACHE_MAX_LIFETIME = ONE_UNIX_MONTH;
 export const HTTP_CACHE_MAX_AGE = ONE_UNIX_DAY;
+
+export const ALLOWED_CORS_ORIGINS = ["https://aur.chaotic.cx", "https://caur-frontend.pages.dev"];
+export const ALLOWED_CORS_METHODS = ["GET"];
+export const corsOptions: CorsOptions = {
+    origin: ALLOWED_CORS_ORIGINS,
+    methods: ALLOWED_CORS_METHODS,
+};
