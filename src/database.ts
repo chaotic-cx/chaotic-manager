@@ -68,8 +68,16 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
      */
     async function createDeploymentNotification(packages: string[], event: string): Promise<void> {
         let text = `*${event}:*\n`;
-        for (const pkg of packages) {
-            text += ` > ${pkg.replace(/\.pkg.tar.zst$/, "")}\n`;
+
+        // TODO: Added this try catch block because of occasional, non-easily reproducible errors
+        // like "packages is non-iterable". Can remove once we have more information logged and fixed the issue.
+        try {
+            for (const pkg of packages) {
+                text += ` > ${pkg.replace(/\.pkg.tar.zst$/, "")}\n`;
+            }
+        } catch (err) {
+            console.error("Error in createDeploymentNotification: ", err);
+            console.error("Packages: ", packages);
         }
         const [err]: [Error, undefined] | [null, void] = await to(notifier.notify(text));
         if (err) console.error(err);
