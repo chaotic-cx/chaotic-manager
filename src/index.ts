@@ -9,6 +9,7 @@ import { Worker } from "bullmq";
 import { scheduleAutoRepoRemove, schedulePackages } from "./scheduler";
 import { startWebServer } from "./web";
 import * as Prometheus from "prom-client";
+import fs from "fs";
 
 const mainDefinitions = [
     { name: "command", defaultOption: true },
@@ -39,11 +40,25 @@ async function main(): Promise<void> {
     });
 
     switch (mainOptions.command) {
-        case "schedule":
+        case "schedule": {
             if (typeof mainOptions._unknown === "undefined" || mainOptions._unknown.length < 1) {
                 console.error("No package names specified");
                 process.exit(1);
             }
+
+            // This is a workaround for too many arguments causing the command line argument not to be executed in the
+            // CI pipeline (mainly important for bigger repos).
+            let deptree: string | undefined;
+            const buildsDir: string | undefined = process.env.CI_BUILDS_DIR || process.env.GITHUB_WORKSPACE;
+            if (buildsDir !== undefined && fs.existsSync(buildsDir + "/.ci/deptree.txt")) {
+                deptree = fs.readFileSync(buildsDir + "/.ci/deptree.txt", {
+                    encoding: "utf8",
+                    flag: "r",
+                });
+            } else {
+                deptree = undefined;
+            }
+
             await connection.connect();
             await schedulePackages(
                 connection,
@@ -52,11 +67,12 @@ async function main(): Promise<void> {
                 mainOptions["source-repo"] || "chaotic-aur",
                 mainOptions._unknown,
                 mainOptions.commit,
-                mainOptions.deptree,
+                deptree ? deptree : mainOptions.deptree,
             );
             connection.quit();
             return;
-        case "auto-repo-remove":
+        }
+        case "auto-repo-remove": {
             if (typeof mainOptions._unknown === "undefined" || mainOptions._unknown.length < 1) {
                 console.error("No pkgbases specified");
                 process.exit(1);
@@ -70,6 +86,7 @@ async function main(): Promise<void> {
             );
             connection.quit();
             return;
+        }
         case "builder": {
             if (!process.env.SHARED_PATH) {
                 console.error("Config variables incomplete");
