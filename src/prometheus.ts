@@ -35,33 +35,19 @@ export const buildToDeployMetricsTime = new Prometheus.Histogram({
 /**
  * Creates a new Prometheus metric for showing a gauge of the currently active builds jobs.
  */
-const amountActiveBuildJobs = new Prometheus.Gauge({
+const amountBuildJobs = new Prometheus.Gauge({
     name: "chaotic_manager_active_build_jobs",
     help: "Shows the amount of currently active build jobs",
+    labelNames: ["status"],
 });
 
 /**
  * Creates a new Prometheus metric for showing a gauge of the currently active database jobs.
  */
-const amountActiveDatabaseJobs = new Prometheus.Gauge({
+const amountDatabaseJobs = new Prometheus.Gauge({
     name: "chaotic_manager_active_database_jobs",
     help: "Shows the amount of currently active database jobs",
-});
-
-/**
- * Creates a Prometheus metric for showing the number of currently waiting build jobs.
- */
-const amountWaitingBuildJobs = new Prometheus.Gauge({
-    name: "chaotic_manager_waiting_build_jobs",
-    help: "Shows the amount of currently waiting build jobs",
-});
-
-/**
- * Creates a Prometheus metric for showing the number of currently waiting database jobs.
- */
-const amountWaitingDatabaseJobs = new Prometheus.Gauge({
-    name: "chaotic_manager_waiting_database_jobs",
-    help: "Shows the amount of currently waiting database jobs",
+    labelNames: ["status"],
 });
 
 /**
@@ -72,10 +58,8 @@ export function registerMetrics(): void {
     Prometheus.register.registerMetric(buildMetricsCount);
     Prometheus.register.registerMetric(buildMetricsTime);
     Prometheus.register.registerMetric(buildToDeployMetricsTime);
-    Prometheus.register.registerMetric(amountActiveBuildJobs);
-    Prometheus.register.registerMetric(amountActiveDatabaseJobs);
-    Prometheus.register.registerMetric(amountWaitingBuildJobs);
-    Prometheus.register.registerMetric(amountWaitingDatabaseJobs);
+    Prometheus.register.registerMetric(amountBuildJobs);
+    Prometheus.register.registerMetric(amountDatabaseJobs);
 }
 
 /**
@@ -108,8 +92,8 @@ export function increaseBuildToDeployElapsedTimeMetrics(jobId: string, outcome: 
 async function setBuilderQueueMetrics(builderQueue: Queue): Promise<void> {
     const active = (await builderQueue.getJobCounts("active"))[0];
     const waiting: number = (await builderQueue.getJobCounts("waiting"))[0];
-    amountActiveBuildJobs.set(active ? active : 0);
-    amountWaitingBuildJobs.set(waiting ? waiting : 0);
+    amountBuildJobs.set({ status: "active" }, active ? active : 0);
+    amountBuildJobs.set({ status: "waiting" }, waiting ? waiting : 0);
 }
 
 /**
@@ -118,8 +102,8 @@ async function setBuilderQueueMetrics(builderQueue: Queue): Promise<void> {
 async function setDatabaseQueueMetrics(databaseQueue: Queue): Promise<void> {
     const active: number = (await databaseQueue.getJobCounts("active"))[0];
     const waiting: number = (await databaseQueue.getJobCounts("waiting"))[0];
-    amountActiveDatabaseJobs.set(active ? active : 0);
-    amountWaitingDatabaseJobs.set(waiting ? waiting : 0);
+    amountDatabaseJobs.set({ status: "active" }, active ? active : 0);
+    amountDatabaseJobs.set({ status: "waiting" }, waiting ? waiting : 0);
 }
 
 /**
