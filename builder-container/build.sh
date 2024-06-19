@@ -121,5 +121,8 @@ echo "Setting up build environment..."
 # Apply interference, this also does a pacman -Syu, which is why it's under setup-buildenv
 print-if-failed setup-buildenv
 setup-build-configs
-build-pkg
+
+# Time out after 2 hours, returns status code 124
+# TODO: Make this configurable per builder?
+timeout 7200 build-pkg
 check-pkg

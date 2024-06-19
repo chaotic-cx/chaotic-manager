@@ -9,8 +9,8 @@ import {
     BuildStatus,
     current_version,
     DatabaseJobData,
-    SOURCECACHE_MAX_LIFETIME,
     RemoteSettings,
+    SOURCECACHE_MAX_LIFETIME,
 } from "./types";
 import { BuildsRedisLogger, SshLogger } from "./logging";
 import { DockerManager } from "./docker-manager";
@@ -147,6 +147,7 @@ export default function createBuilder(redis_connection_manager: RedisConnectionM
             let cancelled = false;
             let listener = null;
             let docker: Docker.Container | null = null;
+
             async function on_cancel(channel: string, message: string) {
                 if (channel === "cancel-job" && message === job.id) {
                     logger.log(`Job ${job.id} cancelled.`);
@@ -216,6 +217,9 @@ export default function createBuilder(redis_connection_manager: RedisConnectionM
                         logger.log(`Job ${job.id} skipped because all packages were already built.`);
                         setTimeout(promotePendingDependents.bind(null, jobdata, builds_queue, logger), 1000);
                         return BuildStatus.ALREADY_BUILT;
+                    } else if (out.StatusCode === 124) {
+                        logger.log(`Job ${job.id} reached a timeout during the build phase.`);
+                        throw new Error("Build timeout reached.");
                     } else {
                         logger.log(`Job ${job.id} failed`);
                         throw new Error("Building failed.");
