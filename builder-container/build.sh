@@ -104,7 +104,10 @@ function setup-buildenv {
 function build-pkg {
 	set -eo pipefail
 	printf "Building package...\n"
-	sudo -D "${BUILDDIR}" -u builder PKGDEST="${PKGOUT}" SRCDEST="${SRCDEST}" makepkg --skippgpcheck -s --noconfirm || { local ret=$? && echo "Failed to build package!" >&2 && return $ret; }
+
+	# Time out after 2 hours
+	# TODO: make this configurable per-builder?
+	timeout 7200 sudo -D "${BUILDDIR}" -u builder PKGDEST="${PKGOUT}" SRCDEST="${SRCDEST}" makepkg --skippgpcheck -s --noconfirm || { local ret=$? && echo "Failed to build package!" >&2 && return $ret; }
 	find "${PKGOUT}" -type f -empty -delete || return 1
 }
 
@@ -121,8 +124,5 @@ echo "Setting up build environment..."
 # Apply interference, this also does a pacman -Syu, which is why it's under setup-buildenv
 print-if-failed setup-buildenv
 setup-build-configs
-
-# Time out after 2 hours, returns status code 124
-# TODO: Make this configurable per builder?
-timeout 7200 build-pkg
+build-pkg
 check-pkg
