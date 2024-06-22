@@ -10,6 +10,7 @@ SRCDEST_CACHED="/home/builder/srcdest_cached/"
 PACKAGE="$1"
 BUILDDIR="/home/builder/build/"
 [[ -z $BUILDER_HOSTNAME ]] && BUILDER_HOSTNAME="unknown builder (please supply BUILDER_HOSTNAME via Docker environment)"
+[[ -z $BUILDER_TIMEOUT ]] && BUILDER_TIMEOUT=3600
 
 function print-if-failed {
 	local output=""
@@ -98,6 +99,7 @@ function setup-buildenv {
 
 	pacman-key --init || return 1
     print-if-failed ./interfere.sh "$BUILDDIR" "$PACKAGE" || return 1
+	# shellcheck disable=SC2068
 	if [[ -n "$EXTRA_PACMAN_KEYRINGS" ]]; then pacman -U --noconfirm ${EXTRA_PACMAN_KEYRINGS[@]} || return 1; fi
 }
 
@@ -105,9 +107,8 @@ function build-pkg {
 	set -eo pipefail
 	printf "Building package...\n"
 
-	# Time out after 2 hours
-	# TODO: make this configurable per-builder?
-	timeout 7200 sudo -D "${BUILDDIR}" -u builder PKGDEST="${PKGOUT}" SRCDEST="${SRCDEST}" makepkg --skippgpcheck -s --noconfirm || { local ret=$? && echo "Failed to build package!" >&2 && return $ret; }
+	# Timeout ensures that the build process doesn't hang indefinitely, sending the kill signal if it still hangs 10 seconds after sending the term signal
+	sudo -D "${BUILDDIR}" -u builder PKGDEST="${PKGOUT}" SRCDEST="${SRCDEST}" timeout -k 10 "${BUILDER_TIMEOUT}" makepkg --skippgpcheck -s --noconfirm || { local ret=$? && echo "Failed to build package!" >&2 && return $ret; }
 	find "${PKGOUT}" -type f -empty -delete || return 1
 }
 

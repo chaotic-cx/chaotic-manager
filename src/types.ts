@@ -17,6 +17,7 @@ export interface RemoteSettings {
     builder: {
         image: string;
         name?: string;
+        timeout?: number;
     };
     repos: Record<
         string,
@@ -70,6 +71,7 @@ export interface DispatchJobData {
 export enum BuildStatus {
     SUCCESS,
     ALREADY_BUILT,
+    TIMED_OUT,
 }
 
 // The object the API should return on /api/packages calls

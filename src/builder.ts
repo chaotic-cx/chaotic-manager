@@ -37,6 +37,7 @@ function requestRemoteConfig(
         const database_port = Number(process.env.DATABASE_PORT || 22);
         const database_user = process.env.DATABASE_USER || null;
         const builder_hostname = process.env.BUILDER_HOSTNAME || null;
+        const builder_timeout = Number(process.env.BUILDER_TIMEOUT) || 3600;
         let init = true;
 
         const subscriber = manager.getSubscriber();
@@ -52,6 +53,7 @@ function requestRemoteConfig(
                     console.log("Worker received incompatible config from master. Worker paused.");
                     return;
                 } else {
+                    remote_config.builder.timeout = builder_timeout;
                     if (builder_hostname !== null) {
                         remote_config.builder.name = builder_hostname;
                     }
@@ -191,6 +193,7 @@ export default function createBuilder(redis_connection_manager: RedisConnectionM
                     ],
                     [
                         "BUILDER_HOSTNAME=" + remote_settings.builder.name,
+                        "BUILDER_TIMEOUT=" + remote_settings.builder.timeout,
                         "EXTRA_PACMAN_REPOS=" + repo_manager.getTargetRepo(target_repo).repoToString(),
                         "EXTRA_PACMAN_KEYRINGS=" + repo_manager.getTargetRepo(target_repo).keyringsToBashArray(),
                         "PACKAGE_REPO_ID=" + src_repo.id,
