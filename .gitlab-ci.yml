@@ -47,6 +47,9 @@ build-builder:
         DOCKER_HOST: tcp://docker-daemon:2375/
         DOCKER_TLS_CERTDIR: ""
     rules:
+        - changes:
+              - builder-container/*
+          if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
         - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $UPDATE_BUILDER == "1"
 
 build-manager:
