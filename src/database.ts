@@ -10,7 +10,7 @@ import { BulkJobOptions, Job, Queue, QueueEvents, UnrecoverableError, Worker } f
 import { DockerManager } from "./docker-manager";
 import { RedisConnectionManager } from "./redis-connection-manager";
 import { Repo, RepoManager } from "./repo-manager";
-import { createLogUrl, currentTime, splitJobId } from "./utils";
+import { createLogUrl, createTrivialNotification, currentTime, splitJobId } from "./utils";
 import { promotePendingDependents } from "./buildorder";
 import {
     buildMetricsTime,
@@ -68,19 +68,10 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
      */
     async function createDeploymentNotification(packages: string[], event: string): Promise<void> {
         let text = `*${event}:*\n`;
-
-        // TODO: Added this try catch block because of occasional, non-easily reproducible errors
-        // like "packages is non-iterable". Can remove once we have more information logged and fixed the issue.
-        try {
-            for (const pkg of packages) {
-                text += ` > ${pkg.replace(/\.pkg.tar.zst$/, "")}\n`;
-            }
-        } catch (err) {
-            console.error("Error in createDeploymentNotification: ", err);
-            console.error("Packages: ", packages);
+        for (const pkg of packages) {
+            text += ` > ${pkg.replace(/\.pkg.tar.zst$/, "")}\n`;
         }
-        const [err]: [Error, undefined] | [null, void] = await to(notifier.notify(text));
-        if (err) console.error(err);
+        createTrivialNotification(text, notifier);
     }
 
     /**
@@ -119,8 +110,7 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
         } else {
             text += "\n";
         }
-        const [err]: [Error, undefined] | [null, void] = await to(notifier.notify(text));
-        if (err) console.error(err);
+        createTrivialNotification(text, notifier);
     }
 
     if (package_repos) {
@@ -411,9 +401,22 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
             if (job) {
                 const jobdata: BuildJobData = job.data;
                 const repo: Repo = repo_manager.getRepo(jobdata.srcrepo);
+                const [err, out] = await to(job.waitUntilFinished(builds_queue_events));
                 void job.remove();
-                await repo.notify(job, "failed", "Build failed.");
-                void createFailedBuildNotification(repo, jobId, jobdata, `🚫 Build for ${jobdata.srcrepo} failed`);
+
+                // Destinguish between a failure because of a timeout and a regular build failure.
+                if (err && err.message.includes("failed")) {
+                    await repo.notify(job, "failed", "Build failed.");
+                    void createFailedBuildNotification(repo, jobId, jobdata, `🚫 Build for ${jobdata.srcrepo} failed`);
+                } else if (err && err.message.includes("timeout")) {
+                    await repo.notify(job, "failed", "Build timed out.");
+                    void createFailedBuildNotification(
+                        repo,
+                        jobId,
+                        jobdata,
+                        `⏳ Build for ${jobdata.srcrepo} failed due to a timeout`,
+                    );
+                }
 
                 // In case of a failed build, we may also end the buildToDeploy timer as it would otherwise never be ended.
                 increaseBuildCountMetrics(jobdata.srcrepo ? jobdata.srcrepo : "unknown", "failed-build");
@@ -455,7 +458,18 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
             const jobdata: DatabaseJobData = job.data;
             const repo: Repo = repo_manager.getRepo(jobdata.srcrepo);
             await repo.notify(job, "success", "Package successfully deployed.");
-            void createDeploymentNotification(jobdata.packages, `📣 New deployment to ${jobdata.srcrepo}`);
+
+            // If we have a source repo and packages, we can create a deployment notification, otherwise we can be certain
+            // a repo-remove job has finished successfully.
+            if (jobdata.packages !== undefined) {
+                void createDeploymentNotification(jobdata.packages, `📣 New deployment to ${jobdata.srcrepo}`);
+            } else {
+                void createTrivialNotification(
+                    `✅ Repo-remove job for ${jobdata.srcrepo} finished successfully.`,
+                    notifier,
+                );
+            }
+
             const logger = new BuildsRedisLogger(connection);
             logger.fromJob(job);
 
@@ -473,7 +487,14 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
             const jobdata: DatabaseJobData = job.data;
             const repo: Repo = repo_manager.getRepo(jobdata.srcrepo);
             await repo.notify(job, "failed", "Error adding package to database.");
-            void createDeploymentNotification(jobdata.packages, `🚨 Failed deploying to ${jobdata.srcrepo}`);
+
+            // If we have a source repo and packages, we can create a deployment notification, otherwise we can be certain
+            // a repo-remove job has failed
+            if (jobdata.packages !== undefined) {
+                void createDeploymentNotification(jobdata.packages, `🚨 Failed deploying to ${jobdata.srcrepo}`);
+            } else {
+                void createTrivialNotification(`🚫 Repo-remove job for ${jobdata.srcrepo} failed!`, notifier);
+            }
             const logger = new BuildsRedisLogger(connection);
             logger.fromJob(job);
 
