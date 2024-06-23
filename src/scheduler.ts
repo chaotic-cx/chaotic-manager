@@ -61,6 +61,7 @@ export async function schedulePackages(
     const queue = new Queue("dispatch", { connection });
 
     const list = packages.map((pkg) => {
+        /* eslint-disable  @typescript-eslint/no-explicit-any */
         const ret: any = {
             pkgbase: pkg,
         };
@@ -111,4 +112,5 @@ export async function scheduleAutoRepoRemove(
         },
     );
     await queue.close();
+    return;
 }

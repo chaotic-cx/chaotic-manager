@@ -464,10 +464,7 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
             if (jobdata.packages !== undefined) {
                 void createDeploymentNotification(jobdata.packages, `📣 New deployment to ${jobdata.srcrepo}`);
             } else {
-                void createTrivialNotification(
-                    `✅ Repo-remove job for ${jobdata.srcrepo} finished successfully.`,
-                    notifier,
-                );
+                void createTrivialNotification(`✅ Cleanup job for ${jobdata.repo} finished successfully`, notifier);
             }
 
             const logger = new BuildsRedisLogger(connection);
@@ -493,7 +490,7 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
             if (jobdata.packages !== undefined) {
                 void createDeploymentNotification(jobdata.packages, `🚨 Failed deploying to ${jobdata.srcrepo}`);
             } else {
-                void createTrivialNotification(`🚫 Repo-remove job for ${jobdata.srcrepo} failed!`, notifier);
+                void createTrivialNotification(`🚫 Cleanup job ${jobdata.repo} failed to remove packages`, notifier);
             }
             const logger = new BuildsRedisLogger(connection);
             logger.fromJob(job);

@@ -49,6 +49,7 @@ export interface BuildJobData {
 
 export type DatabaseJobData = Omit<BuildJobData, "repo_files"> & {
     packages: string[];
+    repo?: string;
 };
 
 export interface DispatchJobData {
