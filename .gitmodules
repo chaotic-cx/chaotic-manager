@@ -1,0 +1,3 @@
+[submodule "ci-template"]
+	path = ci-template
+	url = https://github.com/chaotic-cx/chaotic-repository-template

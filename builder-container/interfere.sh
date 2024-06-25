@@ -85,7 +85,7 @@ function interference-apply() {
 
 	# shellcheck source=/dev/null
 	if [[ -f "${BUILDDIR}/.CI/prepare" ]]; then
-		source "${BUILDDIR}/prepare"
+		source "${BUILDDIR}/.CI/prepare"
 	fi
 
 	if [[ -f "${BUILDDIR}/.CI/interfere.patch" ]]; then
