@@ -6,11 +6,12 @@
 This repository contains the code for Chaotic-AUR's infra 4.0, as well as the repository template in a git submodule.
 It supersedes Infra 3.0, taking a different approach to distributing and executing builds.
 
-If any issues with this application occur, please open a new issue to let us know about it - you can click [here](https://gitlab.com/garuda-linux/tools/chaotic-manager/-/issues/new) to start the process.
+If any issues with this application occur, please open a new problem to let us know about it - you can
+click [here](https://gitlab.com/garuda-linux/tools/chaotic-manager/-/issues/new) to start the process.
 
 ## Reasoning
 
-Our previous build tools, the so-called [toolbox](https://github.com/chaotic-aur/toolbox) was initially created by
+Our previous build tool, the so-called [toolbox](https://github.com/chaotic-aur/toolbox) was initially created by
 @pedrohlc to deal with one issue: having a lot of packages to compile while not having many maintainers for all of the
 packages.
 Additionally, Chaotic-AUR has quite inhomogeneous builders: servers, personal devices, and one HPC which all need to be
@@ -18,13 +19,13 @@ integrated somehow.
 The toolbox had a nice approach to this - keeping things as KISS as possible and using Git to distribute package builds
 between builders. These would then grab builds according to their activated routines. While this works fairly well, it
 had a few problems which we tried to get rid of in the new version.
-A few key ideas about this new setup:
+Here are a few key ideas about this new setup:
 
 - Since we like working with CI a lot besides it providing great enhancement for automating boring tasks as well as
   making the whole process more transparent to the public as well, it was clear CI should be a major part of it.
 - The system should have a scheduler that distributes build tasks to nodes, which prevents useless build routines and
   enables nodes to grab jobs whenever they are queued.
-- The tools should be available as Docker containers to make them easy to use on other systems than Arch.
+- The tools should be available as Docker containers to make them easy to use on systems other than Arch.
 - All logic besides the scheduler (which is written in TypeScript using BullMQ) should be written in Bash
 
 ## How it works
@@ -44,7 +45,7 @@ Compared to Infra 3.0, this means we have the following key differences:
   from AUR once a package has been updated or updated manually in case a Git repository and its tags serve as a source.
 - No more dedicated builders (might change in the future, eg. for heavy builds?) but a common build queue.
 - Routines are no longer necessary - CI determines and adds packages to the schedule as needed. The only "routine-like"
-  thing we have is the CI schedule, executing tasks like PKGBUILD or version updates.
+  the thing we have is the CI schedule, executing tasks like PKGBUILD or version updates.
 - The actual logic behind the build process (like `interfere.sh` or database management) was moved to
   the [builder container of Chaotic Manager](https://gitlab.com/garuda-linux/tools/chaotic-manager/-/tree/main/builder-container?ref_type=heads) -
   this one updates daily/on-commit and gets pulled regularly by the Manager instance.
@@ -68,7 +69,7 @@ Adding packages is as easy as creating a new folder named after the `$pkgbase` o
 other required files in here.
 Adding AUR packages is therefore as simple as cloning its repo and removing the `.git` folder.
 CI relies on `.SRCINFO` files to parse most information, therefore, it is important to have them in place and up-to-date
-in case of self-managed packages.
+in the case of self-managed packages.
 Finally, add a `.CI` folder containing the basic config (`CI_PKGBUILD_SOURCE` is required in case its external package,
 self-managed PKBUILDs don't need it), commit any changes, and push the changes back to the main branch.
 Please follow the [conventional commit convention](https://www.conventionalcommits.org/en/v1.0.0/) while doing
@@ -79,14 +80,14 @@ so ([cz-cli](https://github.com/commitizen/cz-cli) can help with that!). This me
 - `chore($pkgname): update PKGBUILD`
 - `ci(config): update`
 
-This not only helps with having a uniform commit history, it also allows automatic changelog generation.
+This not only helps with having a uniform commit history, but it also allows automatic changelog generation.
 
 ### Removing packages
 
 This can be done by removing the folder containing a package's PKGBUILD. A cleanup job will then automatically remove
 any obsolete package via the `on-commit` pipeline run. This will also consider any split packages that a package might
 produce.
-Renaming folders does also count as removing packages.
+Renaming folders also counts as removing packages.
 
 ### On-commit pipeline
 
@@ -116,35 +117,36 @@ Every half an hour, the on-schedule pipeline will carry out a few tasks:
   commit resulting from the schedule will overwrite it to keep the commit history clean.
 - Collect AUR timestamps of packages to determine whether a PKGBUILD changed
 - Loop through each valid package and carry out the following actions:
-    - Read the `.CI/config` file to gain information about the package configuration (e.g., whether to manage the AUR
-      repository, the source of the PKGBUILD, etc.)
-    - Update PKGBUILD in the following cases:
-        - CI_PKGBUILD_SOURCE is set to `gitlab`: Updates the PKGBUILD from the GitLab repository tags
-        - CI_PKGBUILD_SOURCE is set to `aur`: Updates the PKGBUILD from the AUR repository, pulling in the git repo and
-          replacing the existing files with the new ones.
-          If the AUR timestamp could not be collected earlier, the package update gets skipped.
-        - CI_PKGBUILD_SOURCE is not set to `gitlab` or `aur`:
-          tries to update the PKGBUILD by pulling the repository specified in CI_PKGBUILD_SOURCE.
-          In case cloning was not successful after 2 tries, the update process gets skipped.
-    - In case CI_GIT_COMMIT is set in the packages configuration variables, the latest commit of the git URL set in
-      the `source` section of the PKGBUILD is
-      updated. If it differs, schedule a build.
-    - In case a custom hook exists (`.CI/update.sh` inside the package directory), it gets executed - this can be used for
-      updating PKGBUILDs with a custom script.
-    - Writing needed variables back to `.CI/config` (eg. Git hash)
+  - Read the `.CI/config` file to gain information about the package configuration (e.g., whether to manage the AUR
+    repository, the source of the PKGBUILD, etc.)
+  - Update PKGBUILD in the following cases:
+    - CI_PKGBUILD_SOURCE is set to `gitlab`: Updates the PKGBUILD from the GitLab repository tags
+    - CI_PKGBUILD_SOURCE is set to `aur`: Updates the PKGBUILD from the AUR repository, pulling in the git repo and
+      replacing the existing files with the new ones.
+      If the AUR timestamp cannot be collected earlier, the package update gets skipped.
+    - CI_PKGBUILD_SOURCE is not set to `gitlab` or `aur`:
+      tries to update the PKGBUILD by pulling the repository specified in CI_PKGBUILD_SOURCE.
+      In case cloning is not successful after 2 tries, the update process gets skipped.
+  - In case CI_GIT_COMMIT is set in the package configuration variables, the latest commit of the git URL set in
+    the `source` section of the PKGBUILD is
+    updated. If it differs, schedule a build.
+  - In case a custom hook exists (`.CI/update.sh` inside the package directory), it gets executed - this can be used
+    for
+    updating PKGBUILDs with a custom script.
+  - Writing needed variables back to `.CI/config` (eg. Git hash)
 - Either update the PKGBUILD silently in case of minor changes, create a PR for review in case of major updates (and
   only if `CI_HUMAN_REVIEW` is true)
-    - Updates are only considered if diff actually reports changes between current PKGBUILD folder and AUR PKGBUILD repo
-    - Any change made to the source files is detected, this however does _not_ detect malicious changes in the upstream
-      project source that the package builds
-- The state worktree gets updated with new information
+  - Updates are only considered if diff reports changes between the current PKGBUILD folder and the AUR PKGBUILD repo
+  - Any change made to the source files is detected, however does _not_ detect malicious changes in the upstream
+    project source that the package builds
+- The state work tree gets updated with new information
 - Schedule parameters are getting built and handed over to the scheduled job via artifact
 - Obsolete branches (eg. merged review PRs) are getting pruned
 - The scheduled tag gets updated again
 
 #### Daily
 
-A daily pipeline schedule has been added for specific packages which generate their `pkgver` dynamically.
+A daily pipeline schedule has been added for specific packages that generate their `pkgver` dynamically.
 To make use of it, set `CI_ON_TRIGGER=daily` inside the `.CI/config` file of the package.
 
 ### Manual scheduling
@@ -153,7 +155,7 @@ To make use of it, set `CI_ON_TRIGGER=daily` inside the `.CI/config` file of the
 
 Packages can be added to the schedule manually by going to
 the [pipeline runs](https://gitlab.com/chaotic-aur/pkgbuilds/-/pipelines) page, selecting "Run pipeline" and
-adding `PACKAGES` as a variable with the package names as its value. The pipeline will then pick up the packages and
+adding `PACKAGES` as a variable with the package names as their value. The pipeline will then pick up the packages and
 schedule them.
 `PACKAGES` can also be set to `all` to schedule all packages. In case one or many packages are getting scheduled, it
 needs to follow the format `pkgname1,pkgname2,pkgname3`.
@@ -161,7 +163,8 @@ needs to follow the format `pkgname1,pkgname2,pkgname3`.
 #### Running scheduled pipelines on-demand
 
 This can be done by going to the [pipeline runs](https://gitlab.com/chaotic-aur/pkgbuilds/-/pipeline_schedules) page,
-selecting "Run pipeline" (the play symbol). A link to the pipeline page will be provided, where the pipeline logs can be
+and selecting "Run pipeline" (the play symbol). A link to the pipeline page will be provided, where the pipeline logs
+can be
 obtained.
 
 ### Adding interfere
@@ -170,10 +173,11 @@ Put the required interfere file in the `.CI` folder of a PKGBUILD folder:
 
 - `prepare`: A script that is being executed after the building chroot has been set up. It can be used to source
   environment variables or modify other things before compilation starts.
-    - If something needs to be set up before the actual compilation process, commands can be pushed by inserting
-      eg. `$CAUR_PUSH 'source /etc/profile'`. Likewise, package conflicts can be solved, eg. as
-      follows: `$CAUR_PUSH 'yes | pacman -S nftables'` (single quotes are important because we want the variables/pipes to
-      evaluate in the guest's runtime and not while interfering)
+  - If something needs to be set up before the actual compilation process, commands can be pushed by inserting
+    eg. `$CAUR_PUSH 'source /etc/profile'`. Likewise, package conflicts can be solved, eg. as
+    follows: `$CAUR_PUSH 'yes | pacman -S nftables'` (single quotes are important because we want the variables/pipes
+    to
+    evaluate in the guest's runtime and not while interfering)
 - `interfere.patch`: a patch file that can be used to fix either multiple files or PKGBUILD if a lot of changes are
   required. All changes need to be added to this file.
 - `PKGBUILD.prepend`: contents of this file are added to the beginning of PKGBUILD.
@@ -206,10 +210,11 @@ processes with.
 - `CI_PKGBUILD_SOURCE`: Sets the source for all PKGBUILD-related files, used for pulling updated files from remote
   repositories.
   Valid values as of now are:
-    - `gitlab`: Pulls the PKGBUILD from the GitLab repository tags. It needs to follow the format `gitlab:$PROJECT_ID`.
-      The ID can be obtained by browsing the repository settings general section.
-    - `aur`: Pulls the PKGBUILD from the AUR repository, pulling in the git repo and replacing the existing files with the
-      new ones.
+  - `gitlab`: Pulls the PKGBUILD from the GitLab repository tags. It needs to follow the format `gitlab:$PROJECT_ID`.
+    The ID can be obtained by browsing the repository settings general section.
+  - `aur`: Pulls the PKGBUILD from the AUR repository, pulling in the git repo and replacing the existing files with
+    the
+    new ones.
 - `CI_ON_TRIGGER`: can be provided in case a special schedule trigger should schedule the corresponding package. This
   can be used to schedule packages daily, by setting the value to `daily`.
   Since this checks whether "$TRIGGER == $CI_ON_TRIGGER", any custom schedule can be created using pipeline schedules
@@ -221,8 +226,8 @@ processes with.
 
 ### Known state variables
 
-State will be kept in the .state worktree. It can be viewed by browsing the `state` branch of a PKGBUILD repository.
-Each package will have their own file named after the package name. The following variables are known to be stored:
+The state will be kept in the .state worktree. It can be viewed by browsing the `state` branch of a PKGBUILD repository.
+Each package will have its file named after the package name. The following variables are known to be stored:
 
 - `CI_GIT_COMMIT`: Used by CI to determine whether the latest commit changed. Used by `fetch-gitsrc` to schedule new
   builds. Needs to be provided in case the package should be treated as a git package. CI will automatically update the
@@ -234,7 +239,7 @@ Each package will have their own file named after the package name. The followin
 
 These variables can be set in in the repo root's`.ci/config` to configure the pipeline behavior globally as follows:
 
-- `BUILD_REPO`: The target repository that will be the deploy target
+- `BUILD_REPO`: The target repository that will be the deployment target
 - `GIT_AUTHOR_EMAIL`: The email of the user that will be used to commit
 - `GIT_AUTHOR_NAME`: The name of the user that will be used to commit
 - `REDIS_SSH_HOST`: The Redis SSH host for the target repository (for SSH tunneling)
@@ -242,7 +247,7 @@ These variables can be set in in the repo root's`.ci/config` to configure the pi
 - `REDIS_SSH_USER`: The Redis SSH user for the target repository (for SSH tunneling)
 - `REDIS_PORT`: The redis port for the target repository (inside the SSH tunnel)
 - `REPO_NAME`: The name that this repository is referred to in Chaotic Manager's config
-- `CI_HUMAN_REVIEW`: If merge/pull requests should be created for non pkgver changes
+- `CI_HUMAN_REVIEW`: If merge/pull requests should be created for non-pkgver changes
 - `CI_MANAGE_AUR`: This should be set to true in case select AUR repositories should be managed by CI
 - `CI_OVERWRITE_COMMITS`: If we should overwrite existing automated commits to reduce the size of the git history
 - `CI_CLONE_DELAY`: How long to wait between every executed git clone command for rate limits
@@ -255,7 +260,7 @@ This means that after each scheduled and on-commit pipeline, the AUR repository 
 done to the PKGBUILD folder's files.
 Files not relevant to AUR maintenance (e.g. `.CI` folders) will be omitted.
 The commit message reflects the fact that the commit was created by a CI pipeline
-and contains the link to the source repository's commit history and the pipeline run which triggered the update commit.
+and contains the link to the source repository's commit history and the pipeline run that triggered the updated commit.
 
 ### Updating the CI's scripts
 
@@ -270,9 +275,9 @@ This can happen in case of a few reasons, for example having provided an invalid
 the `scheduled` tag to not be updated.
 In this case, the on-schedule pipeline will not be able to run.
 The last on-commit pipeline needs to be fixed before the on-schedule pipeline can run again.
-Build failures however are not accounted as the `scheduled` tag would be updated already as soon as the scheduling
+Build failures, however, are not accounted for as the `scheduled` tag would be updated already as soon as the scheduling
 parameters were generated.
-Force pushing a fixed up commit is actively encouraged in such a case, as pushing another commit will cause the CI to
+Force pushing a fixed-up commit is actively encouraged in such a case, as pushing another commit will cause the CI to
 evaluate the previous commits it missed, leading to noticing the same issue again and bailing out instead of silently
 continuing.
 This has been a design decision to prevent failures from being overlooked.
@@ -294,22 +299,23 @@ while scheduling packages. See below for more information.
 This tool is distributed as Docker containers and consists of a pair of manager and builder instances.
 
 - Manager: `registry.gitlab.com/garuda-linux/tools/chaotic-manager/manager`
-    - Manages builds by adding them to the schedule, used e.g. in the schedule step of CI pipelines
-    - Provides log management and the live-updating logs
-    - Manages any existing builds by spinning up build containers, picking from the available BullMQ builder / database
-      queues
-    - Picks up already built package archives from the landing zone (builder containers push finished build archives here)
-      to add them to the database of the target repository
+  - Manages builds by adding them to the schedule, used e.g. in the schedule step of CI pipelines
+  - Provides log management and the live-updating logs
+  - Manages any existing builds by spinning up build containers, picking from the available BullMQ builder/database
+    queues
+  - Picks up already built package archives from the landing zone (builder containers push finished build archives
+    here)
+    to add them to the database of the target repository
 - Builder: `registry.gitlab.com/garuda-linux/tools/chaotic-manager/builder`
-    - This one contains the actual logic behind package builds (
-      seen [here](https://gitlab.com/garuda-linux/tools/chaotic-manager/-/tree/main/builder-container?ref_type=heads))
-      known from infra 3.0 like `interfere.sh`, `database.sh` etc.
-    - This one is used by an executing manager instance to run the build processes with. It runs jobs present in the
-      builder BullMQ queue.
+  - This one contains the actual logic behind package builds (
+    seen [here](https://gitlab.com/garuda-linux/tools/chaotic-manager/-/tree/main/builder-container?ref_type=heads))
+    known from infra 3.0 like `interfere.sh`, `database.sh` etc.
+  - This one is used by an executing manager instance to run the build processes with. It runs jobs present in the
+    builder BullMQ queue.
 
 An example of a valid config can be found in
 the [Garuda Linux infrastructure repository](https://gitlab.com/garuda-linux/infra-nix/-/blob/main/docker-compose/chaotic-v4/docker-compose.yml?ref_type=heads#L38).
-The following variables can be set in Docker environment:
+The following variables can be set in the Docker environment:
 
 - `DATABASE_HOST`: database address published to the outside world
 - `DATABASE_PORT`: the port behind packages can be deployed to
@@ -341,8 +347,8 @@ The following variables are only relevant for builder instances:
 
 The base requirements for running this kind of setup are as follows:
 
-- Docker/Podman must be installed in the target system, docker-/podman-compose are good to have as well. We will use it
-  in our following examples.
+- Docker/Podman must be installed in the target system, docker-/podman-compose is good to have as well. We will use it
+  in the following examples.
 - A Redis instance must be available, e.g. installed on the host system or added to ´docker-compose.yml`:
 
   ```yml
@@ -358,11 +364,11 @@ The base requirements for running this kind of setup are as follows:
   ```
 
   The following examples assume Redis to be installed on the host system. In case it is added to `docker-compose.yml`,
-  replace any occurances of `host.docker.internal` with `chaotic-redis`.
+  replace any occurrences of `host.docker.internal` with `chaotic-redis`.
 
 - A reverse proxy like Nginx to expose the Chaotic Manager's logs to the public in a secure way should be available.
   E.g., using Nginx it is sufficient to `proxy_pass` the specified `--web-port` value to the Manager instance container.
-  Additionally, the following settings might be usedful:
+  Additionally, the following settings might be useful:
 
   ```ǹginx
   proxy_buffering off;
@@ -430,20 +436,21 @@ chaotic-manager:
 
 The following things are to note:
 
-- `PACKAGE_REPOS`, `PACKAGE_TARGET_REPOS` and `PACKAGE_REPOS_NOTIFIERS` are JSON values and need to be valid JSON in
-  order to be processed.
+- `PACKAGE_REPOS`, `PACKAGE_TARGET_REPOS`, and `PACKAGE_REPOS_NOTIFIERS` are JSON values and need to be valid JSON to be
+  processed.
 - The above setup assumes the docker-compose.yml to be present in `var/awesome-repo`.
 - `LOGS_URL` needs to match the address which the reverse proxy publishes `--web-port 8080` to the outside world.
 - `REPO_PATH` is the path of the repository _on the Docker host_. The same path must be mapped to `/repo_root` inside
   the container via volumes.
 - `/app/sshkey` is assumed to be the private SSH key
-- Ports don't have to explicitly exposed if using an Nginx Docker container, in this setup however, our Nginx and Redis
-  instance are present on the host system.
-- `PACKAGE_REPOS_NOTIFIERS` and `TELEGRAM_*` variables are optional but provide additional functionality of they are
+- Ports don't have to be explicitly exposed if using a Nginx Docker container, in this setup however, our Nginx and
+  Redis
+  instances are present on the host system.
+- `PACKAGE_REPOS_NOTIFIERS` and `TELEGRAM_*` variables are optional but provide additional functionality if they are
   set.
-- `DATABASE_HOST` refers to the address published to the outside world, e.g. for additional builders an other servers.
+- `DATABASE_HOST` refers to the address published to the outside world, e.g. for additional builders and other servers.
 
-#### Examplary Builder instance setup
+#### Exemplary Builder instance setup
 
 ```yaml
 ---
@@ -473,14 +480,15 @@ The following things are to note:
 
 - The above setup assumes the docker-compose.yml to be present in `var/awesome-repo`.
 - The `SHARED_PATH` variable needs to match the directory mapped to `/shared` inside the container.
-- `DATABASE_HOST` can in theory be any other host, but can be set to `host.docker.internal` in case the Redis instance
+- `DATABASE_HOST` can, in theory, be any other host, but can be set to `host.docker.internal` in case the Redis instance
   runs on the Docker host.
 - The Docker socket needs to be mounted as the builder instance will use it to spin up build container instances.
 - `/app/sshkey` is assumed to be the private SSH key used for pushing finished package builds to the manager instance's
   landing zone.
-- `BUILDER_TIMEOUT` only needs to be set in case it is a slower build machine which does not finish heaver tasks in one
+- `BUILDER_TIMEOUT` only needs to be set in case it is a slower-build machine that does not finish heavy tasks in one
   hour.
-- As many instances of this container can be added the setup as wanted. Each of them will allow processing another build
+- As many instances of this container can be added to the setup as wanted. Each of them will allow the processing of
+  another build
   at the same time in total.
 
 ### Features
@@ -488,34 +496,38 @@ The following things are to note:
 #### Chaotic-Manager container commands
 
 - `schedule`: Schedules a new package build by adding it to the Redis instance. It takes the following arguments:
-    - `arch`: The architecture to build the package for
-    - `target-repo`: The target repository to deploy the package to, referring to the `PACKAGE_TARGET_REPOS` variable set
-      in the Docker environment variables.
-    - `source-repo`: The source repository to pull the package from, referring to the `PACKAGE_REPOS` variable set in the
-      Docker environment variables.
-    - `commit`: The commit hash which the schedule call originates from
-    - `deptree`: the dependency tree built by the CI pipeline. This parameter is omitted in CI pipelines and instead
-      passed as file, reading from `/.ci/deptree.txt`. The reason is that the parameter will be to huge to be processed by
-      the shell if 100+ packages are
-      scheduled at the same time.
-      It contains information about the build order of packages and their dependencies.
+  - `arch`: The architecture to build the package for
+  - `target-repo`: The target repository to deploy the package to, referring to the `PACKAGE_TARGET_REPOS` variable
+    set
+    in the Docker environment variables.
+  - `source-repo`: The source repository to pull the package from, referring to the `PACKAGE_REPOS` variable set in
+    the
+    Docker environment variables.
+  - `commit`: The commit hash which the schedule call originates from
+  - `deptree`: the dependency tree built by the CI pipeline. This parameter is omitted in CI pipelines and instead
+    passed as a file, reading from `/.ci/deptree.txt`. The reason is that the parameter will be too huge to be
+    processed by
+    the shell if 100+ packages are
+    scheduled at the same time.
+    It contains information about the build order of packages and their dependencies.
 - `builder`: Starts the build job, which then grabs any available build jobs from the build queue.
 - `auto-repo-remove`: Removes obsolete packages from the target repository. Further parameters must include the pkgbases
   to be removed.
-- `database`: Starts the manager instance, which is responsible for managing queues, logs and database jobs. It
-  additionally spins up a web server to serve logs from if `--web-port` is passed as argument.
-- `web`: Starts the web server to serve logs from. This is only needed in case the manager instance does not run the web
+- `database`: Starts the manager instance, which is responsible for managing queues, logs, and database jobs. It
+  additionally spins up a web server to serve logs if `--web-port` is passed as an argument.
+- `web`: Starts the webserver to serve logs from. This is only needed in case the manager instance does not run the web
   server.
 
 #### Web server
 
-Available routes on the port set up be the `--web-port` parameter are as follows:
+Available routes on the port set up by the `--web-port` parameter are as follows:
 
-- `/api/logs/:id/:timestamp`: Returns the log file of a package build. The `id` is the package's ID, the `timestamp` is
+- `/api/logs/:id/:timestamp`: Returns the log file of a package build. The `id` is the package's ID, and the `timestamp`
+  is
   the timestamp of the build.
 - `/api/logs/:id`: Returns the latest log file of a package build. The `id` is the package's ID.
 - `/api/queue/stats`: Returns a JSON object containing the current queue stats.
-- `/api/queue/packages`: Returns a JSON object containing information the currently scheduled packages.
+- `/api/queue/packages`: Returns a JSON object containing information on the currently scheduled packages.
 - `/metrics`: Returns collected Prometheus metrics.
 
 #### Notifications
@@ -524,7 +536,7 @@ Notifications about relevant events can be sent to a Telegram channel or chat vi
 This requires a valid Bot token and the Chat ID to be set.
 The following events are currently supported:
 
-- Build failures: additionally contains links to full build logs and the originating commit.
+- Build failures: additionally contain links to full build logs and the originating commit.
 
   ```text
   🚨 Failed deploying to awesome-repo:
@@ -538,7 +550,7 @@ The following events are currently supported:
   > freecad-git
   ```
 
-- Timed out build: Contains links to full build logs and the originating commit.
+- Timed-out build: Contains links to full build logs and the originating commit.
 
   ```text
   ⏳ Build for awesome-repo failed due to a timeout:
@@ -565,29 +577,32 @@ No further intervention is needed to achieve this.
 
 #### Live-updating logs
 
-Logs are live-updating and can be viewed in real-time via the web server.
+Logs are live-updating and can be viewed in real time via the web server.
 In case GitLab is used and `PACKAGE_REPOS_NOTIFIERS` is set,
 an external CI stage will be created for every package scheduled during the CI run, linking to the log.
 
 #### Prometheus metrics
 
 Prometheus metrics are available at the `/metrics` endpoint of the web server.
-Currently, we collect default `prom-client` metrics as well as statistics about total event count of each build status
+Currently, we collect default `prom-client` metrics as well as statistics about the total event count of each build
+status
 (failed, successful, already-built, timed out) as well as metrics about overall build times.
-These can be collected via a Prometheus instance and then be visualized using Grafana.
+These can be collected via a Prometheus instance and then visualized using Grafana.
 
 ## How to contribute
 
 - [Create a fork of this repository](https://gitlab.com/garuda-linux/tools/chaotic-manager/-/forks/new).
 - Clone your fork locally ([short git tutorial](https://rogerdudler.github.io/git-guide/)).
 - Add the desired changes to the source code
-- Commit using a [conventional commit message](https://www.conventionalcommits.org/en/v1.0.0/#summary) and push any changes back to your fork. This is crucial as it allows our CI to generate changelogs easily.
-    - The [commitizen](https://github.com/commitizen-tools/commitizen) application helps with creating a fitting commit message.
-    - You can install it via [pip](https://pip.pypa.io/) as there is currently no package in Arch repos: `pip install --user -U Commitizen`.
-    - Then proceed by running `cz commit` in the cloned folder.
+- Commit using a [conventional commit message](https://www.conventionalcommits.org/en/v1.0.0/#summary) and push any
+  changes back to your fork. This is crucial as it allows our CI to generate changelogs easily.
+  - The [commitizen](https://github.com/commitizen-tools/commitizen) application helps with creating a fitting commit
+    message.
+  - You can install it via [pip](https://pip.pypa.io/) as there is currently no package in Arch
+    repos: `pip install --user -U Commitizen`.
+  - Then proceed by running `cz commit` in the cloned folder.
 - [Create a new merge request at our main repository](https://gitlab.com/garuda-linux/tools/chaotic-manager/-/merge_requests/new).
 - Check if any of the pipeline runs fail and apply eventual suggestions.
-
 
 ## Development setup
 
