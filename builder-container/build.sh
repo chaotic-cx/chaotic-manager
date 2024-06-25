@@ -60,7 +60,16 @@ function setup-package-repo {
 	popd
 }
 
+function setup-extra-keyrings {
+    # shellcheck disable=SC2068
+    if [[ -n "$EXTRA_PACMAN_KEYRINGS" ]]; then pacman -U --noconfirm ${EXTRA_PACMAN_KEYRINGS[@]} || return 1; fi
+}
+
 function setup-build-configs {
+    # Don't silence interfere.sh to be able to print information about what exactly got interfered.
+    ./interfere.sh "$BUILDDIR" "$PACKAGE" || return 1
+    print-if-failed setup-extra-keyrings
+
     declare -A CONFIG
     if [ -f "/pkgbuilds/${PACKAGE_REPO_ID}/${PACKAGE}/.CI/config" ]; then
     	UTIL_READ_VARIABLES_FROM_FILE "/pkgbuilds/${PACKAGE_REPO_ID}/${PACKAGE}/.CI/config" CONFIG
@@ -98,9 +107,6 @@ function setup-buildenv {
 	chown -R builder:builder "${BUILDDIR}"
 
 	pacman-key --init || return 1
-    print-if-failed ./interfere.sh "$BUILDDIR" "$PACKAGE" || return 1
-	# shellcheck disable=SC2068
-	if [[ -n "$EXTRA_PACMAN_KEYRINGS" ]]; then pacman -U --noconfirm ${EXTRA_PACMAN_KEYRINGS[@]} || return 1; fi
 }
 
 function build-pkg {

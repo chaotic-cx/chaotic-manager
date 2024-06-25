@@ -9,30 +9,31 @@ function interference-generic() {
 	# * Treats VCs
 	if (echo "$PACKAGE" | grep -qP '\-git$'); then
 		extra_pkgs+=("git")
+		echo "Interfere applied: Added git."
 	fi
 	if (echo "$PACKAGE" | grep -qP '\-svn$'); then
 		extra_pkgs+=("subversion")
+		echo "Interfere applied: Added subversion."
 	fi
 	if (echo "$PACKAGE" | grep -qP '\-bzr$'); then
 		extra_pkgs+=("breezy")
+		echo "Interfere applied: Added breezy."
 	fi
 	if (echo "$PACKAGE" | grep -qP '\-hg$'); then
 		extra_pkgs+=("mercurial")
+		echo "Interfere applied: Added mercurial."
 	fi
 
 	# * Multilib
 	if (echo "$PACKAGE" | grep -qP '^lib32-'); then
 		extra_pkgs+=("multilib-devel")
-	fi
-
-	# * Special cookie for TKG kernels
-	if (echo "$PACKAGE" | grep -qP '^linux.*tkg'); then
-		extra_pkgs+=("git")
+		echo "Interfere applied: Added multilib-devel."
 	fi
 
 	# * Read options
 	if (grep -qPo "^options=\([a-z! \"']*(?<!!)ccache[ '\"\)]" "${BUILDDIR}/PKGBUILD"); then
 		extra_pkgs+=("ccache")
+		echo "Interfere applied: Added ccache."
 	fi
 
 	# * CHROOT Update
@@ -50,6 +51,7 @@ function interference-generic() {
 	# * Get rid of 'native optimizations'
 	if (grep -qP '\-march=native' "${BUILDDIR}/PKGBUILD"); then
 		sed -i'' 's/-march=native//g' "${BUILDDIR}/PKGBUILD"
+		echo "Interfere applied: Removed -march=native."
 	fi
 
 	return 0
@@ -74,6 +76,7 @@ function interference-pkgrel() {
   echo "if [ \"\$(vercmp \"${_PKGVER}\" \"\${epoch:-0}:\$pkgver-\$pkgrel\")\" = \"0\" ]; then
   pkgrel=\"\$pkgrel.${_BUMPCOUNT}\"
 fi" >>PKGBUILD
+  echo "Interfere applied: pkgrel increased by .${_BUMPCOUNT}."
 }
 
 function interference-apply() {
@@ -91,11 +94,12 @@ function interference-apply() {
 	    pushd "${BUILDDIR}" >/dev/null
 		source "${BUILDDIR}/prepare"
 		popd >/dev/null
+		echo 'Interfere applied: prepare script executed.'
 	fi
 
 	if [[ -f "${BUILDDIR}/.CI/interfere.patch" ]]; then
 		if patch -Np1 <"${BUILDDIR}/.CI/interfere.patch"; then
-			echo 'Patches successfully applied.'
+			echo 'interfere: Patch applied.'
 		else
 			echo 'Ignoring patch failure...'
 		fi
@@ -107,10 +111,12 @@ function interference-apply() {
 		_PKGBUILD="$(cat "${BUILDDIR}/PKGBUILD")"
 		echo "$_PREPEND" >"${BUILDDIR}/PKGBUILD"
 		echo "$_PKGBUILD" >>"${BUILDDIR}/PKGBUILD"
+		echo "Interfere applied: PKGBUILD prepended."
 	fi
 
 	if [[ -f "${BUILDDIR}/.CI/PKGBUILD.append" ]]; then
 		cat "${BUILDDIR}/.CI/PKGBUILD.append" >>"${BUILDDIR}/PKGBUILD"
+		echo "Interfere applied: PKGBUILD appended."
 	fi
 
 	interference-pkgrel
