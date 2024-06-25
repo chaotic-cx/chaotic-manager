@@ -85,7 +85,12 @@ function interference-apply() {
 
 	# shellcheck source=/dev/null
 	if [[ -f "${BUILDDIR}/.CI/prepare" ]]; then
-		source "${BUILDDIR}/.CI/prepare"
+	    # We need to move the prepare file to the build directory to keep existing ones working
+	    # Those are usually relative to the build directory and not .CI and/or entry_point.sh
+	    cp "${BUILDDIR}/.CI/prepare" "${BUILDDIR}/prepare"
+	    pushd "${BUILDDIR}" >/dev/null
+		source "${BUILDDIR}/prepare"
+		popd >/dev/null
 	fi
 
 	if [[ -f "${BUILDDIR}/.CI/interfere.patch" ]]; then
