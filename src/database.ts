@@ -10,7 +10,7 @@ import { BulkJobOptions, Job, Queue, QueueEvents, UnrecoverableError, Worker } f
 import { DockerManager } from "./docker-manager";
 import { RedisConnectionManager } from "./redis-connection-manager";
 import { Repo, RepoManager } from "./repo-manager";
-import { createLogUrl, createTrivialNotification, currentTime, splitJobId } from "./utils";
+import { createTrivialNotification, currentTime, splitJobId } from "./utils";
 import { promotePendingDependents } from "./buildorder";
 import {
     buildMetricsTime,
@@ -92,7 +92,9 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
         let text = `*${event}:*\n > ${pkgbase}`;
 
         if (base_logs_url !== undefined) {
-            const logsUrl = `${createLogUrl(base_logs_url, pkgbase, buildJobData.timestamp)}`;
+            // We use the non-live logs URL here to preserve functionality on mobile devices.
+            const base_logs_url_api = base_logs_url.split("logs.html")[0] + `api/logs`;
+            const logsUrl = `${base_logs_url_api}/${pkgbase}/${buildJobData.timestamp}`;
             text += ` - [logs](${logsUrl})`;
         }
 
