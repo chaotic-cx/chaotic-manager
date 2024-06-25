@@ -1,7 +1,12 @@
 # Chaotic infra 4.0
 
+[![pipeline status](https://gitlab.com/garuda-linux/tools/chaotic-manager/badges/main/pipeline.svg)](https://gitlab.com/garuda-linux/tools/chaotic-manager/-/commits/main)
+[![Commitizen friendly](https://img.shields.io/badge/commitizen-friendly-brightgreen.svg)](http://commitizen.github.io/cz-cli/)
+
 This repository contains the code for Chaotic-AUR's infra 4.0, as well as the repository template in a git submodule.
 It supersedes Infra 3.0, taking a different approach to distributing and executing builds.
+
+If any issues with this application occur, please open a new issue to let us know about it - you can click [here](https://gitlab.com/garuda-linux/tools/chaotic-manager/-/issues/new) to start the process.
 
 ## Reasoning
 
@@ -570,6 +575,19 @@ Prometheus metrics are available at the `/metrics` endpoint of the web server.
 Currently, we collect default `prom-client` metrics as well as statistics about total event count of each build status
 (failed, successful, already-built, timed out) as well as metrics about overall build times.
 These can be collected via a Prometheus instance and then be visualized using Grafana.
+
+## How to contribute
+
+- [Create a fork of this repository](https://gitlab.com/garuda-linux/tools/chaotic-manager/-/forks/new).
+- Clone your fork locally ([short git tutorial](https://rogerdudler.github.io/git-guide/)).
+- Add the desired changes to the source code
+- Commit using a [conventional commit message](https://www.conventionalcommits.org/en/v1.0.0/#summary) and push any changes back to your fork. This is crucial as it allows our CI to generate changelogs easily.
+    - The [commitizen](https://github.com/commitizen-tools/commitizen) application helps with creating a fitting commit message.
+    - You can install it via [pip](https://pip.pypa.io/) as there is currently no package in Arch repos: `pip install --user -U Commitizen`.
+    - Then proceed by running `cz commit` in the cloned folder.
+- [Create a new merge request at our main repository](https://gitlab.com/garuda-linux/tools/chaotic-manager/-/merge_requests/new).
+- Check if any of the pipeline runs fail and apply eventual suggestions.
+
 
 ## Development setup
 
