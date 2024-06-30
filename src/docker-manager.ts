@@ -72,6 +72,11 @@ export class DockerManager {
                             Hard: 1048576,
                         },
                     ],
+                    // Some builds require this for setting up specific things, like unionfs for fluffychat
+                    // Docker containers are much more restricted than systemd-nspawn chroots,
+                    // which were used in infra 3.0.
+                    // Preferred would be, of course, adding this per package as opt-in, but this suffices for now.
+                    CapAdd: ["SYS_ADMIN"],
                 },
                 Env: env,
                 AttachStderr: true,
