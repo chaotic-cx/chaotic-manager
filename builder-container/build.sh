@@ -66,9 +66,11 @@ function setup-extra-keyrings {
 }
 
 function setup-build-configs {
+    # Specifically set up the keyrings BEFORE interfere, so we can install packages that are not in the main keyring
+    print-if-failed setup-extra-keyrings
+
     # Don't silence interfere.sh to be able to print information about what exactly got interfered.
     ./interfere.sh "$BUILDDIR" "$PACKAGE" || return 1
-    print-if-failed setup-extra-keyrings
 
     declare -A CONFIG
     if [ -f "/pkgbuilds/${PACKAGE_REPO_ID}/${PACKAGE}/.CI/config" ]; then
