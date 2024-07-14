@@ -6,6 +6,7 @@ RUN curl -o /etc/pacman.d/mirrorlist "https://archlinux.org/mirrorlist/?country=
     sed -i 's/^#//' /etc/pacman.d/mirrorlist && echo "RemoteFileSigLevel = Never" >> /etc/pacman.conf && \
     echo -e "[multilib]\nInclude = /etc/pacman.d/mirrorlist" >> /etc/pacman.conf && \
     echo -e "OPTIONS=(strip docs !libtool !staticlibs emptydirs zipman purge !debug lto)\nBUILDENV=(!distcc !color !ccache check !sign)" >> /etc/makepkg.conf && \
+    pacman-key --refresh-keys && \
     pacman -Syu --noconfirm base-devel namcap sudo git && \
     pacman -Scc --noconfirm
 
