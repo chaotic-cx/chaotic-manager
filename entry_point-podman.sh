@@ -1,8 +1,14 @@
-#!/usr/bin/env sh
+#!/usr/bin/env bash
 
 set -e
 
 export REDIS_PORT="${REDIS_PORT:-6379}"
+export XDG_RUNTIME_DIR=/home/podman/xdg
+
+sudo -u podman mkdir -p /home/podman/xdg/podman
+sudo -u podman mkdir -p /home/podman/shared/{pkgout,srcdest_cached,sources}
+sudo -u podman podman system service --time=0 unix://${XDG_RUNTIME_DIR}/podman/podman.sock &
+chown podman:podman -R /home/podman
 
 if [ -n "$REDIS_SSH_HOST" ]; then
     REDIS_SSH_PORT="${REDIS_SSH_PORT:-22}"
@@ -32,4 +38,5 @@ if [ -n "$REDIS_SSH_HOST" ]; then
     echo "Tunnel established"
 fi
 
+export DOCKER_HOST="unix://home/podman/xdg/podman/podman.sock"
 node /app/index.js "$@"
