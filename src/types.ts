@@ -16,6 +16,7 @@ export interface RemoteSettings {
     };
     builder: {
         image: string;
+        is_hpc?: boolean;
         name?: string;
         timeout?: number;
     };
