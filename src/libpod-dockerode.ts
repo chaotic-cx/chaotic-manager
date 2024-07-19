@@ -459,6 +459,7 @@ export class LibpodDockerode {
                     if (err) {
                         return reject(err);
                     }
+
                     // TODO: I'm unsure why this is returning a buffer instead of the JSON object
                     const exitCode = (data as Buffer).toString();
                     resolve({ StatusCode: parseInt(exitCode) });

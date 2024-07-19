@@ -60,7 +60,7 @@ build-manager:
           alias: docker-daemon
     script:
         - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
-        - docker build -t "$CI_REGISTRY_IMAGE/manager:latest" .
+        - docker build -t "$CI_REGISTRY_IMAGE/manager:latest" -f Dockerfile .
         - docker push "$CI_REGISTRY_IMAGE/manager:latest"
     tags: [ "dind" ]
     variables:
@@ -78,7 +78,7 @@ build-manager-podman:
           alias: docker-daemon
     script:
         - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
-        - docker build -t "$CI_REGISTRY_IMAGE/manager-podman:latest" -f Dockerfile-podman
+        - docker build -t "$CI_REGISTRY_IMAGE/manager-podman:latest" -f Dockerfile-podman .
         - docker push "$CI_REGISTRY_IMAGE/manager-podman:latest"
     tags: [ "dind" ]
     variables:

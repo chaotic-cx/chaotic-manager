@@ -1,8 +1,9 @@
-FROM node:alpine AS builder
+FROM node:22.4-alpine AS builder
 
 WORKDIR /build
 COPY . /build
 
+ENV NODE_ENV=development
 RUN yarn install
 RUN yarn build
 
