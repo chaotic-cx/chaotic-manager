@@ -13,15 +13,15 @@ import {
     SOURCECACHE_MAX_LIFETIME,
 } from "./types";
 import { BuildsRedisLogger, SshLogger } from "./logging";
-import { DockerManager } from "./docker-manager";
 import { RedisConnectionManager } from "./redis-connection-manager";
 import { RepoManager } from "./repo-manager";
 import { currentTime, splitJobId } from "./utils";
 import { handleJobOrder, promotePendingDependents } from "./buildorder";
+import { ContainerManager, DockerManager, PodmanManager } from "./container-manager";
 
 function ensurePathClean(dir: string, create = true): void {
     if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true });
-    if (create) fs.mkdirSync(dir);
+    if (create) fs.mkdirSync(dir, { recursive: true });
 }
 
 function requestRemoteConfig(
@@ -38,6 +38,7 @@ function requestRemoteConfig(
         const database_user = process.env.DATABASE_USER || null;
         const builder_hostname = process.env.BUILDER_HOSTNAME || null;
         const builder_timeout = Number(process.env.BUILDER_TIMEOUT) || 3600;
+        const builder_is_hpc = process.env.BUILDER_IS_HPC || null;
         let init = true;
 
         const subscriber = manager.getSubscriber();
@@ -56,6 +57,9 @@ function requestRemoteConfig(
                     remote_config.builder.timeout = builder_timeout;
                     if (builder_hostname !== null) {
                         remote_config.builder.name = builder_hostname;
+                    }
+                    if (builder_is_hpc === "true") {
+                        remote_config.builder.is_hpc = true;
                     }
                     if (database_host !== null) {
                         remote_config.database.ssh.host = database_host;
@@ -114,17 +118,24 @@ function clearSourceCache(mountSrcdest: string, target_repo: string): void {
 }
 
 export default function createBuilder(redis_connection_manager: RedisConnectionManager): Worker {
+    const builder_is_hpc = process.env.BUILDER_IS_HPC || null;
     const shared_srcdest_cache: string = path.join(process.env.SHARED_PATH || "", "srcdest_cache");
     const shared_pkgout: string = path.join(process.env.SHARED_PATH || "", "pkgout");
     const shared_sources: string = path.join(process.env.SHARED_PATH || "", "sources");
-    const mountPkgout = "/shared/pkgout";
-    const mountSrcdest = "/shared/srcdest_cache";
+    const mountPkgout = builder_is_hpc ? shared_pkgout : "/shared/pkgout";
+    const mountSrcdest = builder_is_hpc ? shared_srcdest_cache : "/shared/srcdest_cache";
 
     const connection = redis_connection_manager.getClient();
     const subscriber = redis_connection_manager.getSubscriber();
     subscriber.subscribe("cancel-job");
 
-    const docker_manager = new DockerManager();
+    let containerManager: ContainerManager;
+    if (builder_is_hpc) {
+        containerManager = new PodmanManager();
+    } else {
+        containerManager = new DockerManager();
+    }
+
     const database_queue = new Queue("database", { connection });
     const builds_queue = new Queue("builds", { connection });
 
@@ -132,152 +143,196 @@ export default function createBuilder(redis_connection_manager: RedisConnectionM
         settings: null,
     };
 
-    const worker = new Worker(
-        "builds",
-        async (job: Job): Promise<BuildStatus> => {
-            if (job.id === undefined) throw new Error("Job ID is undefined");
+    const jobProcessor = async (job: Job): Promise<BuildStatus> => {
+        if (job?.id === undefined) throw new Error("Job ID is undefined");
 
-            const { target_repo, pkgbase } = splitJobId(job.id);
-            const logger = new BuildsRedisLogger(connection);
-            logger.fromJob(job);
+        const { target_repo, pkgbase } = splitJobId(job.id);
+        const logger = new BuildsRedisLogger(connection);
+        logger.fromJob(job);
 
-            logger.log(`Processing build job ${job.id} at ${currentTime()}`);
-            // Copy settings
-            const remote_settings: RemoteSettings = structuredClone(runtime_settings.settings) as RemoteSettings;
-            const jobdata: BuildJobData = job.data;
+        logger.log(`Processing build job ${job.id} at ${currentTime()}`);
+        // Copy settings
+        const remote_settings: RemoteSettings = structuredClone(runtime_settings.settings) as RemoteSettings;
+        const jobdata: BuildJobData = job.data;
 
-            let cancelled = false;
-            let listener = null;
-            let docker: Docker.Container | null = null;
+        let cancelled = false;
+        let listener = null;
+        let docker: Docker.Container | null = null;
 
-            async function on_cancel(channel: string, message: string) {
-                if (channel === "cancel-job" && message === job.id) {
-                    logger.log(`Job ${job.id} cancelled.`);
-                    cancelled = true;
-                    subscriber.off("message", on_cancel);
-                    if (docker !== null)
-                        await docker_manager.kill(docker).catch((e) => {
-                            console.error(e);
-                        });
-                }
-            }
-
-            await handleJobOrder(job, builds_queue, database_queue, logger);
-
-            try {
-                listener = subscriber.on("message", on_cancel);
-
-                const repo_manager: RepoManager = new RepoManager(undefined);
-                repo_manager.repoFromObject(remote_settings.repos);
-                repo_manager.targetRepoFromObject(remote_settings.target_repos);
-                const src_repo = repo_manager.getRepo(jobdata.srcrepo);
-
-                ensurePathClean(mountPkgout);
-                generateDestFillerFiles(jobdata.repo_files, mountPkgout);
-                clearSourceCache(mountSrcdest, target_repo);
-
-                if (cancelled) {
-                    throw new UnrecoverableError("Job cancelled.");
-                }
-
-                // Generate the folder path for the specific package source cache
-                const srcdest_package_path = path.join(shared_srcdest_cache, target_repo, pkgbase);
-
-                const container = await docker_manager.create(
-                    remote_settings.builder.image,
-                    ["build", pkgbase],
-                    [
-                        srcdest_package_path + ":/home/builder/srcdest_cached",
-                        shared_pkgout + ":/home/builder/pkgout",
-                        shared_sources + ":/pkgbuilds",
-                    ],
-                    [
-                        "BUILDER_HOSTNAME=" + remote_settings.builder.name,
-                        "BUILDER_TIMEOUT=" + remote_settings.builder.timeout,
-                        "EXTRA_PACMAN_REPOS=" + repo_manager.getTargetRepo(target_repo).repoToString(),
-                        "EXTRA_PACMAN_KEYRINGS=" + repo_manager.getTargetRepo(target_repo).keyringsToBashArray(),
-                        "PACKAGE_REPO_ID=" + src_repo.id,
-                        "PACKAGE_REPO_URL=" + src_repo.getUrl(),
-                    ],
-                );
-                if (cancelled) {
-                    await docker_manager.kill(container).catch((e) => {
+        async function on_cancel(channel: string, message: string) {
+            if (channel === "cancel-job" && message === job.id) {
+                logger.log(`Job ${job.id} cancelled.`);
+                cancelled = true;
+                subscriber.off("message", on_cancel);
+                if (docker !== null)
+                    await containerManager.kill(docker).catch((e) => {
                         console.error(e);
                     });
-                    throw new Error("Job cancelled.");
-                }
-                docker = container;
-                const [err, out] = await to(docker_manager.start(docker, logger.raw_log.bind(logger)));
-                docker = null;
-
-                // Remove any filler files from the equation
-                const file_list = fs.readdirSync(mountPkgout).filter((file) => {
-                    const stats = fs.statSync(path.join(mountPkgout, file));
-                    return stats.isFile() && stats.size > 0;
-                });
-                if (err || out.StatusCode !== 0 || file_list.length === 0) {
-                    if (!err && out.StatusCode === 13) {
-                        logger.log(`Job ${job.id} skipped because all packages were already built.`);
-                        setTimeout(promotePendingDependents.bind(null, jobdata, builds_queue, logger), 1000);
-                        return BuildStatus.ALREADY_BUILT;
-                    } else if (out.StatusCode === 124) {
-                        logger.log(`Job ${job.id} reached a timeout during the build phase.`);
-                        throw new Error("Build timeout reached.");
-                    } else {
-                        logger.log(`Job ${job.id} failed`);
-                        throw new Error("Building failed.");
-                    }
-                } else logger.log(`Finished build ${job.id}. Uploading...`);
-
-                const sshlogger = new SshLogger();
-                try {
-                    const client = await Client({
-                        host: String(remote_settings.database.ssh.host),
-                        port: Number(remote_settings.database.ssh.port),
-                        username: String(remote_settings.database.ssh.user),
-                        privateKey: fs.readFileSync("sshkey"),
-                        debug: sshlogger.log.bind(sshlogger),
-                    });
-                    await client.uploadDir(mountPkgout, remote_settings.database.landing_zone);
-                    client.close();
-                } catch (e) {
-                    logger.error(`Failed to upload ${job.id}: ${e}`);
-                    // This does not get logged to redis
-                    console.error(sshlogger.dump());
-                    console.log("End of ssh log.");
-                    throw new Error("Upload failed.");
-                }
-                ensurePathClean(mountPkgout, false);
-                logger.log(`Finished upload ${job.id}.`);
-                const db_job_data: DatabaseJobData = {
-                    arch: jobdata.arch,
-                    packages: file_list,
-                    timestamp: jobdata.timestamp,
-                    commit: jobdata.commit,
-                    srcrepo: jobdata.srcrepo,
-                    deptree: jobdata.deptree,
-                };
-                await database_queue.add("database", db_job_data, {
-                    jobId: job.id,
-                    removeOnComplete: true,
-                    removeOnFail: true,
-                });
-                logger.log(`Build job ${job.id} finished. Scheduled database job at ${currentTime()}...`);
-            } catch (e) {
-                setTimeout(promotePendingDependents.bind(null, jobdata, builds_queue, logger), 1000);
-                throw e;
-            } finally {
-                if (listener !== null) subscriber.off("message", on_cancel);
             }
-            return BuildStatus.SUCCESS;
-        },
-        {
+        }
+
+        await handleJobOrder(job, builds_queue, database_queue, logger);
+        try {
+            listener = subscriber.on("message", on_cancel);
+
+            const repo_manager: RepoManager = new RepoManager(undefined);
+            repo_manager.repoFromObject(remote_settings.repos);
+            repo_manager.targetRepoFromObject(remote_settings.target_repos);
+            const src_repo = repo_manager.getRepo(jobdata.srcrepo);
+
+            ensurePathClean(mountPkgout);
+            generateDestFillerFiles(jobdata.repo_files, mountPkgout);
+            clearSourceCache(mountSrcdest, target_repo);
+
+            if (cancelled) {
+                throw new UnrecoverableError("Job cancelled.");
+            }
+
+            // Generate the folder path for the specific package source cache
+            const srcdest_package_path = path.join(shared_srcdest_cache, target_repo, pkgbase);
+
+            if (builder_is_hpc) {
+                for (const dir of [shared_srcdest_cache, srcdest_package_path, shared_sources]) {
+                    if (!fs.existsSync(dir)) {
+                        fs.mkdirSync(dir, { recursive: true });
+                    }
+                }
+
+                // We also need to take care of the permissions of the pkgout directory as the makepkg
+                // call will happen under the builder user
+                // TODO:
+                //  figure out why the chown process fails with "[Error: EINVAL:
+                //  invalid argument, chown '/home/podman/shared/pkgout']" while chmod succeeds.
+                //  Likely something related to user namespaces / uid mapping.
+                //
+                fs.chmodSync(shared_pkgout, 0o777);
+            }
+
+            const container: Docker.Container = await containerManager.create(
+                remote_settings.builder.image,
+                ["build", pkgbase],
+                [
+                    srcdest_package_path + ":/home/builder/srcdest_cached",
+                    shared_pkgout + ":/home/builder/pkgout",
+                    shared_sources + ":/pkgbuilds",
+                ],
+                [
+                    "BUILDER_HOSTNAME=" + remote_settings.builder.name,
+                    "BUILDER_TIMEOUT=" + remote_settings.builder.timeout,
+                    "EXTRA_PACMAN_REPOS=" + repo_manager.getTargetRepo(target_repo).repoToString(),
+                    "EXTRA_PACMAN_KEYRINGS=" + repo_manager.getTargetRepo(target_repo).keyringsToBashArray(),
+                    "PACKAGE_REPO_ID=" + src_repo.id,
+                    "PACKAGE_REPO_URL=" + src_repo.getUrl(),
+                ],
+            );
+            if (cancelled) {
+                await containerManager.kill(container).catch((e) => {
+                    console.error(e);
+                });
+                throw new Error("Job cancelled.");
+            }
+            docker = container;
+
+            const [err, out] = await to(containerManager.start(docker, logger.raw_log.bind(logger)));
+            docker = null;
+
+            // Remove any filler files from the equation
+            const file_list = fs.readdirSync(mountPkgout).filter((file) => {
+                const stats = fs.statSync(path.join(mountPkgout, file));
+                return stats.isFile() && stats.size > 0;
+            });
+
+            if (err || out.StatusCode !== 0 || file_list.length === 0) {
+                if (!err && out.StatusCode === 13) {
+                    logger.log(`Job ${job.id} skipped because all packages were already built.`);
+                    setTimeout(promotePendingDependents.bind(null, jobdata, builds_queue, logger), 1000);
+                    return BuildStatus.ALREADY_BUILT;
+                } else if (out.StatusCode === 124) {
+                    logger.log(`Job ${job.id} reached a timeout during the build phase.`);
+                    throw new Error("Build timeout reached.");
+                } else {
+                    logger.log(`Job ${job.id} failed`);
+                    throw new Error("Building failed.");
+                }
+            } else logger.log(`Finished build ${job.id}. Uploading...`);
+
+            const sshlogger = new SshLogger();
+            try {
+                const client = await Client({
+                    host: String(remote_settings.database.ssh.host),
+                    port: Number(remote_settings.database.ssh.port),
+                    username: String(remote_settings.database.ssh.user),
+                    privateKey: fs.readFileSync("sshkey"),
+                    debug: sshlogger.log.bind(sshlogger),
+                });
+                await client.uploadDir(mountPkgout, remote_settings.database.landing_zone);
+                client.close();
+            } catch (e) {
+                logger.error(`Failed to upload ${job.id}: ${e}`);
+                // This does not get logged to redis
+                console.error(sshlogger.dump());
+                console.log("End of ssh log.");
+                throw new Error("Upload failed.");
+            }
+            ensurePathClean(mountPkgout, false);
+            logger.log(`Finished upload ${job.id}.`);
+            const db_job_data: DatabaseJobData = {
+                arch: jobdata.arch,
+                packages: file_list,
+                timestamp: jobdata.timestamp,
+                commit: jobdata.commit,
+                srcrepo: jobdata.srcrepo,
+                deptree: jobdata.deptree,
+            };
+            await database_queue.add("database", db_job_data, {
+                jobId: job.id,
+                removeOnComplete: true,
+                removeOnFail: true,
+            });
+            logger.log(`Build job ${job.id} finished. Scheduled database job at ${currentTime()}...`);
+        } catch (e) {
+            setTimeout(promotePendingDependents.bind(null, jobdata, builds_queue, logger), 1000);
+            throw e;
+        } finally {
+            if (listener !== null) subscriber.off("message", on_cancel);
+        }
+        return BuildStatus.SUCCESS;
+    };
+
+    let worker: Worker;
+
+    // If the builder is an HPC, the worker will only process one job and then exit.
+    // This is done to prevent locking its job queue while waiting for new jobs to arrive.
+    // All other workers will process jobs indefinitely.
+    if (!builder_is_hpc) {
+        worker = new Worker("builds", jobProcessor, {
             connection,
-        },
-    );
+        });
+    } else {
+        worker = new Worker("builds", null, {
+            connection,
+        });
+
+        // Grab jobs from the queue and process them until no jobs are left
+        const token = "hpc-processor";
+        worker.getNextJob(token).then((job: Job): void => {
+            jobProcessor(job).then((status: BuildStatus): void => {
+                if (status === BuildStatus.SUCCESS) {
+                    job?.moveToCompleted("success", token, false);
+                } else {
+                    job?.moveToFailed(new Error("Job failed"), token, false);
+                }
+                worker.close().then(() => {
+                    console.log("HPC worker finished processing all jobs.");
+                    process.exit(0);
+                });
+            });
+        });
+    }
+
     void worker.pause();
 
-    requestRemoteConfig(redis_connection_manager, worker, docker_manager, runtime_settings)
+    requestRemoteConfig(redis_connection_manager, worker, containerManager, runtime_settings)
         .then(async () => {
             worker.resume();
             console.log("Worker ready to process jobs.");

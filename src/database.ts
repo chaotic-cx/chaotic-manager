@@ -7,7 +7,7 @@ import to from "await-to-js";
 import { BuildJobData, BuildStatus, current_version, DatabaseJobData, DispatchJobData, RemoteSettings } from "./types";
 import { BuildsRedisLogger } from "./logging";
 import { BulkJobOptions, Job, Queue, QueueEvents, UnrecoverableError, Worker } from "bullmq";
-import { DockerManager } from "./docker-manager";
+import { DockerManager } from "./container-manager";
 import { RedisConnectionManager } from "./redis-connection-manager";
 import { Repo, RepoManager } from "./repo-manager";
 import { createTrivialNotification, currentTime, splitJobId } from "./utils";

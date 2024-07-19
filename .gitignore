@@ -8,3 +8,4 @@
 /sshkey
 /temp
 docker-compose.yml
+docker-compose-podman.yml
