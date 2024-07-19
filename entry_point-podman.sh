@@ -38,5 +38,4 @@ if [ -n "$REDIS_SSH_HOST" ]; then
     echo "Tunnel established"
 fi
 
-export DOCKER_HOST="unix://home/podman/xdg/podman/podman.sock"
 node /app/index.js "$@"

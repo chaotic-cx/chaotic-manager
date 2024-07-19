@@ -118,12 +118,12 @@ function clearSourceCache(mountSrcdest: string, target_repo: string): void {
 }
 
 export default function createBuilder(redis_connection_manager: RedisConnectionManager): Worker {
+    const builder_is_hpc = process.env.BUILDER_IS_HPC || null;
     const shared_srcdest_cache: string = path.join(process.env.SHARED_PATH || "", "srcdest_cache");
     const shared_pkgout: string = path.join(process.env.SHARED_PATH || "", "pkgout");
     const shared_sources: string = path.join(process.env.SHARED_PATH || "", "sources");
-    const mountPkgout = "/shared/pkgout";
-    const mountSrcdest = "/shared/srcdest_cache";
-    const builder_is_hpc = process.env.BUILDER_IS_HPC || null;
+    const mountPkgout = builder_is_hpc ? shared_pkgout : "/shared/pkgout";
+    const mountSrcdest = builder_is_hpc ? shared_srcdest_cache : "/shared/srcdest_cache";
 
     const connection = redis_connection_manager.getClient();
     const subscriber = redis_connection_manager.getSubscriber();
@@ -144,7 +144,7 @@ export default function createBuilder(redis_connection_manager: RedisConnectionM
     };
 
     const jobProcessor = async (job: Job): Promise<BuildStatus> => {
-        if (job.id === undefined) throw new Error("Job ID is undefined");
+        if (job?.id === undefined) throw new Error("Job ID is undefined");
 
         const { target_repo, pkgbase } = splitJobId(job.id);
         const logger = new BuildsRedisLogger(connection);
@@ -191,13 +191,21 @@ export default function createBuilder(redis_connection_manager: RedisConnectionM
             // Generate the folder path for the specific package source cache
             const srcdest_package_path = path.join(shared_srcdest_cache, target_repo, pkgbase);
 
-            // Podman seemingly does not create the directories if they do not exist and errors out instead
             if (builder_is_hpc) {
-                for (const dir of [shared_srcdest_cache, shared_pkgout, srcdest_package_path, shared_sources]) {
+                for (const dir of [shared_srcdest_cache, srcdest_package_path, shared_sources]) {
                     if (!fs.existsSync(dir)) {
                         fs.mkdirSync(dir, { recursive: true });
                     }
                 }
+
+                // We also need to take care of the permissions of the pkgout directory as the makepkg
+                // call will happen under the builder user
+                // TODO:
+                //  figure out why the chown process fails with "[Error: EINVAL:
+                //  invalid argument, chown '/home/podman/shared/pkgout']" while chmod succeeds.
+                //  Likely something related to user namespaces / uid mapping.
+                //
+                fs.chmodSync(shared_pkgout, 0o777);
             }
 
             const container: Docker.Container = await containerManager.create(
@@ -233,6 +241,7 @@ export default function createBuilder(redis_connection_manager: RedisConnectionM
                 const stats = fs.statSync(path.join(mountPkgout, file));
                 return stats.isFile() && stats.size > 0;
             });
+
             if (err || out.StatusCode !== 0 || file_list.length === 0) {
                 if (!err && out.StatusCode === 13) {
                     logger.log(`Job ${job.id} skipped because all packages were already built.`);

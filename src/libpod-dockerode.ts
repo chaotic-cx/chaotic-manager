@@ -359,6 +359,7 @@ export interface LibPod {
     pruneAllImages(dangling: boolean): Promise<void>;
     podmanInfo(): Promise<Info>;
     getImages(options: GetImagesOptions): Promise<NodeJS.ReadableStream>;
+    podmanWait(podId: string): Promise<unknown>;
 }
 
 // tweak Dockerode by adding the support of libpod API
@@ -436,6 +437,31 @@ export class LibpodDockerode {
                         return reject(err);
                     }
                     resolve(data);
+                });
+            });
+        };
+
+        prototypeOfDockerode.podmanWait = function (containerId: string): Promise<unknown> {
+            const optsf = {
+                path: `/v4.2.0/libpod/containers/${containerId}/wait`,
+                method: "POST",
+                allowEmpty: true,
+                openStdin: true,
+                statusCodes: {
+                    200: true,
+                    404: "no such container",
+                    500: "server error",
+                },
+                options: {},
+            };
+            return new Promise((resolve, reject) => {
+                this.modem.dial(optsf, (err: unknown, data: unknown) => {
+                    if (err) {
+                        return reject(err);
+                    }
+                    // TODO: I'm unsure why this is returning a buffer instead of the JSON object
+                    const exitCode = (data as Buffer).toString();
+                    resolve({ StatusCode: parseInt(exitCode) });
                 });
             });
         };

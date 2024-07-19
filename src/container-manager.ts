@@ -193,12 +193,13 @@ export class DockerManager extends ContainerManager {
 }
 
 export class PodmanManager extends ContainerManager {
-    docker: Dockerode;
+    docker: Docker;
     libPodApi: LibPod;
 
     constructor() {
         super();
-        this.docker = new Docker({ socketPath: "/home/podman/xdg/podman/podman.sock" });
+        const socketPath = process.env.DOCKER_SOCKET ? process.env.DOCKER_SOCKET : "/run/podman/podman.sock";
+        this.docker = new Docker({ socketPath: socketPath });
         const libPodDockerode = new LibpodDockerode();
         libPodDockerode.enhancePrototypeWithLibPod();
         this.libPodApi = this.docker as unknown as LibPod;
@@ -213,7 +214,7 @@ export class PodmanManager extends ContainerManager {
                 Source: host,
                 Destination: container,
                 RW: true,
-                Propagation: "shared",
+                Propagation: "rshared",
             };
         });
 
@@ -256,7 +257,7 @@ export class PodmanManager extends ContainerManager {
         });
         [err, out] = await to(container.start());
         if (err) throw err;
-        [err, out] = await to(container.wait({ condition: "removed" }));
+        [err, out] = await to(this.libPodApi.podmanWait(container.id));
         if (err) throw err;
         return out;
     }

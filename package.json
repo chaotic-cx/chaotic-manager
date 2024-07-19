@@ -45,6 +45,7 @@
         "prepare": "husky",
         "start": "tsc && node dist/index.js",
         "start:dev": "tsc-watch --onSuccess 'node --env-file=.env dist/index.js database --web-port 8080'",
+        "start:dev-builder": "tsc-watch --onSuccess 'node --env-file=.env dist/index.js builder'",
         "test": "jest"
     },
     "devDependencies": {
