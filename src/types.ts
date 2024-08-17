@@ -15,6 +15,7 @@ export interface RemoteSettings {
         landing_zone: string;
     };
     builder: {
+        ci_code_skip?: number;
         image: string;
         is_hpc?: boolean;
         name?: string;
@@ -73,7 +74,7 @@ export interface DispatchJobData {
 export enum BuildStatus {
     SUCCESS,
     ALREADY_BUILT,
-    TIMED_OUT,
+    SKIPPED,
 }
 
 // The object the API should return on /api/packages calls

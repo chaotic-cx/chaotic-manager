@@ -448,6 +448,14 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
                     increaseBuildToDeployElapsedTimeMetrics(jobId, "already-built", endDeployTimer());
 
                     await logger.end_log();
+                } else if (!err && out === BuildStatus.SKIPPED) {
+                    await repo.notify(job, "canceled", "Build skipped intentionally via build tools.");
+
+                    increaseBuildCountMetrics(jobdata.srcrepo ? jobdata.srcrepo : "unknown", "skipped");
+                    increaseBuildElapsedTimeMetrics(jobId, "skipped", endTimer());
+                    increaseBuildToDeployElapsedTimeMetrics(jobId, "skipped", endDeployTimer());
+
+                    await logger.end_log();
                 }
             }
         } catch (error) {

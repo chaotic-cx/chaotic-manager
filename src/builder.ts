@@ -39,6 +39,7 @@ function requestRemoteConfig(
         const builder_hostname = process.env.BUILDER_HOSTNAME || null;
         const builder_timeout = Number(process.env.BUILDER_TIMEOUT) || 3600;
         const builder_is_hpc = process.env.BUILDER_IS_HPC || null;
+        const ci_code_skip = Number(process.env.CI_CODE_SKIP) || 123;
         let init = true;
 
         const subscriber = manager.getSubscriber();
@@ -54,6 +55,7 @@ function requestRemoteConfig(
                     console.log("Worker received incompatible config from master. Worker paused.");
                     return;
                 } else {
+                    remote_config.builder.ci_code_skip = ci_code_skip;
                     remote_config.builder.timeout = builder_timeout;
                     if (builder_hostname !== null) {
                         remote_config.builder.name = builder_hostname;
@@ -247,6 +249,10 @@ export default function createBuilder(redis_connection_manager: RedisConnectionM
                     logger.log(`Job ${job.id} skipped because all packages were already built.`);
                     setTimeout(promotePendingDependents.bind(null, jobdata, builds_queue, logger), 1000);
                     return BuildStatus.ALREADY_BUILT;
+                } else if (out.StatusCode === remote_settings.builder.ci_code_skip) {
+                    logger.log(`Job ${job.id} skipped intentionally via build tools.`);
+                    setTimeout(promotePendingDependents.bind(null, jobdata, builds_queue, logger), 1000);
+                    return BuildStatus.SKIPPED;
                 } else if (out.StatusCode === 124) {
                     logger.log(`Job ${job.id} reached a timeout during the build phase.`);
                     throw new Error("Build timeout reached.");
