@@ -221,6 +221,7 @@ export default function createBuilder(redis_connection_manager: RedisConnectionM
                 [
                     "BUILDER_HOSTNAME=" + remote_settings.builder.name,
                     "BUILDER_TIMEOUT=" + remote_settings.builder.timeout,
+                    "CI_CODE_SKIP=" + remote_settings.builder.ci_code_skip,
                     "EXTRA_PACMAN_REPOS=" + repo_manager.getTargetRepo(target_repo).repoToString(),
                     "EXTRA_PACMAN_KEYRINGS=" + repo_manager.getTargetRepo(target_repo).keyringsToBashArray(),
                     "PACKAGE_REPO_ID=" + src_repo.id,
