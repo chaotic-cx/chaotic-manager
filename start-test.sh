@@ -77,6 +77,6 @@ EOM
 
 docker build -t registry.gitlab.com/garuda-linux/tools/chaotic-manager/manager .
 
-docker-compose up || true
-docker-compose down
+docker compose up || true
+docker compose down
 rm docker-compose.yml

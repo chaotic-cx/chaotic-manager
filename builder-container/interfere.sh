@@ -60,7 +60,7 @@ function interference-generic() {
 function interference-pkgrel() {
   set -euo pipefail
 
-  if [ ! -v CONFIG[CI_PACKAGE_BUMP] ]; then
+  if [[ ! -v CONFIG[CI_PACKAGE_BUMP] ]]; then
     return 0
   fi
 

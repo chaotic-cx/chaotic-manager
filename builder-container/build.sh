@@ -11,6 +11,7 @@ PACKAGE="$1"
 BUILDDIR="/home/builder/build/"
 [[ -z $BUILDER_HOSTNAME ]] && BUILDER_HOSTNAME="unknown builder (please supply BUILDER_HOSTNAME via Docker environment)"
 [[ -z $BUILDER_TIMEOUT ]] && BUILDER_TIMEOUT=3600
+[[ -z $CI_CODE_SKIP ]] && CI_CODE_SKIP=123
 
 function print-if-failed {
 	local output=""
@@ -70,7 +71,18 @@ function setup-build-configs {
     print-if-failed setup-extra-keyrings
 
     # Don't silence interfere.sh to be able to print information about what exactly got interfered.
-    ./interfere.sh "$BUILDDIR" "$PACKAGE" || return 1
+    ./interfere.sh "$BUILDDIR" "$PACKAGE"
+
+    # If the interfere script exits with the defined exit code for intended skips,
+    # we should exit the build process gracefully and return the same code to the manager instance.
+    exit_code=$?
+    if [[ $exit_code -eq $CI_CODE_SKIP ]]; then
+        echo "Skipping build process intentionally."
+        exit "$CI_CODE_SKIP"
+    elif [[ $exit_code -ne 0 ]]; then
+        echo "Interfere script failed with exit code $exit_code."
+        exit "$exit_code"
+    fi
 
     declare -A CONFIG
     if [ -f "/pkgbuilds/${PACKAGE_REPO_ID}/${PACKAGE}/.CI/config" ]; then
