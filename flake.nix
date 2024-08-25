@@ -24,6 +24,7 @@
     perSystem = {
       pkgs,
       system,
+      self',
       ...
     }: {
       # Handy devshell for working with this flake
@@ -62,14 +63,6 @@
             {
               category = "chaotic-manager";
               command = ''
-                node2nix node-packages.json -o ./nix/node-packages.nix -c ./nix/default.nix -e ./nix/node-env.nix
-              '';
-              help = "Regenerates the node-packages.nix file";
-              name = "regen-node";
-            }
-            {
-              category = "chaotic-manager";
-              command = ''
                 tsc && node dist/index.js
               '';
               help = "Starts the development environment";
@@ -99,6 +92,10 @@
             {
               name = "NIX_PATH";
               value = "${nixpkgs}";
+            }
+            {
+              name = "NODE_PATH";
+              value = "${self.packages.${system}.node-modules}";
             }
           ];
         };
@@ -136,7 +133,8 @@
     flake-parts.lib.mkFlake {inherit inputs;} {
       # Imports flake-modules
       imports = [
-        ./nix/flake-module.nix
+        ./nix/nixos-module.nix
+        ./nix/package-module.nix
         inputs.pre-commit-hooks.flakeModule
       ];
 

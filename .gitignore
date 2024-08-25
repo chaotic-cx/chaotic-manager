@@ -9,5 +9,6 @@
 /sshkey
 /temp
 biome.json
-docker-compose.yml
 docker-compose-podman.yml
+docker-compose.yml
+result*

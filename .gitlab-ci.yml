@@ -26,18 +26,6 @@ check-pr-commitizen:
     - nix run nixpkgs#commitizen -- check --message "$CI_COMMIT_MESSAGE"
   rules:
     - if: $UPDATE_BUILDER != "1"
-update-node-nix:
-  stage: update
-  image: nixpkgs/nix:latest
-  script:
-    - nix run nixpkgs#node2nix -- -o nix/node-packages.nix -c nix/default.nix -e nix/node-env.nix
-    - git add nix/
-    - "git commit -m 'chore(nix): update manager nix package'"
-    - git push "$REPO_URL" HEAD:main
-  rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-      changes:
-        - yarn.lock
 build-builder:
   # Used to deploy a new base Docker image for building purposes,
   # this one runs once per day via pipeline schedules
