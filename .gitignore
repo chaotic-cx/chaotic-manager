@@ -8,5 +8,6 @@
 /node_modules
 /sshkey
 /temp
+biome.json
 docker-compose.yml
 docker-compose-podman.yml

@@ -39,13 +39,15 @@
       "locked": {
         "lastModified": 1722555600,
         "narHash": "sha256-XOQkdLafnb/p9ij77byFQjDf5m5QYl9b2REiVClC+x4=",
-        "path": "/nix/store/20cgsn80c8jq4lwial6ry4spgwhzk8fv-source",
+        "owner": "hercules-ci",
+        "repo": "flake-parts",
         "rev": "8471fe90ad337a8074e957b69ca4d0089218391d",
-        "type": "path"
+        "type": "github"
       },
       "original": {
-        "id": "flake-parts",
-        "type": "indirect"
+        "owner": "hercules-ci",
+        "repo": "flake-parts",
+        "type": "github"
       }
     },
     "gitignore": {

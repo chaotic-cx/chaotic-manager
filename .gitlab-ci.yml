@@ -1,31 +1,43 @@
 ---
-stages: [checks, build]
+stages: [checks, update, build]
+variables:
+  GIT_AUTHOR_EMAIL: ci@garudalinux.org
+  GIT_AUTHOR_NAME: Gitlab CI
+  GIT_STRATEGY: clone
+  REPO_URL: $CI_SERVER_PROTOCOL://gitlab-ci-token:$ACCESS_TOKEN@$CI_SERVER_HOST/$CI_PROJECT_PATH.git
 check-lint:
   # Check all files for common anti-patterns and issues
   stage: checks
-  image: alpine:latest
+  image: nixpkgs/nix-flakes:latest
   inherit:
     variables: false
   script:
-    - apk add --no-cache --upgrade bash npm py3-pip shellcheck shfmt
-    - pip install --break-system-packages yamllint
-    - npm install -g markdownlint-cli
-    - bash .ci/lint.sh || true  # be graceful for now
+    - nix flake check --all-systems
+    - nix run nixpkgs#commitizen -- check --message "$CI_COMMIT_MESSAGE"
   rules:
     - if: $UPDATE_BUILDER != "1"
 check-pr-commitizen:
   # Check the current commit message for compliance with commitizen
   stage: checks
-  image: alpine:latest
+  image: nixpkgs/nix-flakes:latest
   inherit:
     variables: false
   script:
-    - apk add --no-cache --upgrade py3-pip
-    - pip install --break-system-packages commitizen
-    - cz check --message "$CI_COMMIT_MESSAGE" >/tmp/cz_check || true
-    - grep "successful" /tmp/cz_check
+    - nix run nixpkgs#commitizen -- check --message "$CI_COMMIT_MESSAGE"
   rules:
     - if: $UPDATE_BUILDER != "1"
+update-node-nix:
+  stage: update
+  image: nixpkgs/nix:latest
+  script:
+    - nix run nixpkgs#node2nix -- -o nix/node-packages.nix -c nix/default.nix -e nix/node-env.nix
+    - git add nix/
+    - "git commit -m 'chore(nix): update manager nix package'"
+    - git push "$REPO_URL" HEAD:main
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      changes:
+        - yarn.lock
 build-builder:
   # Used to deploy a new base Docker image for building purposes,
   # this one runs once per day via pipeline schedules

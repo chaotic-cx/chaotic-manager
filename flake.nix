@@ -4,6 +4,7 @@
       url = "github:numtide/devshell";
       flake = false;
     };
+    flake-parts.url = "github:hercules-ci/flake-parts";
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     pre-commit-hooks = {
       url = "github:cachix/pre-commit-hooks.nix";
@@ -64,7 +65,7 @@
                 node2nix node-packages.json -o ./nix/node-packages.nix -c ./nix/default.nix -e ./nix/node-env.nix
               '';
               help = "Regenerates the node-packages.nix file";
-              name = "node2nix";
+              name = "regen-node";
             }
             {
               category = "chaotic-manager";
@@ -75,16 +76,15 @@
               name = "start";
             }
             {package = "biome";}
-            {package = "nodejs_22";}
             {package = "commitizen";}
-            {package = "pre-commit";}
-            #     { package = "node2nix"; }
-            {package = "biome";}
-            {package = "yarn";}
-            {package = "redis";}
-            {package = "psmisc";}
             {package = "docker-compose";}
             {package = "jq";}
+            {package = "node2nix";}
+            {package = "nodejs_22";}
+            {package = "pre-commit";}
+            {package = "psmisc";}
+            {package = "redis";}
+            {package = "yarn";}
           ];
           devshell.startup.preCommitHooks.text = ''
             ${self.checks.${system}.pre-commit-check.shellHook}
@@ -112,7 +112,6 @@
       # Pre-commit hooks are set up automatically via nix-shell / nix develop
       checks.pre-commit-check = pre-commit-hooks.lib.${system}.run {
         hooks = {
-          actionlint.enable = true;
           alejandra-quiet = {
             description = "Run Alejandra in quiet mode";
             enable = true;
@@ -122,7 +121,6 @@
             files = "\\.nix$";
             name = "alejandra";
           };
-          biome.enable = true;
           commitizen.enable = true;
           check-json.enable = true;
           check-yaml.enable = true;
