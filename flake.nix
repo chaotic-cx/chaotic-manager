@@ -72,7 +72,6 @@
             {package = "commitizen";}
             {package = "docker-compose";}
             {package = "jq";}
-            {package = "node2nix";}
             {package = "nodejs_22";}
             {package = "pre-commit";}
             {package = "psmisc";}
@@ -82,7 +81,7 @@
           devshell.startup.preCommitHooks.text = ''
             ${self.checks.${system}.pre-commit-check.shellHook}
 
-            killall -9 redis-server || true
+            killall -9 redis-server 2> /dev/null || true
             rm -f dump.rdb
             redis-server --daemonize yes
             redis-cli ping
