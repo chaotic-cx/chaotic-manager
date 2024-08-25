@@ -1,2 +1,0 @@
-yarn run pre-commit || true
-yarn run test || true
