@@ -1,7 +1,7 @@
-import to from "await-to-js";
-import { Job } from "bullmq";
-import { PacmanRepo } from "./types";
 import { URL } from "url";
+import to from "await-to-js";
+import type { Job } from "bullmq";
+import type { PacmanRepo } from "./types";
 import { splitJobId } from "./utils";
 
 export type GitlabState = "pending" | "running" | "success" | "failed" | "canceled";

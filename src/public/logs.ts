@@ -53,7 +53,7 @@ async function setup(): Promise<void> {
         return false;
     });
 
-    const xterm_resize_ob: ResizeObserver = new ResizeObserver(function (): void {
+    const xterm_resize_ob: ResizeObserver = new ResizeObserver((): void => {
         fitAddon.fit();
     });
     xterm_resize_ob.observe(termdiv);
@@ -74,7 +74,7 @@ async function setup(): Promise<void> {
     let timestamp: string;
     if (query.has("timestamp") && /^\d+$/.test((timestamp = query.get("timestamp") as string))) url += "/" + timestamp;
 
-    let is_finished: boolean = false;
+    let is_finished = false;
     await fetch(url).then(async (response: Response): Promise<void> => {
         document.title = `Chaotic logs: ${id} - ${timestamp}`;
         if (!response.body) {
@@ -83,7 +83,7 @@ async function setup(): Promise<void> {
             return;
         }
         const reader: ReadableStreamDefaultReader = response.body.getReader();
-        let err: boolean = false;
+        let err = false;
         while (!is_finished && !err) {
             await reader
                 .read()

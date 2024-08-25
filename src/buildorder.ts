@@ -3,11 +3,11 @@
  * Also handles dependency cycles and other edge cases.
  */
 
-import Redlock from "redlock";
-import { BuildJobData, DatabaseJobData } from "./types";
-import { BuildsRedisLogger } from "./logging";
-import { DelayedError, Job, Queue } from "bullmq";
+import { DelayedError, type Job, type Queue } from "bullmq";
 import { DepGraph } from "dependency-graph";
+import Redlock from "redlock";
+import type { BuildsRedisLogger } from "./logging";
+import type { BuildJobData, DatabaseJobData } from "./types";
 
 interface CachedData {
     job: Job;
@@ -86,7 +86,7 @@ async function populateDepGraph(job: Job, queue: Queue) {
         }
     }
 
-    // Check if reverse depdendencies match forward dependencies
+    // Check if reverse dependencies match forward dependencies
     for (const node of graph.overallOrder()) {
         const data = graph.getNodeData(node);
         // Remove nodes without data (ones that have no relation to the job)
@@ -107,9 +107,9 @@ async function populateDepGraph(job: Job, queue: Queue) {
 }
 
 export enum DependencyState {
-    MUST_WAIT,
-    REQUIRES_EXCLUSIVE_LOOPBREAK,
-    CAN_EXECUTE,
+    MUST_WAIT = 0,
+    REQUIRES_EXCLUSIVE_LOOPBREAK = 1,
+    CAN_EXECUTE = 2,
 }
 
 async function shouldExecute(job: Job, buildsqueue: Queue, databasequeue: Queue | null): Promise<DependencyState> {

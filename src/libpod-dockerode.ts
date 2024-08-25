@@ -174,7 +174,13 @@ export interface PodmanContainerInfo {
     StartedAt: number;
     Command: string[];
     Labels: Record<string, string>;
-    Ports: { host_ip: string; container_port: number; host_port: number; range?: string; protocol: string }[];
+    Ports: {
+        host_ip: string;
+        container_port: number;
+        host_port: number;
+        range?: string;
+        protocol: string;
+    }[];
 }
 
 export interface Info {
@@ -302,7 +308,7 @@ export interface ContainerStore {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-empty-interface
-export interface GraphOptions {}
+export type GraphOptions = {};
 
 export interface GraphStatus {
     "Backing Filesystem": string;
@@ -462,7 +468,7 @@ export class LibpodDockerode {
 
                     // TODO: I'm unsure why this is returning a buffer instead of the JSON object
                     const exitCode = (data as Buffer).toString();
-                    resolve({ StatusCode: parseInt(exitCode) });
+                    resolve({ StatusCode: Number.parseInt(exitCode) });
                 });
             });
         };

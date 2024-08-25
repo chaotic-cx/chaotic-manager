@@ -1,4 +1,4 @@
-import RedisConnection from "ioredis";
+import type RedisConnection from "ioredis";
 
 export class RedisConnectionManager {
     private subscriber: RedisConnection | undefined;

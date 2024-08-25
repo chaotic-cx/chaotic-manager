@@ -1,17 +1,13 @@
-import Notifier from "./notifier";
-import Redis from "ioredis";
-import Timeout from "await-timeout";
 import fs from "fs";
 import path from "path";
+import Timeout from "await-timeout";
 import to from "await-to-js";
-import { BuildJobData, BuildStatus, current_version, DatabaseJobData, DispatchJobData, RemoteSettings } from "./types";
-import { BuildsRedisLogger } from "./logging";
-import { BulkJobOptions, Job, Queue, QueueEvents, UnrecoverableError, Worker } from "bullmq";
-import { DockerManager } from "./container-manager";
-import { RedisConnectionManager } from "./redis-connection-manager";
-import { Repo, RepoManager } from "./repo-manager";
-import { createTrivialNotification, currentTime, splitJobId } from "./utils";
+import { type BulkJobOptions, Job, Queue, QueueEvents, UnrecoverableError, Worker } from "bullmq";
+import type Redis from "ioredis";
 import { promotePendingDependents } from "./buildorder";
+import { DockerManager } from "./container-manager";
+import { BuildsRedisLogger } from "./logging";
+import Notifier from "./notifier";
 import {
     buildMetricsTime,
     buildToDeployMetricsTime,
@@ -20,6 +16,17 @@ import {
     increaseBuildToDeployElapsedTimeMetrics,
     registerMetrics,
 } from "./prometheus";
+import type { RedisConnectionManager } from "./redis-connection-manager";
+import { type Repo, RepoManager } from "./repo-manager";
+import {
+    type BuildJobData,
+    BuildStatus,
+    type DatabaseJobData,
+    type DispatchJobData,
+    type RemoteSettings,
+    current_version,
+} from "./types";
+import { createTrivialNotification, currentTime, splitJobId } from "./utils";
 
 async function publishSettingsObject(manager: RedisConnectionManager, settings: RemoteSettings): Promise<void> {
     const subscriber = manager.getSubscriber();
@@ -406,7 +413,7 @@ export default function createDatabaseWorker(redis_connection_manager: RedisConn
                 const [err, out] = await to(job.waitUntilFinished(builds_queue_events));
                 void job.remove();
 
-                // Destinguish between a failure because of a timeout and a regular build failure.
+                // Distinguish between a failure because of a timeout and a regular build failure.
                 if (err && err.message.includes("failed")) {
                     await repo.notify(job, "failed", "Build failed.");
                     void createFailedBuildNotification(repo, jobId, jobdata, `🚫 Build for ${jobdata.srcrepo} failed`);

@@ -1,9 +1,9 @@
-import Docker from "dockerode";
-import Dockerode from "dockerode";
-import to from "await-to-js";
-import { Mutex } from "async-mutex";
 import { Stream } from "stream";
-import { ContainerCreateMountOption, LibPod, LibpodDockerode } from "./libpod-dockerode";
+import { Mutex } from "async-mutex";
+import to from "await-to-js";
+import Docker from "dockerode";
+import type Dockerode from "dockerode";
+import { type ContainerCreateMountOption, type LibPod, LibpodDockerode } from "./libpod-dockerode";
 
 export abstract class ContainerManager {
     abstract docker: Dockerode;

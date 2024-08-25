@@ -1,7 +1,7 @@
-import RedisConnection from "ioredis";
 import to from "await-to-js";
-import { BuildJobData } from "./types";
-import { Job, MetricsTime, Queue } from "bullmq";
+import { type Job, MetricsTime, type Queue } from "bullmq";
+import type RedisConnection from "ioredis";
+import type { BuildJobData } from "./types";
 import { splitJobId } from "./utils";
 
 // Console.log imitation that saves to a variable instead of stdout
@@ -51,7 +51,7 @@ export class BuildsRedisLogger {
             } else {
                 this.channel = "build-logs." + pkgbase + "." + out;
                 this.key = "build-logs:" + pkgbase + ":" + out;
-                this.timestamp = parseInt(out);
+                this.timestamp = Number.parseInt(out);
                 this.init = true;
                 return undefined;
             }

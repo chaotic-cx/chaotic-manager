@@ -1,23 +1,23 @@
-import { Job, Queue, UnrecoverableError, Worker } from "bullmq";
 import fs from "fs";
 import path from "path";
-import { Client } from "node-scp";
-import Docker from "dockerode";
 import to from "await-to-js";
-import {
-    BuildJobData,
-    BuildStatus,
-    current_version,
-    DatabaseJobData,
-    RemoteSettings,
-    SOURCECACHE_MAX_LIFETIME,
-} from "./types";
-import { BuildsRedisLogger, SshLogger } from "./logging";
-import { RedisConnectionManager } from "./redis-connection-manager";
-import { RepoManager } from "./repo-manager";
-import { currentTime, splitJobId } from "./utils";
+import { type Job, Queue, UnrecoverableError, Worker } from "bullmq";
+import type Docker from "dockerode";
+import { Client } from "node-scp";
 import { handleJobOrder, promotePendingDependents } from "./buildorder";
-import { ContainerManager, DockerManager, PodmanManager } from "./container-manager";
+import { type ContainerManager, DockerManager, PodmanManager } from "./container-manager";
+import { BuildsRedisLogger, SshLogger } from "./logging";
+import type { RedisConnectionManager } from "./redis-connection-manager";
+import { RepoManager } from "./repo-manager";
+import {
+    type BuildJobData,
+    BuildStatus,
+    type DatabaseJobData,
+    type RemoteSettings,
+    SOURCECACHE_MAX_LIFETIME,
+    current_version,
+} from "./types";
+import { currentTime, splitJobId } from "./utils";
 
 function ensurePathClean(dir: string, create = true): void {
     if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true });

@@ -1,5 +1,5 @@
-import { Metrics, Queue } from "bullmq";
-import { MetricsReturnObject, PackagesReturnObject, StatsReturnObject } from "./types";
+import type { Metrics, Queue } from "bullmq";
+import type { MetricsReturnObject, PackagesReturnObject, StatsReturnObject } from "./types";
 
 /**
  * The ChaoticApi class is a wrapper around the Queue class from BullMQ. It provides a set of methods to interact with the

@@ -1,13 +1,13 @@
 import Timeout from "await-timeout";
-import express, { Request, Response } from "express";
 import to from "await-to-js";
-import { ChaoticApi } from "./api";
 import { Queue } from "bullmq";
-import { RedisConnectionManager } from "./redis-connection-manager";
-import { corsOptions, HTTP_CACHE_MAX_AGE } from "./types";
-import { getMetrics } from "./prometheus";
-import { register } from "prom-client";
 import cors from "cors";
+import express, { type Request, type Response } from "express";
+import { register } from "prom-client";
+import { ChaoticApi } from "./api";
+import { getMetrics } from "./prometheus";
+import type { RedisConnectionManager } from "./redis-connection-manager";
+import { HTTP_CACHE_MAX_AGE, corsOptions } from "./types";
 
 export async function startWebServer(port: number, manager: RedisConnectionManager) {
     const connection = manager.getClient();

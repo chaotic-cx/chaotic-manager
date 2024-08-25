@@ -1,15 +1,15 @@
 if (!process.env.NODE_ENV) process.env.NODE_ENV = "production";
 
+import fs from "fs";
+import type { Worker } from "bullmq";
 import commandLineArgs from "command-line-args";
 import IORedis from "ioredis";
+import * as Prometheus from "prom-client";
 import createBuilder from "./builder";
 import createDatabaseWorker from "./database";
 import { RedisConnectionManager } from "./redis-connection-manager";
-import { Worker } from "bullmq";
 import { scheduleAutoRepoRemove, schedulePackages } from "./scheduler";
 import { startWebServer } from "./web";
-import * as Prometheus from "prom-client";
-import fs from "fs";
 
 const mainDefinitions = [
     { name: "command", defaultOption: true },

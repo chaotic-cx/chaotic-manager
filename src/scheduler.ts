@@ -1,7 +1,7 @@
-import RedisConnection from "ioredis";
-import { DepGraph } from "dependency-graph";
-import { DispatchJobData } from "./types";
 import { Queue } from "bullmq";
+import { DepGraph } from "dependency-graph";
+import type RedisConnection from "ioredis";
+import type { DispatchJobData } from "./types";
 
 export default function schedulePackage(
     connection: RedisConnection,

@@ -1,5 +1,5 @@
 import to from "await-to-js";
-import Notifier from "./notifier";
+import type Notifier from "./notifier";
 
 export function splitJobId(jobId: string): {
     target_repo: string;

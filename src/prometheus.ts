@@ -1,5 +1,5 @@
+import type { Queue } from "bullmq";
 import * as Prometheus from "prom-client";
-import { Queue } from "bullmq";
 
 /**
  *  Prometheus metrics, counting the number of builds and their outcome via labels

@@ -1,89 +1,83 @@
 ---
-stages: [ checks, build ]
-
+stages: [checks, build]
 check-lint:
-    # Check all files for common anti-patterns and issues
-    stage: checks
-    image: alpine:latest
-    inherit:
-        variables: false
-    script:
-        - apk add --no-cache --upgrade bash npm py3-pip shellcheck shfmt
-        - pip install --break-system-packages yamllint
-        - npm install -g markdownlint-cli
-        - bash .ci/lint.sh || true # be graceful for now
-    rules:
-        - if: $UPDATE_BUILDER != "1"
-
+  # Check all files for common anti-patterns and issues
+  stage: checks
+  image: alpine:latest
+  inherit:
+    variables: false
+  script:
+    - apk add --no-cache --upgrade bash npm py3-pip shellcheck shfmt
+    - pip install --break-system-packages yamllint
+    - npm install -g markdownlint-cli
+    - bash .ci/lint.sh || true  # be graceful for now
+  rules:
+    - if: $UPDATE_BUILDER != "1"
 check-pr-commitizen:
-    # Check the current commit message for compliance with commitizen
-    stage: checks
-    image: alpine:latest
-    inherit:
-        variables: false
-    script:
-        - apk add --no-cache --upgrade py3-pip
-        - pip install --break-system-packages commitizen
-        - cz check --message "$CI_COMMIT_MESSAGE" >/tmp/cz_check || true
-        - grep "successful" /tmp/cz_check
-    rules:
-        - if: $UPDATE_BUILDER != "1"
-
+  # Check the current commit message for compliance with commitizen
+  stage: checks
+  image: alpine:latest
+  inherit:
+    variables: false
+  script:
+    - apk add --no-cache --upgrade py3-pip
+    - pip install --break-system-packages commitizen
+    - cz check --message "$CI_COMMIT_MESSAGE" >/tmp/cz_check || true
+    - grep "successful" /tmp/cz_check
+  rules:
+    - if: $UPDATE_BUILDER != "1"
 build-builder:
-    # Used to deploy a new base Docker image for building purposes
-    # this one runs once per day via pipeline schedules
-    stage: build
-    image: docker:24-cli
-    services:
-        - name: docker:24-dind
-          alias: docker-daemon
-    script:
-        - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
-        - docker build -t "$CI_REGISTRY_IMAGE/builder:latest" ./builder-container
-        - docker push "$CI_REGISTRY_IMAGE/builder:latest"
-    tags: [ "dind" ]
-    variables:
-        DOCKER_DRIVER: overlay2
-        DOCKER_HOST: tcp://docker-daemon:2375/
-        DOCKER_TLS_CERTDIR: ""
-    rules:
-        - changes:
-              - builder-container/*
-          if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-        - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $UPDATE_BUILDER == "1"
-
+  # Used to deploy a new base Docker image for building purposes,
+  # this one runs once per day via pipeline schedules
+  stage: build
+  image: docker:24-cli
+  services:
+    - name: docker:24-dind
+      alias: docker-daemon
+  script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+    - docker build -t "$CI_REGISTRY_IMAGE/builder:latest" ./builder-container
+    - docker push "$CI_REGISTRY_IMAGE/builder:latest"
+  tags: [dind]
+  variables:
+    DOCKER_DRIVER: overlay2
+    DOCKER_HOST: tcp://docker-daemon:2375/
+    DOCKER_TLS_CERTDIR: ''
+  rules:
+    - changes: [builder-container/*]
+      if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $UPDATE_BUILDER == "1"
 build-manager:
-    stage: build
-    image: docker:24-cli
-    services:
-        - name: docker:24-dind
-          alias: docker-daemon
-    script:
-        - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
-        - docker build -t "$CI_REGISTRY_IMAGE/manager:latest" -f Dockerfile .
-        - docker push "$CI_REGISTRY_IMAGE/manager:latest"
-    tags: [ "dind" ]
-    variables:
-        DOCKER_DRIVER: overlay2
-        DOCKER_HOST: tcp://docker-daemon:2375/
-        DOCKER_TLS_CERTDIR: ""
-    rules:
-        - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $UPDATE_BUILDER != "1"
-
+  stage: build
+  image: docker:24-cli
+  services:
+    - name: docker:24-dind
+      alias: docker-daemon
+  script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+    - docker build -t "$CI_REGISTRY_IMAGE/manager:latest" -f Dockerfile .
+    - docker push "$CI_REGISTRY_IMAGE/manager:latest"
+  tags: [dind]
+  variables:
+    DOCKER_DRIVER: overlay2
+    DOCKER_HOST: tcp://docker-daemon:2375/
+    DOCKER_TLS_CERTDIR: ''
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $UPDATE_BUILDER != "1"
 build-manager-podman:
-    stage: build
-    image: docker:24-cli
-    services:
-        - name: docker:24-dind
-          alias: docker-daemon
-    script:
-        - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
-        - docker build -t "$CI_REGISTRY_IMAGE/manager-podman:latest" -f Dockerfile-podman .
-        - docker push "$CI_REGISTRY_IMAGE/manager-podman:latest"
-    tags: [ "dind" ]
-    variables:
-        DOCKER_DRIVER: overlay2
-        DOCKER_HOST: tcp://docker-daemon:2375/
-        DOCKER_TLS_CERTDIR: ""
-    rules:
-        - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $UPDATE_BUILDER != "1"
+  stage: build
+  image: docker:24-cli
+  services:
+    - name: docker:24-dind
+      alias: docker-daemon
+  script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+    - docker build -t "$CI_REGISTRY_IMAGE/manager-podman:latest" -f Dockerfile-podman .
+    - docker push "$CI_REGISTRY_IMAGE/manager-podman:latest"
+  tags: [dind]
+  variables:
+    DOCKER_DRIVER: overlay2
+    DOCKER_HOST: tcp://docker-daemon:2375/
+    DOCKER_TLS_CERTDIR: ''
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $UPDATE_BUILDER != "1"

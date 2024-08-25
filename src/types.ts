@@ -1,4 +1,4 @@
-import { CorsOptions } from "cors";
+import type { CorsOptions } from "cors";
 
 export interface PacmanRepo {
     name: string;
@@ -72,9 +72,9 @@ export interface DispatchJobData {
 }
 
 export enum BuildStatus {
-    SUCCESS,
-    ALREADY_BUILT,
-    SKIPPED,
+    SUCCESS = 0,
+    ALREADY_BUILT = 1,
+    SKIPPED = 2,
 }
 
 // The object the API should return on /api/packages calls
