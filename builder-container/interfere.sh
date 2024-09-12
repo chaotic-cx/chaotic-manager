@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# shellcheck source=util.shlib
 source ./util.shlib
 
 function interference-generic() {

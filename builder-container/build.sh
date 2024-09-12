@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -eo pipefail
 
+# shellcheck source=util.shlib
 source ./util.shlib
 
 PKGOUT="/home/builder/pkgout/"
@@ -99,6 +100,11 @@ function setup-build-configs {
                 touch "$SRCDEST/.timestamp"
             fi
         fi
+
+		# In case we want to override the global timeout for a specific package. Useful for e.g. Ungoogled Chromium or kernels.
+		if [[ -v "CONFIG[BUILDER_EXTRA_TIMEOUT]" ]]; then 
+			BUILDER_TIMEOUT=$(($"${CONFIG[BUILDER_EXTRA_TIMEOUT]}" * "$BUILDER_TIMEOUT"))
+		fi
     fi
 }
 

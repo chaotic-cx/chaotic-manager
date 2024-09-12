@@ -2,6 +2,7 @@
 
 [![pipeline status](https://gitlab.com/garuda-linux/tools/chaotic-manager/badges/main/pipeline.svg)](https://gitlab.com/garuda-linux/tools/chaotic-manager/-/commits/main)
 [![Commitizen friendly](https://img.shields.io/badge/commitizen-friendly-brightgreen.svg)](http://commitizen.github.io/cz-cli/)
+[![Latest Release](https://gitlab.com/garuda-linux/tools/chaotic-manager/-/badges/release.svg)](https://gitlab.com/garuda-linux/tools/chaotic-manager/-/releases)
 
 This repository contains the code for Chaotic-AUR's infra 4.0, as well as the repository template in a git submodule.
 It supersedes Infra 3.0, taking a different approach to distributing and executing builds.
