@@ -7,7 +7,7 @@ import { register } from "prom-client";
 import { ChaoticApi } from "./api";
 import { getMetrics } from "./prometheus";
 import type { RedisConnectionManager } from "./redis-connection-manager";
-import { HTTP_CACHE_MAX_AGE, corsOptions } from "./types";
+import { corsOptions, HTTP_CACHE_MAX_AGE } from "./types";
 
 export async function startWebServer(port: number, manager: RedisConnectionManager) {
     const connection = manager.getClient();
@@ -34,10 +34,12 @@ export async function startWebServer(port: number, manager: RedisConnectionManag
         res.setHeader("Content-Type", "text/plain");
         res.setHeader("Connection", "keep-alive");
 
-        const id: string = req.params.id;
+        // Get variables, ensuring also packages with "+" in the name are getting parsed validly
+        const id: string = req.params.id.replaceAll(/%2B/g, "+");
         const timestamp: string = req.params.timestamp;
-        // Verify if timestamp is a number and if id is alphanumerical or -/_ via regex
-        if (!/^\d+$/.test(timestamp) || !/^[a-zA-Z0-9-_]+$/.test(id)) {
+
+        // Verify if the timestamp is a number and if id is alphanumerical or -/_ via regex
+        if (!/^\d+$/.test(timestamp) || !/^[a-zA-Z0-9-_+]+$/.test(id)) {
             res.status(400).send("Invalid timestamp");
             return;
         }
