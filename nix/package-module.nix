@@ -1,4 +1,4 @@
-{
+{inputs, ...}: {
   perSystem = {
     lib,
     pkgs,
@@ -107,6 +107,16 @@
         source /etc/set-environment
         nix repl --file "${replPath}/repl.nix" "$@"
       '';
+
+      ci =
+        (inputs.nixpkgs.lib.nixosSystem {
+          system = "x86_64-linux";
+          modules = [./ci.nix {}];
+        })
+        .config
+        .system
+        .build
+        .vm;
     };
   };
 }

@@ -7,6 +7,13 @@
   cfg = config.chaotic;
 in {
   options.chaotic = with lib; {
+    containerEngine = mkOption {
+      default = "docker";
+      type = types.enum ["docker" "podman"];
+      description = mdDoc ''
+        Which container engine to use for running the containers with.
+      '';
+    };
     builder = {
       enable = mkOption {
         default = false;
@@ -60,8 +67,8 @@ in {
           '';
         };
         port = mkOption {
-          default = "6379";
-          type = types.str;
+          default = 6379;
+          type = types.int;
           description = mdDoc ''
             The port of the Redis server.
           '';
@@ -136,7 +143,7 @@ in {
         };
         port = mkOption {
           default = 6379;
-          type = types.str;
+          type = types.int;
           description = mdDoc ''
             The port of the Redis server.
           '';
@@ -156,7 +163,7 @@ in {
           '';
         };
         passwordFile = mkOption {
-          default = null;
+          default = "";
           type = types.str;
           description = mdDoc ''
             The password file to use for the Redis server.
@@ -269,10 +276,17 @@ in {
   };
 
   config = {
-    # Docker is needed, as builds are being executed in it. Database operations as well.
-    virtualisation.docker = lib.mkIf (cfg.builder.enable || cfg.manager.enable) {
-      autoPrune.enable = true;
-      enable = true;
+    # Docker or Podman are needed, as builds are being executed in it. Database operations as well.
+    virtualisation = {
+      docker = lib.mkIf ((cfg.builder.enable || cfg.manager.enable) && cfg.builderEngine == "docker") {
+        autoPrune.enable = true;
+        enable = true;
+      };
+      podman = lib.mkIf ((cfg.builder.enable || cfg.manager.enable) && cfg.builderEngine == "podman") {
+        autoPrune.enable = true;
+        dockerCompat = true;
+        enable = true;
+      };
     };
 
     # Builder service
@@ -311,7 +325,7 @@ in {
         bind = cfg.manager.redis.host;
         enable = true;
         inherit (cfg.manager.redis) port;
-        requirePassFile = cfg.database.redis.passwordFile;
+        requirePassFile = cfg.manager.redis.passwordFile;
       };
     };
 
@@ -327,12 +341,15 @@ in {
     '';
 
     # Package deploying user
-    users.users.package-deployer = lib.mkIf cfg.manager.enable {
-      isNormalUser = true;
-      extraGroups = [cfg.manager.ssh.group];
-      openssh.authorizedKeys.keys = cfg.manager.ssh.allowedPubkeys;
+    users.users = {
+      ${cfg.builder.user}.extraGroups = lib.mkIf cfg.builder.enable && cfg.builder.user != "root" ["docker"];
+      package-deployer = lib.mkIf cfg.manager.enable {
+        isNormalUser = true;
+        extraGroups = [cfg.manager.ssh.group];
+        openssh.authorizedKeys.keys = cfg.manager.ssh.allowedPubkeys;
+      };
     };
-    users.groups.${cfg.manager.sshGroup} = {};
+    users.groups.${cfg.manager.ssh.group} = {};
 
     # Chaotic Manager service
     systemd.services.chaotic-manager = lib.mkIf cfg.manager.enable {
