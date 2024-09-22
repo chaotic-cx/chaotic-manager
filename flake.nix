@@ -24,7 +24,6 @@
     perSystem = {
       pkgs,
       system,
-      self',
       ...
     }: {
       # Handy devshell for working with this flake

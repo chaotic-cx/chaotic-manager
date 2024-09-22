@@ -1,7 +1,7 @@
 {
   config,
   lib,
-  self',
+  packages,
   ...
 }: let
   cfg = config.chaotic;
@@ -23,7 +23,7 @@ in {
         '';
       };
       package = mkOption {
-        default = self'.packages.chaotic-manager;
+        default = packages.chaotic-builder;
         type = types.package;
         description = mdDoc ''
           The package to use for the Chaotic Builder service.
@@ -43,7 +43,7 @@ in {
           The build timeout to use for the Chaotic Builder service in seconds.
         '';
       };
-      enironmentFile = mkOption {
+      environmentFile = mkOption {
         default = null;
         type = types.path;
         description = mdDoc ''
@@ -119,7 +119,7 @@ in {
         '';
       };
       package = mkOption {
-        default = self'.packages.chaotic-manager;
+        default = self.packages.chaotic-manager;
         type = types.package;
         description = mdDoc ''
           The package to use for the Chaotic Manager service.
@@ -163,8 +163,8 @@ in {
           '';
         };
         passwordFile = mkOption {
-          default = "";
-          type = types.str;
+          default = null;
+          type = types.path;
           description = mdDoc ''
             The password file to use for the Redis server.
           '';
@@ -278,11 +278,11 @@ in {
   config = {
     # Docker or Podman are needed, as builds are being executed in it. Database operations as well.
     virtualisation = {
-      docker = lib.mkIf ((cfg.builder.enable || cfg.manager.enable) && cfg.builderEngine == "docker") {
+      docker = lib.mkIf ((cfg.builder.enable || cfg.manager.enable) && cfg.containerEngine == "docker") {
         autoPrune.enable = true;
         enable = true;
       };
-      podman = lib.mkIf ((cfg.builder.enable || cfg.manager.enable) && cfg.builderEngine == "podman") {
+      podman = lib.mkIf ((cfg.builder.enable || cfg.manager.enable) && cfg.containerEngine == "podman") {
         autoPrune.enable = true;
         dockerCompat = true;
         enable = true;

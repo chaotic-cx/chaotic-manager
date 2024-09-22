@@ -6,12 +6,12 @@
   users = {
     mutableUsers = false;
     users = {
-      garuda = {
+      nix = {
         isNormalUser = true;
         extraGroups = ["wheel"];
-        password = "garuda";
+        password = "nixos";
       };
-      root.password = "garuda";
+      root.password = "nixos";
     };
   };
 
@@ -23,6 +23,25 @@
   services.xserver = {
     enable = true;
     xkb.layout = "de";
+  };
+
+  # Builder dummy stuff
+  chaotic = {
+    builder = {
+      enable = true;
+      environmentFile = "/var/lib/chaotic/environment";
+      sshKey = "/var/lib/chaotic/ssh-key";
+    };
+    manager = {
+      enable = true;
+      environmentFile = "/var/lib/chaotic/environment";
+      redis.passwordFile = "/var/lib/chaotic/password";
+      repos = {
+        packageRepos = "test";
+        packageTargetRepos = "test";
+      };
+      sshKey = "/var/lib/chaotic/ssh-key";
+    };
   };
 
   # Timezone
