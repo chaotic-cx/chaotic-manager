@@ -6,7 +6,14 @@ import { currentTime } from "../utils";
 import type Docker from "dockerode";
 import fs from "fs";
 import path from "path";
-import { Builder_Action_BuildPackage_Params, BuildStatusReturn, BuildStatus, Database_Action_GenerateDestFillerFiles_Params, SOURCECACHE_MAX_LIFETIME, Database_Action_AddToDb_Params } from "../types";
+import {
+    Builder_Action_BuildPackage_Params,
+    BuildStatus,
+    BuildStatusReturn,
+    Database_Action_AddToDb_Params,
+    Database_Action_GenerateDestFillerFiles_Params,
+    SOURCECACHE_MAX_LIFETIME,
+} from "../types";
 import { ContainerManager, DockerManager } from "../container-manager";
 import { to } from "await-to-js";
 import Client from "node-scp";
@@ -20,8 +27,16 @@ function ensurePathClean(dir: string, create = true): void {
 
 // Request a list of files from the database server and fill the destination directory with empty files
 // Goal: stop pacman from building packages it has already built
-async function generateDestFillerFiles(ctx: Context, target_repo: string, arch: string, destdir: string): Promise<void> {
-    let generateDestFillerFilesParams: Database_Action_GenerateDestFillerFiles_Params = { target_repo: target_repo, arch: arch };
+async function generateDestFillerFiles(
+    ctx: Context,
+    target_repo: string,
+    arch: string,
+    destdir: string,
+): Promise<void> {
+    let generateDestFillerFilesParams: Database_Action_GenerateDestFillerFiles_Params = {
+        target_repo: target_repo,
+        arch: arch,
+    };
     let repo_files: string[] = await ctx.call("database.generateDestFillerFiles", generateDestFillerFilesParams);
     for (const line of repo_files) {
         const filepath = path.join(destdir, line);
@@ -61,8 +76,8 @@ export class BuilderService extends Service {
     builder = {
         ci_code_skip: Number(process.env.CI_CODE_SKIP) || 123,
         name: "chaotic-builder",
-        timeout: Number(process.env.BUILDER_TIMEOUT) || 3600
-    }
+        timeout: Number(process.env.BUILDER_TIMEOUT) || 3600,
+    };
 
     shared_srcdest_cache: string = path.join(process.env.SHARED_PATH || "", "srcdest_cache");
     shared_pkgout: string = path.join(process.env.SHARED_PATH || "", "pkgout");
@@ -91,7 +106,7 @@ export class BuilderService extends Service {
     }
 
     async buildPackage(ctx: Context): Promise<BuildStatusReturn> {
-        let data = ctx.params as Builder_Action_BuildPackage_Params
+        let data = ctx.params as Builder_Action_BuildPackage_Params;
         // If this fails something has gone terribly wrong
         // The coordinator should never send two jobs to the same builder
         return tryAcquire(this.mutex).runExclusive(async () => {
@@ -168,7 +183,7 @@ export class BuilderService extends Service {
                     logger.log(`Job ${ctx.id} failed`);
                     return {
                         success: BuildStatus.FAILED,
-                    }
+                    };
                 }
             } else logger.log(`Finished build ${ctx.id}. Uploading...`);
 
@@ -190,7 +205,7 @@ export class BuilderService extends Service {
                 console.log("End of SSH log.");
                 return {
                     success: BuildStatus.FAILED,
-                }
+                };
             }
             ensurePathClean(this.mountPkgout, false);
             logger.log(`Finished upload ${ctx.id}.`);
@@ -208,19 +223,18 @@ export class BuilderService extends Service {
             if (!addToDbReturn.success) {
                 return {
                     success: BuildStatus.FAILED,
-                }
-            };
-
+                };
+            }
             logger.log(`Build job ${ctx.id} finished at ${currentTime()}...`);
 
             return {
                 success: BuildStatus.SUCCESS,
-                packages: file_list
-            }
+                packages: file_list,
+            };
         });
     }
 
     async cancelBuild(ctx: Context) {
         // TODO
     }
-};
+}

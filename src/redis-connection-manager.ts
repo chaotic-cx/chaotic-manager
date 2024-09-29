@@ -2,6 +2,7 @@ import type RedisConnection from "ioredis";
 
 export class RedisConnectionManager {
     private subscriber: RedisConnection | undefined;
+
     constructor(private client: RedisConnection) {}
 
     public getClient(): RedisConnection {

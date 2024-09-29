@@ -1,7 +1,6 @@
 if (!process.env.NODE_ENV) process.env.NODE_ENV = "production";
 
 import fs from "fs";
-import type { Worker } from "bullmq";
 import commandLineArgs from "command-line-args";
 import IORedis from "ioredis";
 import * as Prometheus from "prom-client";
@@ -10,7 +9,7 @@ import { scheduleAutoRepoRemove, schedulePackages } from "./scheduler";
 import { startWebServer } from "./web";
 import { ServiceBroker } from "moleculer";
 import CoordinatorService from "./services/coordinator.service";
-import { BuildClass } from "./types"
+import { BuildClass } from "./types";
 import { DatabaseService } from "./services/database.service";
 import { NotifierService } from "./services/notifier.service";
 import { BuilderService } from "./services/builder.service";
@@ -31,8 +30,6 @@ const mainOptions = commandLineArgs(mainDefinitions, {
 const redisHost = process.env.REDIS_HOST || "localhost";
 const redisPort = Number(process.env.REDIS_PORT) || 6379;
 const redisPassword = process.env.REDIS_PASSWORD || "";
-
-const workers: Worker[] = [];
 
 Prometheus.collectDefaultMetrics();
 
@@ -55,8 +52,10 @@ async function main(): Promise<void> {
             },
         },
         metadata: {
-            build_class: process.env.BUILDER_CLASS ? Number(process.env.BUILDER_CLASS) as BuildClass : BuildClass.Medium,
-        }
+            build_class: process.env.BUILDER_CLASS
+                ? (Number(process.env.BUILDER_CLASS) as BuildClass)
+                : BuildClass.Medium,
+        },
     });
 
     switch (mainOptions.command) {
@@ -117,7 +116,7 @@ async function main(): Promise<void> {
             await connection.connect();
             const redis_connection_manager = new RedisConnectionManager(connection);
             broker.createService(new BuilderService(broker, redis_connection_manager));
-            broker.start();
+            void broker.start();
             break;
         }
         case "database": {
@@ -138,7 +137,7 @@ async function main(): Promise<void> {
             broker.createService(new DatabaseService(broker, redis_connection_manager));
             broker.createService(new CoordinatorService(broker));
             broker.createService(new NotifierService(broker));
-            broker.start();
+            void broker.start();
 
             if (typeof mainOptions["web-port"] !== "undefined") {
                 void startWebServer(Number(mainOptions["web-port"]), redis_connection_manager);

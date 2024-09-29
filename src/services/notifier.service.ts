@@ -1,9 +1,11 @@
 import ChaoticTelegramBot from "../telegram-bot";
 import { Service, ServiceBroker } from "moleculer";
-import { splitJobId } from "../utils";
-import { type BuildJobData, type FailureNotificationParams, type SuccessNotificationParams, type GenericNotificationParams } from "../types";
-import { to } from "await-to-js"
-import { type Repo } from "../repo-manager";
+import {
+    type FailureNotificationParams,
+    type GenericNotificationParams,
+    type SuccessNotificationParams,
+} from "../types";
+import { to } from "await-to-js";
 
 /**
  * Notifier class to send messages to the implemented destinations.
@@ -36,7 +38,7 @@ export class NotifierService extends Service {
             actions: {
                 notifyPackages: this.createDeploymentNotification,
                 notifyFailure: this.createFailedBuildNotification,
-                notifyGeneric: this.notify
+                notifyGeneric: this.notify,
             },
         });
     }
@@ -53,7 +55,7 @@ export class NotifierService extends Service {
                 void this.telegramBot.notify(params.message);
             }
         } catch (err) {
-            console.error(`Notifier: fatal error ${err}`)
+            console.error(`Notifier: fatal error ${err}`);
         }
     }
 
@@ -68,9 +70,9 @@ export class NotifierService extends Service {
             for (const pkg of params.packages) {
                 text += ` > ${pkg.replace(/\.pkg.tar.zst$/, "")}\n`;
             }
-            this.createTrivialNotification(text);
+            void this.createTrivialNotification(text);
         } catch (err) {
-            console.error(`Notifier: fatal error ${err}`)
+            console.error(`Notifier: fatal error ${err}`);
         }
     }
 
@@ -103,18 +105,16 @@ export class NotifierService extends Service {
             } else {
                 text += "\n";
             }
-            this.createTrivialNotification(text);
+            void this.createTrivialNotification(text);
         } catch (err) {
-            console.error(`Notifier: fatal error ${err}`)
+            console.error(`Notifier: fatal error ${err}`);
         }
     }
 
     /**
      * Helper function for sending a notification containing one string for the given event and logging
      * eventual errors gracefully.
-     *
-     * @param event The event to notify.
-     * @param notifier The notifier instance to use
+     * @param event The event to notify about.
      */
     private async createTrivialNotification(event: string): Promise<void> {
         const [err]: [Error, undefined] | [null, void] = await to(this.notify({ message: event }));

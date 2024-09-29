@@ -1,8 +1,15 @@
 import { Context, Service, ServiceBroker } from "moleculer";
 import {
-    CoordinatorJob, Builder_Action_BuildPackage_Params, BuildStatus, BuildStatusReturn, Coordinator_Action_AddJobsToQueue_Params,
-    Coordinator_Action_AutoRepoRemove_Params, Database_Action_AutoRepoRemove_Params, Database_Action_fetchUploadInfo_Response,
-    SuccessNotificationParams, FailureNotificationParams
+    Builder_Action_BuildPackage_Params,
+    BuildStatus,
+    BuildStatusReturn,
+    Coordinator_Action_AddJobsToQueue_Params,
+    Coordinator_Action_AutoRepoRemove_Params,
+    CoordinatorJob,
+    Database_Action_AutoRepoRemove_Params,
+    Database_Action_fetchUploadInfo_Response,
+    FailureNotificationParams,
+    SuccessNotificationParams,
 } from "../types";
 import { RepoManager } from "../repo-manager";
 import { DepGraph } from "dependency-graph";
@@ -11,7 +18,8 @@ const base_logs_url = process.env.LOGS_URL;
 const package_repos = process.env.PACKAGE_REPOS;
 const package_target_repos = process.env.PACKAGE_TARGET_REPOS;
 const package_repos_notifiers = process.env.PACKAGE_REPOS_NOTIFIERS;
-const builder_image = process.env.BUILDER_IMAGE || "registry.gitlab.com/garuda-linux/tools/chaotic-manager/builder:latest";
+const builder_image =
+    process.env.BUILDER_IMAGE || "registry.gitlab.com/garuda-linux/tools/chaotic-manager/builder:latest";
 
 function initRepoManager(repo_manager: RepoManager) {
     if (package_repos) {
@@ -105,15 +113,14 @@ function getPossibleJobs(graph: DepGraph<CoordinatorJob>, builder_class: number)
             jobs.push(job);
         }
     }
-    
+
     console.log("Available jobs: ", jobs);
     return jobs;
 }
 
 function createAssignLoop(coordinator: CoordinatorService) {
+    // On job finish / on new job added
     setTimeout(() => {
-        console.log("AAAAAAAAAAAAAAAAAAAAAAAA", coordinator.queue)
-        
         coordinator.assignJobs().finally(() => {
             createAssignLoop(coordinator);
         });
@@ -153,7 +160,7 @@ export class CoordinatorService extends Service {
     }
 
     async assignJobs() {
-        console.debug("Coordinator: Trying to assign jobs...")
+        console.debug("Coordinator: Trying to assign jobs...");
 
         let services: any[] = await this.broker.call("$node.services");
         let nodes: string[] | undefined;
@@ -179,7 +186,9 @@ export class CoordinatorService extends Service {
         // nodes.includes(node.id) -> check if the node is in the list of builder nodes
         // node.available -> check if the node is available (not offline)
         // !this.busy_nodes[node.id] -> check if the node is not in the list of busy nodes
-        let available_nodes: any[] = full_node_list.filter((node: any) => nodes.includes(node.id) && node.available && !this.busy_nodes[node.id]);
+        let available_nodes: any[] = full_node_list.filter(
+            (node: any) => nodes.includes(node.id) && node.available && !this.busy_nodes[node.id],
+        );
 
         if (available_nodes.length == 0) {
             console.log("Coordinator: All builder nodes are busy or unavailable.");
@@ -189,7 +198,7 @@ export class CoordinatorService extends Service {
         let graph = constructDependencyGraph(this.queue);
         let upload_info = await this.getUploadInfo();
 
-        console.debug("Coordinator: Entering available nodes loop")
+        console.debug("Coordinator: Entering available nodes loop");
 
         for (const node of available_nodes) {
             let jobs = getPossibleJobs(graph, node.metadata.build_class);
@@ -215,74 +224,80 @@ export class CoordinatorService extends Service {
                 builder_image,
                 upload_info,
                 timestamp: job.timestamp,
-                commit: job.commit
+                commit: job.commit,
             };
 
             job.node = node.id;
 
-            this.broker.call<BuildStatusReturn, Builder_Action_BuildPackage_Params>("builder.buildPackage", params, { nodeID: node.id }).then((ret: BuildStatusReturn) => {
-                switch (ret.success) {
-                    case BuildStatus.ALREADY_BUILT: {
-                        source_repo.notify(job, "canceled", "Build skipped because package was already built.");
-                        break;
-                    }
-                    case BuildStatus.SUCCESS: {
-                        source_repo.notify(job, "success", "Package successfully deployed.");
-                        const notify_params: SuccessNotificationParams = {
-                            packages: ret.packages!,
-                            event: `📣 New deployment to ${job.target_repo}`
+            this.broker
+                .call<BuildStatusReturn, Builder_Action_BuildPackage_Params>("builder.buildPackage", params, {
+                    nodeID: node.id,
+                })
+                .then((ret: BuildStatusReturn) => {
+                    switch (ret.success) {
+                        case BuildStatus.ALREADY_BUILT: {
+                            source_repo.notify(job, "canceled", "Build skipped because package was already built.");
+                            break;
                         }
-                        this.broker.call("notifier.notifyPackages", notify_params)
-                        break;
-                    }
-                    case BuildStatus.SKIPPED: {
-                        source_repo.notify(job, "canceled", "Build skipped intentionally via build tools.");
-                        break;
-                    }
-                    case BuildStatus.FAILED: {
-                        const notify_params: FailureNotificationParams = {
-                            pkgbase: params.pkgbase,
-                            event: `🚨 Failed deploying to ${job.target_repo}`,
-                            source_repo_url: params.source_repo_url,
-                            source_repo: params.source_repo,
-                            timestamp: params.timestamp,
-                            commit: params.commit
+                        case BuildStatus.SUCCESS: {
+                            source_repo.notify(job, "success", "Package successfully deployed.");
+                            const notify_params: SuccessNotificationParams = {
+                                packages: ret.packages!,
+                                event: `📣 New deployment to ${job.target_repo}`,
+                            };
+                            this.broker.call("notifier.notifyPackages", notify_params);
+                            break;
                         }
-                        this.broker.call("notifier.notifyFailure", params)
-                        source_repo.notify(job, "failed", "Build failed.");
-                        break;
-                    }
-                    case BuildStatus.TIMED_OUT: {
-                        const notify_params: FailureNotificationParams = {
-                            pkgbase: params.pkgbase,
-                            event: `⏳ Build for ${params.source_repo} failed due to a timeout`,
-                            source_repo_url: params.source_repo_url,
-                            source_repo: params.source_repo,
-                            timestamp: params.timestamp,
-                            commit: params.commit
+                        case BuildStatus.SKIPPED: {
+                            source_repo.notify(job, "canceled", "Build skipped intentionally via build tools.");
+                            break;
                         }
+                        case BuildStatus.FAILED: {
+                            const notify_params: FailureNotificationParams = {
+                                pkgbase: params.pkgbase,
+                                event: `🚨 Failed deploying to ${job.target_repo}`,
+                                source_repo_url: params.source_repo_url,
+                                source_repo: params.source_repo,
+                                timestamp: params.timestamp,
+                                commit: params.commit,
+                            };
+                            this.broker.call("notifier.notifyFailure", notify_params);
+                            source_repo.notify(job, "failed", "Build failed.");
+                            break;
+                        }
+                        case BuildStatus.TIMED_OUT: {
+                            const notify_params: FailureNotificationParams = {
+                                pkgbase: params.pkgbase,
+                                event: `⏳ Build for ${params.source_repo} failed due to a timeout`,
+                                source_repo_url: params.source_repo_url,
+                                source_repo: params.source_repo,
+                                timestamp: params.timestamp,
+                                commit: params.commit,
+                            };
 
-                        this.broker.call("notifier.notifyFailure", notify_params)
-                        source_repo.notify(job, "failed", "Build timed out.");
-                        break;
+                            this.broker.call("notifier.notifyFailure", notify_params);
+                            source_repo.notify(job, "failed", "Build timed out.");
+                            break;
+                        }
                     }
-                }
-            }).catch((err) => {
-                console.error("Failed during package deployment:", err);
-                source_repo.notify(job, "failed", "Build failed.");
-                const notify_params: FailureNotificationParams = {
-                    pkgbase: params.pkgbase,
-                    event: `💥 The code blew up while deploying to ${job.target_repo}`,
-                    source_repo_url: params.source_repo_url,
-                    source_repo: params.source_repo,
-                    timestamp: params.timestamp,
-                    commit: params.commit
-                }
-                this.broker.call("notifier.notifyFailure", notify_params)
-            }).finally(() => {
-                delete this.queue[job.toId()];
-                delete this.busy_nodes[node.id];
-            });
+                })
+                .catch((err) => {
+                    console.error("Failed during package deployment:", err);
+                    source_repo.notify(job, "failed", "Build failed.");
+                    const notify_params: FailureNotificationParams = {
+                        pkgbase: params.pkgbase,
+                        event: `💥 The code blew up while deploying to ${job.target_repo}`,
+                        source_repo_url: params.source_repo_url,
+                        source_repo: params.source_repo,
+                        timestamp: params.timestamp,
+                        commit: params.commit,
+                    };
+                    this.broker.call("notifier.notifyFailure", notify_params);
+                })
+                .finally(() => {
+                    delete this.queue[job.toId()];
+                    delete this.busy_nodes[node.id];
+                });
         }
     }
 
@@ -295,8 +310,20 @@ export class CoordinatorService extends Service {
         console.debug("Called!", data);
 
         for (const pkg of data.packages) {
-            jobs.push(new CoordinatorJob(pkg.pkgbase, data.target_repo, data.source_repo, data.arch, pkg.build_class || 0, pkg.pkgnames, pkg.dependencies, timestamp, data.commit));
-            console.log("Pushing new job", pkg)
+            jobs.push(
+                new CoordinatorJob(
+                    pkg.pkgbase,
+                    data.target_repo,
+                    data.source_repo,
+                    data.arch,
+                    pkg.build_class || 0,
+                    pkg.pkgnames,
+                    pkg.dependencies,
+                    timestamp,
+                    data.commit,
+                ),
+            );
+            console.log("Pushing new job", pkg);
         }
         for (const job of jobs) {
             let id = job.toId();
@@ -305,7 +332,7 @@ export class CoordinatorService extends Service {
                 // TODO: cancel jobs if they are currently active
                 continue;
             }
-            console.debug("Queued", job)
+            console.debug("Queued", job);
             this.queue[job.toId()] = job;
         }
     }
@@ -315,13 +342,13 @@ export class CoordinatorService extends Service {
         const request: Database_Action_AutoRepoRemove_Params = {
             builder_image,
             ...data,
-        }
+        };
         return await this.broker.call("database.autoRepoRemove", request);
     }
-};
+}
 
 export default CoordinatorService;
 
 // TODO:
-// 
+//
 // assignJobs should not be called in a loop, but rather be called when a job is finished/a new builder is available

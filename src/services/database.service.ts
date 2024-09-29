@@ -1,7 +1,11 @@
 import { Context, Service, ServiceBroker } from "moleculer";
 import { Mutex } from "async-mutex";
-import { Database_Action_AddToDb_Params, Database_Action_AutoRepoRemove_Params, Database_Action_fetchUploadInfo_Response, Database_Action_GenerateDestFillerFiles_Params } from "../types";
-import { RepoManager } from "../repo-manager";
+import {
+    Database_Action_AddToDb_Params,
+    Database_Action_AutoRepoRemove_Params,
+    Database_Action_fetchUploadInfo_Response,
+    Database_Action_GenerateDestFillerFiles_Params,
+} from "../types";
 import { RedisConnectionManager } from "../redis-connection-manager";
 import { BuildsRedisLogger } from "../logging";
 import { ContainerManager, DockerManager } from "../container-manager";
@@ -57,7 +61,7 @@ export class DatabaseService extends Service {
                 },
                 landing_zone: landing_zone_adv || this.landing_zone,
             },
-        }
+        };
     }
 
     // Add multiple package files that belong to a pkgbase to the database
@@ -67,14 +71,14 @@ export class DatabaseService extends Service {
             // const repo = this.repo_manager.getRepo(data.repo);
 
             const logger = new BuildsRedisLogger(this.redis_connection_manager.getClient());
-            logger.from(data.pkgbase, data.timestamp);
+            void logger.from(data.pkgbase, data.timestamp);
 
             logger.log(`Processing add to db job ${ctx.id} at ${currentTime()}`);
 
             if (data.pkgfiles.length < 1) {
                 return {
-                    success: false
-                }
+                    success: false,
+                };
             }
 
             const [err, out] = await this.container_manager.run(
@@ -90,12 +94,12 @@ export class DatabaseService extends Service {
                 logger.error(`Failed to add packages to the database.`);
                 return {
                     success: false,
-                }
+                };
             }
             logger.log(`Successfully added packages to the database.`);
             return {
                 success: true,
-            }
+            };
         });
     }
 

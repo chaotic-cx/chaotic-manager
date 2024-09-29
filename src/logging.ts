@@ -1,8 +1,6 @@
 import to from "await-to-js";
-import { type Job, MetricsTime, type Queue } from "bullmq";
+import { MetricsTime } from "bullmq";
 import type RedisConnection from "ioredis";
-import type { BuildJobData } from "./types";
-import { splitJobId } from "./utils";
 
 // Console.log imitation that saves to a variable instead of stdout
 export class SshLogger {
@@ -11,6 +9,7 @@ export class SshLogger {
     log(arg: any): void {
         this.logs.push(arg);
     }
+
     dump(): string {
         return this.logs.join("\n");
     }
@@ -33,8 +32,7 @@ export class BuildsRedisLogger {
 
         if (timestamp === undefined) {
             const [err, out] = await to(this.connection.get(this.default_key));
-            if (err || !out)
-                throw new Error("Job not found");
+            if (err || !out) throw new Error("Job not found");
             timestamp = Number.parseInt(out);
         }
 

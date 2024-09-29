@@ -136,7 +136,7 @@ export type Database_Action_fetchUploadInfo_Response = {
 };
 
 export type Database_Action_AddToDb_Params = {
-    pkgbase: string,
+    pkgbase: string;
     arch: string;
     pkgfiles: string[];
     target_repo: string;
@@ -168,12 +168,12 @@ export type Builder_Action_BuildPackage_Params = {
     extra_keyrings: string; // repo_manager.getTargetRepo(data.target_repo).keyringsToBashArray()
     upload_info: Database_Action_fetchUploadInfo_Response;
     timestamp: number;
-    commit?: string
+    commit?: string;
 };
 
 export type BuildStatusReturn = {
-    success: BuildStatus,
-    packages?: string[],
+    success: BuildStatus;
+    packages?: string[];
 };
 
 export interface Coordinator_Action_PackageMetaData_Single {
@@ -190,10 +190,10 @@ export type Coordinator_Action_AddJobsToQueue_Params = {
     source_repo: string;
     commit: string | undefined;
     arch: string;
-    packages: Coordinator_Action_PackageMetaData_List
+    packages: Coordinator_Action_PackageMetaData_List;
 };
 
-export type Coordinator_Action_AutoRepoRemove_Params = Omit<Database_Action_AutoRepoRemove_Params, "builder_image">
+export type Coordinator_Action_AutoRepoRemove_Params = Omit<Database_Action_AutoRepoRemove_Params, "builder_image">;
 
 export enum BuildClass {
     "Small" = 0,
@@ -213,7 +213,17 @@ export class CoordinatorJob {
     timestamp: number;
     commit: string | undefined;
 
-    constructor(pkgbase: string, target_repo: string, source_repo: string, arch: string, build_class: number, pkgnames: string[] | undefined, dependencies: string[] | undefined, timestamp: number, commit: string | undefined) {
+    constructor(
+        pkgbase: string,
+        target_repo: string,
+        source_repo: string,
+        arch: string,
+        build_class: number,
+        pkgnames: string[] | undefined,
+        dependencies: string[] | undefined,
+        timestamp: number,
+        commit: string | undefined,
+    ) {
         this.pkgbase = pkgbase;
         this.target_repo = target_repo;
         this.source_repo = source_repo;
@@ -229,22 +239,22 @@ export class CoordinatorJob {
     toId() {
         return `${this.target_repo}/${this.arch}/${this.pkgbase}`;
     }
-};
+}
 
 export interface SuccessNotificationParams {
-    packages: string[],
-    event: string
+    packages: string[];
+    event: string;
 }
 
 export interface FailureNotificationParams {
-    pkgbase: string,
-    timestamp: number,
-    event: string,
-    source_repo: string,
-    commit?: string,
-    source_repo_url: string
+    pkgbase: string;
+    timestamp: number;
+    event: string;
+    source_repo: string;
+    commit?: string;
+    source_repo_url: string;
 }
 
 export interface GenericNotificationParams {
-    message: string
+    message: string;
 }

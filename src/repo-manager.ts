@@ -1,7 +1,6 @@
 import { URL } from "url";
 import to from "await-to-js";
 import type { CoordinatorJob, PacmanRepo } from "./types";
-import { splitJobId } from "./utils";
 
 export type GitlabState = "pending" | "running" | "success" | "failed" | "canceled";
 
