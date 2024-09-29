@@ -13,8 +13,6 @@ import { ContainerManager, DockerManager } from "../container-manager";
 import { currentTime } from "../utils";
 import fs from "fs";
 
-// TODO: FETCH builder_image from the coordinator?
-
 export class DatabaseService extends Service {
     landing_zone: string = process.env.LANDING_ZONE_PATH || "";
     repo_root: string = process.env.REPO_PATH || "";

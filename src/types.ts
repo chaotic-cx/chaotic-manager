@@ -1,4 +1,5 @@
 import type { CorsOptions } from "cors";
+import { Container } from "dockerode";
 
 export interface PacmanRepo {
     name: string;
@@ -164,11 +165,12 @@ export type Builder_Action_BuildPackage_Params = {
     arch: string;
     pkgbase: string;
     builder_image: string;
-    extra_repos: string; // repo_manager.getTargetRepo(data.extra_repos).repoToString(),
-    extra_keyrings: string; // repo_manager.getTargetRepo(data.target_repo).keyringsToBashArray()
+    extra_repos: string;
+    extra_keyrings: string;
     upload_info: Database_Action_fetchUploadInfo_Response;
     timestamp: number;
     commit?: string;
+    container?: Container;
 };
 
 export type BuildStatusReturn = {

@@ -1,8 +1,8 @@
 import { Stream } from "stream";
 import { Mutex } from "async-mutex";
 import to from "await-to-js";
-import type Dockerode from "dockerode";
-import Docker from "dockerode";
+import Dockerode from "dockerode";
+import Docker, { Container } from "dockerode";
 import { type ContainerCreateMountOption, type LibPod, LibpodDockerode } from "./libpod-dockerode";
 
 export abstract class ContainerManager {
@@ -16,8 +16,7 @@ export abstract class ContainerManager {
         }
     }
 
-    async pullImage(imagename: string, locked = false) {
-        // if (process.env.NODE_ENV === "development") return;
+    async pullImage(imagename: string, locked = false): Promise<void> {
         if (!locked) await this.pull_mutex.acquire();
 
         try {
@@ -68,7 +67,7 @@ export abstract class ContainerManager {
         binds: string[] = [],
         env: string[] = [],
         logfunc: (arg: string) => void = console.log,
-    ) {
+    ): Promise<[Error, undefined] | [null, unknown]> {
         const image = await this.getImage(imagename);
 
         const stream = new Stream.Writable();
@@ -123,7 +122,7 @@ export abstract class ContainerManager {
 export class DockerManager extends ContainerManager {
     docker: Docker = new Docker();
 
-    async create(imagename: string, args: string[], binds: string[] = [], env: string[] = []) {
+    async create(imagename: string, args: string[], binds: string[] = [], env: string[] = []): Promise<Container> {
         const image = await this.getImage(imagename);
 
         const [err, out] = await to(
@@ -162,7 +161,7 @@ export class DockerManager extends ContainerManager {
     }
 
     // Manually re-implementing the dockerode run function because we need better lifecycle control
-    async start(container: Docker.Container, logfunc: (arg: string) => void = console.log) {
+    async start(container: Docker.Container, logfunc: (arg: string) => void = console.log): Promise<any> {
         const stream = new Stream.Writable();
         stream._write = (chunk, encoding, next) => {
             logfunc(chunk.toString());
@@ -205,7 +204,7 @@ export class PodmanManager extends ContainerManager {
         this.libPodApi = this.docker as unknown as LibPod;
     }
 
-    async create(imagename: string, args: string[], binds: string[] = [], env: string[] = []) {
+    async create(imagename: string, args: string[], binds: string[] = [], env: string[] = []): Promise<Container> {
         const image = await this.getImage(imagename);
         const mountsOption: ContainerCreateMountOption[] = binds.map((bind) => {
             const [host, container] = bind.split(":");
@@ -238,7 +237,7 @@ export class PodmanManager extends ContainerManager {
     }
 
     // Manually re-implementing the dockerode run function because we need better lifecycle control
-    async start(container: Docker.Container, logfunc: (arg: string) => void = console.log) {
+    async start(container: Docker.Container, logfunc: (arg: string) => void = console.log): Promise<unknown> {
         const stream = new Stream.Writable();
         stream._write = (chunk, encoding, next) => {
             logfunc(chunk.toString());

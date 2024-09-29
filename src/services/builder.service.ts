@@ -3,7 +3,6 @@ import { RedisConnectionManager } from "../redis-connection-manager";
 import { Mutex, tryAcquire } from "async-mutex";
 import { BuildsRedisLogger, SshLogger } from "../logging";
 import { currentTime } from "../utils";
-import type Docker from "dockerode";
 import fs from "fs";
 import path from "path";
 import {
@@ -14,69 +13,23 @@ import {
     Database_Action_GenerateDestFillerFiles_Params,
     SOURCECACHE_MAX_LIFETIME,
 } from "../types";
-import { ContainerManager, DockerManager } from "../container-manager";
+import { ContainerManager, DockerManager, PodmanManager } from "../container-manager";
 import { to } from "await-to-js";
 import Client, { ScpClient } from "node-scp";
-
-// TODO: FETCH builder_image from the coordinator?
-
-function ensurePathClean(dir: string, create = true): void {
-    if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true });
-    if (create) fs.mkdirSync(dir, { recursive: true });
-}
-
-// Request a list of files from the database server and fill the destination directory with empty files
-// Goal: stop pacman from building packages it has already built
-async function generateDestFillerFiles(
-    ctx: Context,
-    target_repo: string,
-    arch: string,
-    destdir: string,
-): Promise<void> {
-    let generateDestFillerFilesParams: Database_Action_GenerateDestFillerFiles_Params = {
-        target_repo: target_repo,
-        arch: arch,
-    };
-    let repo_files: string[] = await ctx.call("database.generateDestFillerFiles", generateDestFillerFilesParams);
-    for (const line of repo_files) {
-        const filepath = path.join(destdir, line);
-        fs.writeFileSync(filepath, "");
-    }
-}
+import { Dirent } from "node:fs";
 
 /**
- * Ensure that the source cache is cleared after one month, also for no longer existing packages
- * @param mountSrcdest The path of the shared sources directory inside the container
- * @param target_repo The target repository, which is the name of the directory in the shared sources directory
+ * The BuilderService class is a moleculer service that provides the buildPackage and cancelBuild actions.
  */
-function clearSourceCache(mountSrcdest: string, target_repo: string): void {
-    const now = new Date().getTime();
-    const sourceCacheDir = path.join(mountSrcdest, target_repo);
-
-    if (!fs.existsSync(sourceCacheDir)) return;
-
-    const directory = fs.readdirSync(sourceCacheDir, { withFileTypes: true });
-
-    directory.filter((dirent) => dirent.isDirectory()).map((dirent) => dirent.name);
-    for (const dir of directory) {
-        const filePath = path.join(sourceCacheDir, `${dir.name}`);
-        if (fs.existsSync(`${filePath}/.timestamp`)) {
-            const timestamp = fs.statSync(`${filePath}/.timestamp`);
-            const mtime = new Date(timestamp.mtime).getTime();
-            if (now - mtime <= SOURCECACHE_MAX_LIFETIME) continue;
-        }
-        fs.rmSync(filePath, { recursive: true, force: true });
-    }
-}
-
 export class BuilderService extends Service {
     mutex: Mutex = new Mutex();
     redis_connection_manager: RedisConnectionManager;
 
     builder = {
         ci_code_skip: Number(process.env.CI_CODE_SKIP) || 123,
-        name: process.env.BUILD_HOSTNAME || "chaotic-builder",
+        name: process.env.BUILDER_HOSTNAME || "chaotic-builder",
         timeout: Number(process.env.BUILDER_TIMEOUT) || 3600,
+        container_engine: process.env.BUILDER_PODMAN ? "podman" : "docker",
     };
 
     shared_srcdest_cache: string = path.join(process.env.SHARED_PATH || "", "srcdest_cache");
@@ -103,8 +56,20 @@ export class BuilderService extends Service {
                 cancelBuild: this.cancelBuild,
             },
         });
+
+        if (this.builder.container_engine === "podman") {
+            this.containerManager = new PodmanManager();
+        } else {
+            this.containerManager = new DockerManager();
+        }
     }
 
+    /**
+     * Builds a package using the given parameters. After having finished the build, this method calls the database action
+     * to add the package to the database. The exit code if this action will be returned to the coordinator service.
+     * @param ctx The Moleculer context object
+     * @returns The exit code of the build action as a BuildStatusReturn object
+     */
     async buildPackage(ctx: Context): Promise<BuildStatusReturn> {
         let data = ctx.params as Builder_Action_BuildPackage_Params;
 
@@ -118,19 +83,20 @@ export class BuilderService extends Service {
             logger.log(`Processing build job ${ctx.id} at ${currentTime()}`);
 
             // Make sure the pkgout directory is clean for the current build
-            ensurePathClean(this.mountPkgout);
+            this.ensurePathClean(this.mountPkgout);
 
             // Generate filler files in the pkgout directory.
             // Goal: Avoid building packages that are already in the target repo
-            await generateDestFillerFiles(ctx, data.target_repo, data.arch, this.mountPkgout);
+            await this.generateDestFillerFiles(ctx, data.target_repo, data.arch, this.mountPkgout);
 
             // Clean the source cache of any old source files
-            clearSourceCache(this.mountSrcdest, data.target_repo);
+            this.clearSourceCache(this.mountSrcdest, data.target_repo);
 
             // Generate the folder path for the specific package source cache
             const srcdest_package_path = path.join(this.shared_srcdest_cache, data.target_repo, data.pkgbase);
 
-            const container: Docker.Container = await this.containerManager.create(
+            // Append the container object to the job context
+            data.container = await this.containerManager.create(
                 data.builder_image,
                 ["build", data.pkgbase],
                 [
@@ -149,14 +115,7 @@ export class BuilderService extends Service {
                 ],
             );
 
-            // if (cancelled) {
-            //     await this.containerManager.kill(container).catch((e) => {
-            //         console.error(e);
-            //     });
-            //     throw new Error("Job cancelled.");
-            // }
-
-            const [err, out] = await to(this.containerManager.start(container, logger.raw_log.bind(logger)));
+            const [err, out] = await to(this.containerManager.start(data.container, logger.raw_log.bind(logger)));
 
             // Remove any filler files from the equation
             const file_list = fs.readdirSync(this.mountPkgout).filter((file): boolean => {
@@ -197,7 +156,7 @@ export class BuilderService extends Service {
                 return { success: BuildStatus.FAILED };
             }
 
-            ensurePathClean(this.mountPkgout, false);
+            this.ensurePathClean(this.mountPkgout, false);
             logger.log(`Finished upload ${ctx.id}.`);
 
             let addToDbParams: Database_Action_AddToDb_Params = {
@@ -222,7 +181,84 @@ export class BuilderService extends Service {
         });
     }
 
-    async cancelBuild(ctx: Context) {
-        // TODO
+    /**
+     * Cancels a build by killing the container associated with the build job. The idea is that created container
+     * object is appended to the job context by the buildPackage method, so this method can kill it.
+     * @param ctx The moleculer context, containing the Container object to kill
+     */
+    async cancelBuild(ctx: Context): Promise<void> {
+        let data = ctx.params as Builder_Action_BuildPackage_Params;
+
+        if (!data.container) {
+            return;
+        }
+
+        await this.containerManager.kill(data.container!).catch((e) => {
+            console.error(e);
+        });
+        throw new Error("Job cancelled.");
+    }
+
+    /**
+     * Ensures no files are left behind in the given directory
+     * @param dir The directory to clean
+     * @param create Whether to re-create the directory after cleaning
+     * @private
+     */
+    private ensurePathClean(dir: string, create = true): void {
+        if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true });
+        if (create) fs.mkdirSync(dir, { recursive: true });
+    }
+
+    /**
+     * Request a list of files from the database server and fill the destination directory with empty files
+     * Goal: stopping Pacman from building packages it has already built
+     * @param ctx The moleculer context
+     * @param target_repo The target repository
+     * @param arch The package target architecture
+     * @param destdir The destination directory to write the files to
+     * @private
+     */
+    private async generateDestFillerFiles(
+        ctx: Context,
+        target_repo: string,
+        arch: string,
+        destdir: string,
+    ): Promise<void> {
+        let generateDestFillerFilesParams: Database_Action_GenerateDestFillerFiles_Params = {
+            target_repo: target_repo,
+            arch: arch,
+        };
+        let repo_files: string[] = await ctx.call("database.generateDestFillerFiles", generateDestFillerFilesParams);
+        for (const line of repo_files) {
+            const filepath = path.join(destdir, line);
+            fs.writeFileSync(filepath, "");
+        }
+    }
+
+    /**
+     * Ensure that the source cache is cleared after one month, also for no longer existing packages
+     * @param mountSrcdest The path of the shared sources directory inside the container
+     * @param target_repo The target repository, which is the name of the directory in the shared sources directory
+     * @private
+     */
+    private clearSourceCache(mountSrcdest: string, target_repo: string): void {
+        const now = new Date().getTime();
+        const sourceCacheDir = path.join(mountSrcdest, target_repo);
+
+        if (!fs.existsSync(sourceCacheDir)) return;
+
+        const directory: Dirent[] = fs.readdirSync(sourceCacheDir, { withFileTypes: true });
+
+        directory.filter((dirent) => dirent.isDirectory()).map((dirent) => dirent.name);
+        for (const dir of directory) {
+            const filePath = path.join(sourceCacheDir, `${dir.name}`);
+            if (fs.existsSync(`${filePath}/.timestamp`)) {
+                const timestamp = fs.statSync(`${filePath}/.timestamp`);
+                const mtime = new Date(timestamp.mtime).getTime();
+                if (now - mtime <= SOURCECACHE_MAX_LIFETIME) continue;
+            }
+            fs.rmSync(filePath, { recursive: true, force: true });
+        }
     }
 }
