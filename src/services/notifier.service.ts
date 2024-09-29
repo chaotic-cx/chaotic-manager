@@ -38,18 +38,17 @@ export class NotifierService extends Service {
             actions: {
                 notifyPackages: this.createDeploymentNotification,
                 notifyFailure: this.createFailedBuildNotification,
-                notifyGeneric: this.notify,
+                notifyGeneric: this.createTrivialNotification,
             },
         });
     }
 
     /**
      * Notifies the enabled targets with the given message.
-     *
      * @param params An object containing all necessary event metadata
      * @returns Resolves after each target has been notified successfully
      */
-    async notify(params: GenericNotificationParams): Promise<void> {
+    private async notify(params: GenericNotificationParams): Promise<void> {
         try {
             if (this.telegramBot !== undefined) {
                 void this.telegramBot.notify(params.message);
@@ -70,7 +69,7 @@ export class NotifierService extends Service {
             for (const pkg of params.packages) {
                 text += ` > ${pkg.replace(/\.pkg.tar.zst$/, "")}\n`;
             }
-            void this.createTrivialNotification(text);
+            void this.createTrivialNotification({ message: text });
         } catch (err) {
             console.error(`Notifier: fatal error ${err}`);
         }
@@ -105,7 +104,7 @@ export class NotifierService extends Service {
             } else {
                 text += "\n";
             }
-            void this.createTrivialNotification(text);
+            void this.createTrivialNotification({ message: text });
         } catch (err) {
             console.error(`Notifier: fatal error ${err}`);
         }
@@ -114,10 +113,10 @@ export class NotifierService extends Service {
     /**
      * Helper function for sending a notification containing one string for the given event and logging
      * eventual errors gracefully.
-     * @param event The event to notify about.
+     * @param params An object containing the necessary metadata to create the notification with.
      */
-    private async createTrivialNotification(event: string): Promise<void> {
-        const [err]: [Error, undefined] | [null, void] = await to(this.notify({ message: event }));
+    async createTrivialNotification(params: GenericNotificationParams): Promise<void> {
+        const [err]: [Error, undefined] | [null, void] = await to(this.notify({ message: params.message }));
         if (err) console.error(err);
     }
 }

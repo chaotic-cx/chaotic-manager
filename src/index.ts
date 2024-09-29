@@ -135,7 +135,7 @@ async function main(): Promise<void> {
             const redis_connection_manager = new RedisConnectionManager(connection);
 
             broker.createService(new DatabaseService(broker, redis_connection_manager));
-            broker.createService(new CoordinatorService(broker));
+            broker.createService(new CoordinatorService(broker, redis_connection_manager));
             broker.createService(new NotifierService(broker));
             void broker.start();
 

@@ -16,7 +16,7 @@ import {
 } from "../types";
 import { ContainerManager, DockerManager } from "../container-manager";
 import { to } from "await-to-js";
-import Client from "node-scp";
+import Client, { ScpClient } from "node-scp";
 
 // TODO: FETCH builder_image from the coordinator?
 
@@ -75,7 +75,7 @@ export class BuilderService extends Service {
 
     builder = {
         ci_code_skip: Number(process.env.CI_CODE_SKIP) || 123,
-        name: "chaotic-builder",
+        name: process.env.BUILD_HOSTNAME || "chaotic-builder",
         timeout: Number(process.env.BUILDER_TIMEOUT) || 3600,
     };
 
@@ -107,18 +107,19 @@ export class BuilderService extends Service {
 
     async buildPackage(ctx: Context): Promise<BuildStatusReturn> {
         let data = ctx.params as Builder_Action_BuildPackage_Params;
-        // If this fails something has gone terribly wrong
+
+        // If this fails, something has gone terribly wrong.
         // The coordinator should never send two jobs to the same builder
-        return tryAcquire(this.mutex).runExclusive(async () => {
+        return tryAcquire(this.mutex).runExclusive(async (): Promise<BuildStatusReturn> => {
             const logger = new BuildsRedisLogger(this.redis_connection_manager.getClient());
-            logger.from(data.pkgbase, data.timestamp);
-            logger.setDefault();
+            void logger.from(data.pkgbase, data.timestamp);
+            void logger.setDefault();
 
             logger.log(`Processing build job ${ctx.id} at ${currentTime()}`);
 
             // Make sure the pkgout directory is clean for the current build
-
             ensurePathClean(this.mountPkgout);
+
             // Generate filler files in the pkgout directory.
             // Goal: Avoid building packages that are already in the target repo
             await generateDestFillerFiles(ctx, data.target_repo, data.arch, this.mountPkgout);
@@ -158,38 +159,26 @@ export class BuilderService extends Service {
             const [err, out] = await to(this.containerManager.start(container, logger.raw_log.bind(logger)));
 
             // Remove any filler files from the equation
-            const file_list = fs.readdirSync(this.mountPkgout).filter((file) => {
+            const file_list = fs.readdirSync(this.mountPkgout).filter((file): boolean => {
                 const stats = fs.statSync(path.join(this.mountPkgout, file));
                 return stats.isFile() && stats.size > 0;
             });
 
             if (err || out.StatusCode !== 0 || file_list.length === 0) {
                 if (!err && out.StatusCode === 13) {
-                    logger.log(`Job ${ctx.id} skipped because all packages were already built.`);
-                    return {
-                        success: BuildStatus.ALREADY_BUILT,
-                    };
+                    return { success: BuildStatus.ALREADY_BUILT };
                 } else if (out.StatusCode === this.builder.ci_code_skip) {
-                    logger.log(`Job ${ctx.id} skipped intentionally via build tools.`);
-                    return {
-                        success: BuildStatus.SKIPPED,
-                    };
+                    return { success: BuildStatus.SKIPPED };
                 } else if (out.StatusCode === 124) {
-                    logger.log(`Job ${ctx.id} reached a timeout during the build phase.`);
-                    return {
-                        success: BuildStatus.TIMED_OUT,
-                    };
+                    return { success: BuildStatus.TIMED_OUT };
                 } else {
-                    logger.log(`Job ${ctx.id} failed`);
-                    return {
-                        success: BuildStatus.FAILED,
-                    };
+                    return { success: BuildStatus.FAILED };
                 }
             } else logger.log(`Finished build ${ctx.id}. Uploading...`);
 
             const sshlogger = new SshLogger();
             try {
-                const client = await Client({
+                const client: ScpClient = await Client({
                     host: String(data.upload_info.database.ssh.host),
                     port: Number(data.upload_info.database.ssh.port),
                     username: String(data.upload_info.database.ssh.user),
@@ -200,13 +189,14 @@ export class BuilderService extends Service {
                 client.close();
             } catch (e) {
                 logger.error(`Failed to upload ${ctx.id}: ${e}`);
+
                 // This does not get logged to redis
                 console.error(sshlogger.dump());
                 console.log("End of SSH log.");
-                return {
-                    success: BuildStatus.FAILED,
-                };
+
+                return { success: BuildStatus.FAILED };
             }
+
             ensurePathClean(this.mountPkgout, false);
             logger.log(`Finished upload ${ctx.id}.`);
 
@@ -220,17 +210,15 @@ export class BuilderService extends Service {
                 timestamp: data.timestamp,
             };
             let addToDbReturn: { success: boolean } = await ctx.call("database.addToDb", addToDbParams);
+
             if (!addToDbReturn.success) {
+                return { success: BuildStatus.FAILED };
+            } else {
                 return {
-                    success: BuildStatus.FAILED,
+                    success: BuildStatus.SUCCESS,
+                    packages: file_list,
                 };
             }
-            logger.log(`Build job ${ctx.id} finished at ${currentTime()}...`);
-
-            return {
-                success: BuildStatus.SUCCESS,
-                packages: file_list,
-            };
         });
     }
 

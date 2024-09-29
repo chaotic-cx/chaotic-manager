@@ -176,6 +176,10 @@ export type BuildStatusReturn = {
     packages?: string[];
 };
 
+export interface DatabaseRemoveStatusReturn {
+    success: boolean;
+}
+
 export interface Coordinator_Action_PackageMetaData_Single {
     pkgbase: string;
     pkgnames?: string[];
@@ -236,7 +240,7 @@ export class CoordinatorJob {
         this.node = "";
     }
 
-    toId() {
+    toId(): string {
         return `${this.target_repo}/${this.arch}/${this.pkgbase}`;
     }
 }

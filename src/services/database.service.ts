@@ -5,6 +5,7 @@ import {
     Database_Action_AutoRepoRemove_Params,
     Database_Action_fetchUploadInfo_Response,
     Database_Action_GenerateDestFillerFiles_Params,
+    DatabaseRemoveStatusReturn,
 } from "../types";
 import { RedisConnectionManager } from "../redis-connection-manager";
 import { BuildsRedisLogger } from "../logging";
@@ -65,7 +66,7 @@ export class DatabaseService extends Service {
     }
 
     // Add multiple package files that belong to a pkgbase to the database
-    async addToDb(ctx: Context) {
+    async addToDb(ctx: Context): Promise<{ success: boolean }> {
         const data = ctx.params as Database_Action_AddToDb_Params;
         return await this.mutex.runExclusive(async () => {
             // const repo = this.repo_manager.getRepo(data.repo);
@@ -104,8 +105,10 @@ export class DatabaseService extends Service {
     }
 
     // Remove all packages from the database that do not belong to the list of pkgbases
-    async autoRepoRemove(ctx: Context) {
+    async autoRepoRemove(ctx: Context): Promise<DatabaseRemoveStatusReturn> {
         const data = ctx.params as Database_Action_AutoRepoRemove_Params;
+        let ret: DatabaseRemoveStatusReturn = { success: false };
+
         await this.mutex.runExclusive(async () => {
             console.log(`\r\nProcessing automatic package removal job for ${data.repo} at ${currentTime()}`);
 
@@ -125,13 +128,14 @@ export class DatabaseService extends Service {
             if (err) {
                 console.error(err);
                 console.log("Failed to remove packages from the database.");
-                return;
+                ret.success = false;
             }
-            console.log("Successfully removed packages from the database.");
         });
+
+        return ret;
     }
 
-    async generateDestFillerFiles(ctx: Context) {
+    async generateDestFillerFiles(ctx: Context): Promise<string[]> {
         let data = ctx.params as Database_Action_GenerateDestFillerFiles_Params;
         let directory = `${this.repo_root_mount}/${data.target_repo}/${data.arch}`;
         if (fs.existsSync(directory)) {

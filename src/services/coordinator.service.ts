@@ -8,11 +8,15 @@ import {
     CoordinatorJob,
     Database_Action_AutoRepoRemove_Params,
     Database_Action_fetchUploadInfo_Response,
+    DatabaseRemoveStatusReturn,
     FailureNotificationParams,
     SuccessNotificationParams,
 } from "../types";
-import { RepoManager } from "../repo-manager";
+import { Repo, RepoManager, TargetRepo } from "../repo-manager";
 import { DepGraph } from "dependency-graph";
+import { BuildsRedisLogger } from "../logging";
+import { RedisConnectionManager } from "../redis-connection-manager";
+import { currentTime } from "../utils";
 
 const base_logs_url = process.env.LOGS_URL;
 const package_repos = process.env.PACKAGE_REPOS;
@@ -21,7 +25,7 @@ const package_repos_notifiers = process.env.PACKAGE_REPOS_NOTIFIERS;
 const builder_image =
     process.env.BUILDER_IMAGE || "registry.gitlab.com/garuda-linux/tools/chaotic-manager/builder:latest";
 
-function initRepoManager(repo_manager: RepoManager) {
+function initRepoManager(repo_manager: RepoManager): void {
     if (package_repos) {
         try {
             let obj = JSON.parse(package_repos);
@@ -92,6 +96,7 @@ function constructDependencyGraph(queue: { [key: string]: CoordinatorJob }): Dep
     for (const [job_ident, deps] of mapped_deps) {
         for (const dep of deps) {
             const dep_pkgbase = mapped_pkgbases.get(dep);
+
             // We do not know of this dependency, so we skip it
             if (!dep_pkgbase) continue;
             graph.addDependency(job_ident, dep_pkgbase);
@@ -103,36 +108,25 @@ function constructDependencyGraph(queue: { [key: string]: CoordinatorJob }): Dep
 
 function getPossibleJobs(graph: DepGraph<CoordinatorJob>, builder_class: number): CoordinatorJob[] {
     const jobs: CoordinatorJob[] = [];
-    const nodes = graph.overallOrder(true);
-
-    console.log("Available jobs in queue graph: ", nodes);
+    const nodes: string[] = graph.overallOrder(true);
 
     for (const node of nodes) {
-        const job = graph.getNodeData(node);
+        const job: CoordinatorJob = graph.getNodeData(node);
         if (job.build_class <= builder_class) {
             jobs.push(job);
         }
     }
 
-    console.log("Available jobs: ", jobs);
     return jobs;
-}
-
-function createAssignLoop(coordinator: CoordinatorService) {
-    // On job finish / on new job added
-    setTimeout(() => {
-        coordinator.assignJobs().finally(() => {
-            createAssignLoop(coordinator);
-        });
-    }, 5000);
 }
 
 export class CoordinatorService extends Service {
     queue: { [key: string]: CoordinatorJob } = {};
+    redis_connection_manager: RedisConnectionManager;
     repo_manager = new RepoManager(base_logs_url ? new URL(base_logs_url) : undefined);
     busy_nodes: { [key: string]: CoordinatorJob } = {};
 
-    constructor(broker: ServiceBroker) {
+    constructor(broker: ServiceBroker, redis_connection_manager: RedisConnectionManager) {
         super(broker);
 
         initRepoManager(this.repo_manager);
@@ -145,13 +139,23 @@ export class CoordinatorService extends Service {
                 $noVersionPrefix: true,
             },
             actions: {
+                assignJobs: this.assignJobs,
                 addJobsToQueue: this.addJobsToQueue,
                 autoRepoRemove: this.autoRepoRemove,
             },
+            events: {
+                "$node.connected": {
+                    handler(): void {
+                        void broker.call("coordinator.assignJobs");
+                    },
+                },
+            },
         });
 
+        this.redis_connection_manager = redis_connection_manager;
+
         this.broker.waitForServices(["$node"]).then(() => {
-            createAssignLoop(this);
+            void this.assignJobs();
         });
     }
 
@@ -159,9 +163,7 @@ export class CoordinatorService extends Service {
         return this.broker.call("database.fetchUploadInfo");
     }
 
-    async assignJobs() {
-        console.debug("Coordinator: Trying to assign jobs...");
-
+    async assignJobs(): Promise<void> {
         let services: any[] = await this.broker.call("$node.services");
         let nodes: string[] | undefined;
         for (const entry of services) {
@@ -171,7 +173,7 @@ export class CoordinatorService extends Service {
             }
         }
 
-        // check if any of the nodes are in the busy_nodes list
+        // Check if any of the nodes are in the busy_nodes list
         if (!nodes || nodes.length == 0) {
             console.log("Coordinator: No builder nodes available.");
             return;
@@ -191,28 +193,25 @@ export class CoordinatorService extends Service {
         );
 
         if (available_nodes.length == 0) {
-            console.log("Coordinator: All builder nodes are busy or unavailable.");
             return;
         }
 
-        let graph = constructDependencyGraph(this.queue);
-        let upload_info = await this.getUploadInfo();
-
-        console.debug("Coordinator: Entering available nodes loop");
+        let graph: DepGraph<CoordinatorJob> = constructDependencyGraph(this.queue);
+        let upload_info: Database_Action_fetchUploadInfo_Response = await this.getUploadInfo();
 
         for (const node of available_nodes) {
-            let jobs = getPossibleJobs(graph, node.metadata.build_class);
+            let jobs: CoordinatorJob[] = getPossibleJobs(graph, node.metadata.build_class);
             if (jobs.length == 0) {
                 continue;
             }
-            let job = jobs.shift();
+            let job: CoordinatorJob | undefined = jobs.shift();
             if (!job) {
                 continue;
             }
 
             this.busy_nodes[node.id] = job;
-            let source_repo = this.repo_manager.getRepo(job.source_repo);
-            let target_repo = this.repo_manager.getTargetRepo(job.target_repo);
+            let source_repo: Repo = this.repo_manager.getRepo(job.source_repo);
+            let target_repo: TargetRepo = this.repo_manager.getTargetRepo(job.target_repo);
             let params: Builder_Action_BuildPackage_Params = {
                 pkgbase: job.pkgbase,
                 target_repo: job.target_repo,
@@ -229,6 +228,10 @@ export class CoordinatorService extends Service {
 
             job.node = node.id;
 
+            let logger = new BuildsRedisLogger(this.redis_connection_manager.getClient());
+            void logger.from(job.pkgbase, job.timestamp);
+            void logger.setDefault();
+
             this.broker
                 .call<BuildStatusReturn, Builder_Action_BuildPackage_Params>("builder.buildPackage", params, {
                     nodeID: node.id,
@@ -237,10 +240,13 @@ export class CoordinatorService extends Service {
                     switch (ret.success) {
                         case BuildStatus.ALREADY_BUILT: {
                             source_repo.notify(job, "canceled", "Build skipped because package was already built.");
+                            logger.log(`Job ${job?.toId()} skipped because all packages were already built.`);
                             break;
                         }
                         case BuildStatus.SUCCESS: {
                             source_repo.notify(job, "success", "Package successfully deployed.");
+                            logger.log(`Build job ${job?.toId()} finished at ${currentTime()}...`);
+
                             const notify_params: SuccessNotificationParams = {
                                 packages: ret.packages!,
                                 event: `📣 New deployment to ${job.target_repo}`,
@@ -250,9 +256,13 @@ export class CoordinatorService extends Service {
                         }
                         case BuildStatus.SKIPPED: {
                             source_repo.notify(job, "canceled", "Build skipped intentionally via build tools.");
+                            logger.log(`Job ${job?.toId()} skipped intentionally via build tools.`);
                             break;
                         }
                         case BuildStatus.FAILED: {
+                            source_repo.notify(job, "failed", "Build failed.");
+                            logger.log(`Job ${job?.toId()} failed`);
+
                             const notify_params: FailureNotificationParams = {
                                 pkgbase: params.pkgbase,
                                 event: `🚨 Failed deploying to ${job.target_repo}`,
@@ -262,10 +272,12 @@ export class CoordinatorService extends Service {
                                 commit: params.commit,
                             };
                             this.broker.call("notifier.notifyFailure", notify_params);
-                            source_repo.notify(job, "failed", "Build failed.");
                             break;
                         }
                         case BuildStatus.TIMED_OUT: {
+                            source_repo.notify(job, "failed", "Build timed out.");
+                            logger.log(`Job ${job?.toId()} reached a timeout during the build phase.`);
+
                             const notify_params: FailureNotificationParams = {
                                 pkgbase: params.pkgbase,
                                 event: `⏳ Build for ${params.source_repo} failed due to a timeout`,
@@ -274,9 +286,7 @@ export class CoordinatorService extends Service {
                                 timestamp: params.timestamp,
                                 commit: params.commit,
                             };
-
                             this.broker.call("notifier.notifyFailure", notify_params);
-                            source_repo.notify(job, "failed", "Build timed out.");
                             break;
                         }
                     }
@@ -284,6 +294,8 @@ export class CoordinatorService extends Service {
                 .catch((err) => {
                     console.error("Failed during package deployment:", err);
                     source_repo.notify(job, "failed", "Build failed.");
+                    logger.log(`Job ${job?.toId()} failed`);
+
                     const notify_params: FailureNotificationParams = {
                         pkgbase: params.pkgbase,
                         event: `💥 The code blew up while deploying to ${job.target_repo}`,
@@ -297,17 +309,16 @@ export class CoordinatorService extends Service {
                 .finally(() => {
                     delete this.queue[job.toId()];
                     delete this.busy_nodes[node.id];
+                    this.assignJobs();
                 });
         }
     }
 
     // Add jobs to the queue, executed from scheduler
-    async addJobsToQueue(ctx: Context) {
+    async addJobsToQueue(ctx: Context): Promise<void> {
         const timestamp: number = Date.now();
         const data = ctx.params as Coordinator_Action_AddJobsToQueue_Params;
         const jobs: CoordinatorJob[] = [];
-
-        console.debug("Called!", data);
 
         for (const pkg of data.packages) {
             jobs.push(
@@ -323,7 +334,6 @@ export class CoordinatorService extends Service {
                     data.commit,
                 ),
             );
-            console.log("Pushing new job", pkg);
         }
         for (const job of jobs) {
             let id = job.toId();
@@ -332,23 +342,31 @@ export class CoordinatorService extends Service {
                 // TODO: cancel jobs if they are currently active
                 continue;
             }
-            console.debug("Queued", job);
             this.queue[job.toId()] = job;
         }
     }
 
-    async autoRepoRemove(ctx: Context) {
+    async autoRepoRemove(ctx: Context): Promise<void> {
         const data = ctx.params as Coordinator_Action_AutoRepoRemove_Params;
         const request: Database_Action_AutoRepoRemove_Params = {
             builder_image,
             ...data,
         };
-        return await this.broker.call("database.autoRepoRemove", request);
+        const result = await this.broker.call<DatabaseRemoveStatusReturn, Database_Action_AutoRepoRemove_Params>(
+            "database.autoRepoRemove",
+            request,
+        );
+
+        if (result.success) {
+            void this.broker.call("notifier.notifyGeneric", {
+                message: `✅ Cleanup job for ${data.repo} finished successfully`,
+            });
+        } else {
+            void this.broker.call("notifier.notifyGeneric", {
+                message: `🚫 Cleanup job ${data.repo} failed to remove packages`,
+            });
+        }
     }
 }
 
 export default CoordinatorService;
-
-// TODO:
-//
-// assignJobs should not be called in a loop, but rather be called when a job is finished/a new builder is available
