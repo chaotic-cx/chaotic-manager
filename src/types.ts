@@ -75,6 +75,8 @@ export enum BuildStatus {
     SUCCESS = 0,
     ALREADY_BUILT = 1,
     SKIPPED = 2,
+    FAILED = 3,
+    TIMED_OUT = 4,
 }
 
 // The object the API should return on /api/packages calls
@@ -121,3 +123,128 @@ export const corsOptions: CorsOptions = {
     origin: ALLOWED_CORS_ORIGINS,
     methods: ALLOWED_CORS_METHODS,
 };
+
+export type Database_Action_fetchUploadInfo_Response = {
+    database: {
+        ssh: {
+            host: string;
+            port: number;
+            user: string;
+        };
+        landing_zone: string;
+    };
+};
+
+export type Database_Action_AddToDb_Params = {
+    pkgbase: string,
+    arch: string;
+    pkgfiles: string[];
+    target_repo: string;
+    source_repo: string;
+    builder_image: string;
+    timestamp: number;
+};
+
+export type Database_Action_AutoRepoRemove_Params = {
+    pkgbases: string[];
+    arch: string;
+    repo: string;
+    builder_image: string;
+};
+
+export type Database_Action_GenerateDestFillerFiles_Params = {
+    target_repo: string;
+    arch: string;
+};
+
+export type Builder_Action_BuildPackage_Params = {
+    target_repo: string;
+    source_repo: string;
+    source_repo_url: string;
+    arch: string;
+    pkgbase: string;
+    builder_image: string;
+    extra_repos: string; // repo_manager.getTargetRepo(data.extra_repos).repoToString(),
+    extra_keyrings: string; // repo_manager.getTargetRepo(data.target_repo).keyringsToBashArray()
+    upload_info: Database_Action_fetchUploadInfo_Response;
+    timestamp: number;
+    commit?: string
+};
+
+export type BuildStatusReturn = {
+    success: BuildStatus,
+    packages?: string[],
+};
+
+export interface Coordinator_Action_PackageMetaData_Single {
+    pkgbase: string;
+    pkgnames?: string[];
+    dependencies?: string[];
+    build_class?: number;
+}
+
+export type Coordinator_Action_PackageMetaData_List = Coordinator_Action_PackageMetaData_Single[];
+
+export type Coordinator_Action_AddJobsToQueue_Params = {
+    target_repo: string;
+    source_repo: string;
+    commit: string | undefined;
+    arch: string;
+    packages: Coordinator_Action_PackageMetaData_List
+};
+
+export type Coordinator_Action_AutoRepoRemove_Params = Omit<Database_Action_AutoRepoRemove_Params, "builder_image">
+
+export enum BuildClass {
+    "Small" = 0,
+    "Medium" = 1,
+    "Heavy" = 2,
+}
+
+export class CoordinatorJob {
+    pkgbase: string;
+    target_repo: string;
+    source_repo: string;
+    arch: string;
+    build_class: number;
+    pkgnames: string[] | undefined;
+    dependencies: string[] | undefined;
+    node: string;
+    timestamp: number;
+    commit: string | undefined;
+
+    constructor(pkgbase: string, target_repo: string, source_repo: string, arch: string, build_class: number, pkgnames: string[] | undefined, dependencies: string[] | undefined, timestamp: number, commit: string | undefined) {
+        this.pkgbase = pkgbase;
+        this.target_repo = target_repo;
+        this.source_repo = source_repo;
+        this.arch = arch;
+        this.build_class = build_class;
+        this.pkgnames = pkgnames;
+        this.dependencies = dependencies;
+        this.timestamp = timestamp;
+
+        this.node = "";
+    }
+
+    toId() {
+        return `${this.target_repo}/${this.arch}/${this.pkgbase}`;
+    }
+};
+
+export interface SuccessNotificationParams {
+    packages: string[],
+    event: string
+}
+
+export interface FailureNotificationParams {
+    pkgbase: string,
+    timestamp: number,
+    event: string,
+    source_repo: string,
+    commit?: string,
+    source_repo_url: string
+}
+
+export interface GenericNotificationParams {
+    message: string
+}

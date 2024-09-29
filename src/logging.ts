@@ -28,37 +28,20 @@ export class BuildsRedisLogger {
         this.connection = connection;
     }
 
-    public fromJob(job: Job) {
-        const job_data = job.data as BuildJobData;
-        const { target_repo, pkgbase } = splitJobId(job.id as string);
-
-        this.channel = "build-logs." + pkgbase + "." + job_data.timestamp;
-        this.key = "build-logs:" + pkgbase + ":" + job_data.timestamp;
+    public async from(pkgbase: string, timestamp?: number) {
         this.default_key = "build-logs:" + pkgbase + ":default";
-        this.timestamp = job_data.timestamp;
-        this.init = true;
-    }
 
-    public async fromJobID(job_id: string, queue: Queue): Promise<Job | undefined> {
-        const [err, job] = await to(queue.getJob(job_id));
-        if (err || !job) {
-            const { target_repo, pkgbase } = splitJobId(job_id);
-            this.default_key = "build-logs:" + pkgbase + ":default";
-
+        if (timestamp === undefined) {
             const [err, out] = await to(this.connection.get(this.default_key));
-            if (err || !out) {
+            if (err || !out)
                 throw new Error("Job not found");
-            } else {
-                this.channel = "build-logs." + pkgbase + "." + out;
-                this.key = "build-logs:" + pkgbase + ":" + out;
-                this.timestamp = Number.parseInt(out);
-                this.init = true;
-                return undefined;
-            }
-        } else {
-            this.fromJob(job);
-            return job;
+            timestamp = Number.parseInt(out);
         }
+
+        this.channel = "build-logs." + pkgbase + "." + timestamp;
+        this.key = "build-logs:" + pkgbase + ":" + timestamp;
+        this.timestamp = timestamp;
+        this.init = true;
     }
 
     private internal_log(arg: string, err = false): void {

@@ -52,6 +52,7 @@ services:
             - REDIS_SSH_USER=${DATABASE_USER}
             - NODE_ENV=development
             - BUILDER_HOSTNAME=${BUILDER_HOSTNAME}
+            - BUILDER_CLASS=1
         image: registry.gitlab.com/garuda-linux/tools/chaotic-manager/manager
         command: builder
     chaotic-database:

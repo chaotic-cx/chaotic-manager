@@ -1,22 +1,9 @@
-import { Queue } from "bullmq";
-import { DepGraph } from "dependency-graph";
 import type RedisConnection from "ioredis";
-import type { DispatchJobData } from "./types";
-
-export default function schedulePackage(
-    connection: RedisConnection,
-    arch: string,
-    target_repo: string,
-    source_repo: string,
-    name: string,
-    commit: string | undefined,
-    deptree: string | undefined,
-): Promise<void> {
-    return schedulePackages(connection, arch, target_repo, source_repo, [name], commit, deptree);
-}
+import type { Coordinator_Action_PackageMetaData_List, Coordinator_Action_AddJobsToQueue_Params, Coordinator_Action_AutoRepoRemove_Params, BuildClass } from "./types";
+import { ServiceBroker } from "moleculer"
 
 export async function schedulePackages(
-    connection: RedisConnection,
+    broker: ServiceBroker,
     arch: string,
     target_repo: string,
     source_repo: string,
@@ -24,11 +11,14 @@ export async function schedulePackages(
     commit: string | undefined,
     deptree: string | undefined,
 ): Promise<void> {
-    const graph = new DepGraph({ circular: true });
-    if (deptree) {
-        const mapped_deps = new Map<string, string[]>();
-        const mapped_pkgbases = new Map<string, string>();
+    let package_dependency_map: {
+        [pkgbase: string]: {
+            dependencies: string[];
+            pkgnames: string[];
+        };
+    } = {};
 
+    if (deptree) {
         // Deptree format:
         // pkgbase:pkgname1[,pkgname2,...]:dep1[,dep2,...];...
         const deptree_split = deptree.split(";");
@@ -39,78 +29,54 @@ export async function schedulePackages(
             const pkgname = pkg_split[1].split(",");
             const deps = pkg_split[2].split(",");
 
-            mapped_deps.set(pkgbase, deps);
-
-            for (const name of pkgname) {
-                mapped_pkgbases.set(name, pkgbase);
-            }
-
-            graph.addNode(pkgbase);
-        }
-
-        for (const [pkgbase, deps] of mapped_deps) {
-            for (const dep of deps) {
-                const dep_pkgbase = mapped_pkgbases.get(dep);
-                // We do not know of this dependency, so we skip it
-                if (!dep_pkgbase) continue;
-                graph.addDependency(pkgbase, dep_pkgbase);
+            package_dependency_map[pkgbase] = {
+                dependencies: deps,
+                pkgnames: pkgname,
             }
         }
     }
 
-    const queue = new Queue("dispatch", { connection });
+    const packageList: Coordinator_Action_PackageMetaData_List = [];
 
-    const list = packages.map((pkg) => {
-        /* eslint-disable  @typescript-eslint/no-explicit-any */
-        const ret: any = {
-            pkgbase: pkg,
-        };
-        if (deptree)
-            ret.deptree = {
-                dependencies: graph.directDependenciesOf(pkg).map((dep: string) => target_repo + "/" + dep),
-                dependents: graph.directDependantsOf(pkg).map((dep: string) => target_repo + "/" + dep),
-            };
-        return ret;
-    });
+    for (const pkg of packages) {
+        let [pkgbase, build_class] = pkg.split("/");
 
-    const disaptch_data: DispatchJobData = {
-        type: "add-job",
-        data: {
-            target_repo: target_repo,
-            source_repo: source_repo,
-            commit: commit,
-            arch: arch,
-            packages: list,
-        },
-    };
+        console.debug(pkgbase, build_class, package_dependency_map)
 
-    await queue.add("add-job", disaptch_data, {
-        removeOnComplete: true,
-        removeOnFail: true,
-    });
-    await queue.close();
+        let dependencies = package_dependency_map[pkgbase];
+        packageList.push({
+           pkgbase,
+           build_class: build_class ? Number(build_class) as BuildClass: undefined,
+           dependencies: dependencies ? dependencies.dependencies : undefined,
+           pkgnames: dependencies ? dependencies.pkgnames : undefined
+        });
+    }
+
+    let params: Coordinator_Action_AddJobsToQueue_Params = {
+        target_repo,
+        source_repo,
+        commit,
+        arch,
+        packages: packageList
+    }
+
+    await broker.waitForServices(["coordinator"], 10000);
+    await broker.call("coordinator.addJobsToQueue", params)
+    return 
 }
 
 export async function scheduleAutoRepoRemove(
-    connection: RedisConnection,
+    broker: ServiceBroker,
     arch: string,
     repo: string,
     pkgbases: string[],
 ): Promise<void> {
-    const queue = new Queue("database", { connection });
-    await queue.add(
-        "auto-repo-remove",
-        {
-            arch: arch,
-            repo: repo,
-            pkgbases: pkgbases,
-        },
-        {
-            jobId: repo + "/repo-remove/internal",
-            removeOnComplete: true,
-            removeOnFail: true,
-        },
-    );
-    await queue.close();
+    const params: Coordinator_Action_AutoRepoRemove_Params = {
+        pkgbases,
+        arch,
+        repo
+    }
+    await broker.waitForServices(["coordinator"], 10000);
+    await broker.call("coordinator.autoRepoRemove", params);
     return;
 }

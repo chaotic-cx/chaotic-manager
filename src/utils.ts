@@ -1,6 +1,3 @@
-import to from "await-to-js";
-import type Notifier from "./notifier";
-
 export function splitJobId(jobId: string): {
     target_repo: string;
     pkgbase: string;
@@ -33,16 +30,4 @@ export function createLiveLogUrl(baseLogUrl: string, pkgbase: string, timestamp:
     url.searchParams.set("timestamp", timestamp.toString());
     url.searchParams.set("id", pkgbase);
     return url;
-}
-
-/**
- * Helper function for sending a notification containing one string for the given event and logging
- * eventual errors gracefully.
- *
- * @param event The event to notify.
- * @param notifier The notifier instance to use
- */
-export async function createTrivialNotification(event: string, notifier: Notifier): Promise<void> {
-    const [err]: [Error, undefined] | [null, void] = await to(notifier.notify(event));
-    if (err) console.error(err);
 }

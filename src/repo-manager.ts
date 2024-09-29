@@ -1,7 +1,6 @@
 import { URL } from "url";
 import to from "await-to-js";
-import type { Job } from "bullmq";
-import type { PacmanRepo } from "./types";
+import type { CoordinatorJob, PacmanRepo } from "./types";
 import { splitJobId } from "./utils";
 
 export type GitlabState = "pending" | "running" | "success" | "failed" | "canceled";
@@ -14,22 +13,21 @@ class GitlabNotifier {
         public base_log_url: URL,
     ) {}
 
-    getLogUrl(job: Job) {
-        const { target_repo, pkgbase } = splitJobId(job.id as string);
+    getLogUrl(job: CoordinatorJob) {
         const url = new URL(this.base_log_url.toString());
-        url.searchParams.set("timestamp", job.data.timestamp);
-        url.searchParams.set("id", pkgbase);
+        url.searchParams.set("timestamp", job.timestamp.toString());
+        url.searchParams.set("id", job.pkgbase);
         return {
             url: url.toString(),
-            target_repo: target_repo,
-            pkgbase: pkgbase,
+            target_repo: job.target_repo,
+            pkgbase: job.pkgbase,
         };
     }
 
-    async notify(job: Job, status?: GitlabState, description?: string) {
-        if (job.data.commit === undefined) return;
+    async notify(job: CoordinatorJob, status?: GitlabState, description?: string) {
+        if (job.commit === undefined) return;
         // format of job.data.commit is: commit:pipeline_id, but pipeline_id is optional
-        const commit_split = job.data.commit.split(":");
+        const commit_split = job.commit.split(":");
         const commit = commit_split[0];
         const pipeline_id = commit_split.length > 1 ? commit_split[1] : undefined;
 
@@ -70,7 +68,7 @@ export class Repo {
         private notifier: GitlabNotifier | undefined,
     ) {}
 
-    async notify(job: Job, status?: GitlabState, description?: string) {
+    async notify(job: CoordinatorJob, status?: GitlabState, description?: string) {
         if (this.notifier !== undefined) await this.notifier.notify(job, status, description);
     }
 
@@ -205,13 +203,13 @@ export class RepoManager {
         }
     }
 
-    async notify(job: Job, status?: GitlabState, description?: string) {
-        if (typeof this.repos[job.data.repo] !== "undefined")
-            await this.repos[job.data.repo].notify(job, status, description);
+    async notify(job: CoordinatorJob, status?: GitlabState, description?: string) {
+        if (typeof this.repos[job.source_repo] !== "undefined")
+            await this.repos[job.source_repo].notify(job, status, description);
     }
 
-    getRepo(repo: string | undefined) {
-        let out;
+    getRepo(repo: string | undefined): Repo {
+        let out: Repo | undefined;
         // Default: pick the first repo
         if (repo === undefined) {
             out = Object.values(this.repos)[0];
@@ -219,7 +217,7 @@ export class RepoManager {
             out = this.repos[repo];
             if (out === undefined) throw new Error(`Repo ${repo} not found`);
         }
-        return out;
+        return out as Repo;
     }
 
     getTargetRepo(repo: string) {

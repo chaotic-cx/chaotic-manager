@@ -5,11 +5,15 @@ import type { Worker } from "bullmq";
 import commandLineArgs from "command-line-args";
 import IORedis from "ioredis";
 import * as Prometheus from "prom-client";
-import createBuilder from "./builder";
-import createDatabaseWorker from "./database";
 import { RedisConnectionManager } from "./redis-connection-manager";
 import { scheduleAutoRepoRemove, schedulePackages } from "./scheduler";
 import { startWebServer } from "./web";
+import { ServiceBroker } from "moleculer";
+import CoordinatorService from "./services/coordinator.service";
+import { BuildClass } from "./types"
+import { DatabaseService } from "./services/database.service";
+import { NotifierService } from "./services/notifier.service";
+import { BuilderService } from "./services/builder.service";
 
 const mainDefinitions = [
     { name: "command", defaultOption: true },
@@ -39,6 +43,22 @@ async function main(): Promise<void> {
         lazyConnect: true,
     });
 
+    const nodeID = process.env.BUILDER_HOSTNAME;
+    const broker = new ServiceBroker({
+        nodeID,
+        transporter: {
+            type: "Redis",
+            options: {
+                host: connection.options.host,
+                port: connection.options.port,
+                password: connection.options.password,
+            },
+        },
+        metadata: {
+            build_class: process.env.BUILDER_CLASS ? Number(process.env.BUILDER_CLASS) as BuildClass : BuildClass.Medium,
+        }
+    });
+
     switch (mainOptions.command) {
         case "schedule": {
             if (typeof mainOptions._unknown === "undefined" || mainOptions._unknown.length < 1) {
@@ -60,8 +80,9 @@ async function main(): Promise<void> {
             }
 
             await connection.connect();
+            await broker.start();
             await schedulePackages(
-                connection,
+                broker,
                 mainOptions.arch || "x86_64",
                 mainOptions["target-repo"] || "chaotic-aur",
                 mainOptions["source-repo"] || "chaotic-aur",
@@ -69,6 +90,7 @@ async function main(): Promise<void> {
                 mainOptions.commit,
                 deptree ? deptree : mainOptions.deptree,
             );
+            await broker.stop();
             connection.quit();
             return;
         }
@@ -79,7 +101,7 @@ async function main(): Promise<void> {
             }
             await connection.connect();
             await scheduleAutoRepoRemove(
-                connection,
+                broker,
                 mainOptions.arch || "x86_64",
                 mainOptions["target-repo"] || "chaotic-aur",
                 mainOptions._unknown,
@@ -94,7 +116,8 @@ async function main(): Promise<void> {
             }
             await connection.connect();
             const redis_connection_manager = new RedisConnectionManager(connection);
-            workers.push(createBuilder(redis_connection_manager));
+            broker.createService(new BuilderService(broker, redis_connection_manager));
+            broker.start();
             break;
         }
         case "database": {
@@ -111,10 +134,15 @@ async function main(): Promise<void> {
             }
             await connection.connect();
             const redis_connection_manager = new RedisConnectionManager(connection);
+
+            broker.createService(new DatabaseService(broker, redis_connection_manager));
+            broker.createService(new CoordinatorService(broker));
+            broker.createService(new NotifierService(broker));
+            broker.start();
+
             if (typeof mainOptions["web-port"] !== "undefined") {
                 void startWebServer(Number(mainOptions["web-port"]), redis_connection_manager);
             }
-            createDatabaseWorker(redis_connection_manager);
             break;
         }
         case "web": {
