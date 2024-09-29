@@ -31,7 +31,7 @@ export class CoordinatorService extends Service {
 
     queue: { [key: string]: CoordinatorJob } = {};
     redis_connection_manager: RedisConnectionManager;
-    repo_manager = new RepoManager(this.base_logs_url ? new URL(this.base_logs_url) : undefined);
+    repo_manager = new RepoManager(this.base_logs_url ? new URL(this.base_logs_url) : undefined, this.logger);
     busy_nodes: { [key: string]: CoordinatorJob } = {};
 
     constructor(broker: ServiceBroker, redis_connection_manager: RedisConnectionManager) {
@@ -92,13 +92,13 @@ export class CoordinatorService extends Service {
 
         // Check if any of the nodes are in the busy_nodes list
         if (!nodes || nodes.length == 0) {
-            console.log("Coordinator: No builder nodes available.");
+            this.logger.warn("No builder nodes available.");
             return;
         }
 
         let full_node_list: any[] = await this.broker.call("$node.list");
         if (!full_node_list || full_node_list.length == 0) {
-            console.log("Coordinator: No nodes listed??");
+            this.logger.error("No nodes listed??");
             return;
         }
 
@@ -145,7 +145,7 @@ export class CoordinatorService extends Service {
 
             job.node = node.id;
 
-            let logger = new BuildsRedisLogger(this.redis_connection_manager.getClient());
+            let logger = new BuildsRedisLogger(this.redis_connection_manager.getClient(), this.logger);
             void logger.from(job.pkgbase, job.timestamp);
             void logger.setDefault();
 
@@ -209,7 +209,7 @@ export class CoordinatorService extends Service {
                     }
                 })
                 .catch((err) => {
-                    console.error("Failed during package deployment:", err);
+                    this.logger.error("Failed during package deployment:", err);
                     source_repo.notify(job, "failed", "Build failed.");
                     logger.log(`Job ${job?.toId()} failed`);
 
@@ -303,7 +303,7 @@ export class CoordinatorService extends Service {
                 let obj = JSON.parse(this.package_repos);
                 repo_manager.repoFromObject(obj);
             } catch (error) {
-                console.error(error);
+                this.logger.error(error);
                 throw new Error("Invalid package repos.");
             }
         }
@@ -321,7 +321,7 @@ export class CoordinatorService extends Service {
                 let obj = JSON.parse(this.package_target_repos);
                 repo_manager.targetRepoFromObject(obj);
             } catch (error) {
-                console.error(error);
+                this.logger.error(error);
                 throw new Error("Invalid package repos.");
             }
         }
@@ -345,7 +345,7 @@ export class CoordinatorService extends Service {
                 let obj = JSON.parse(this.package_repos_notifiers);
                 repo_manager.notifiersFromObject(obj);
             } catch (error) {
-                console.error(error);
+                this.logger.error(error);
             }
         }
     }

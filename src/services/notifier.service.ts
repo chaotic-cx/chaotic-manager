@@ -19,10 +19,13 @@ export class NotifierService extends Service {
         super(broker);
 
         if (process.env.TELEGRAM_BOT_TOKEN !== undefined && process.env.TELEGRAM_CHAT_ID !== undefined) {
-            this.telegramBot = new ChaoticTelegramBot({
-                telegramChatId: process.env.TELEGRAM_CHAT_ID,
-                telegramToken: process.env.TELEGRAM_BOT_TOKEN,
-            });
+            this.telegramBot = new ChaoticTelegramBot(
+                {
+                    telegramChatId: process.env.TELEGRAM_CHAT_ID,
+                    telegramToken: process.env.TELEGRAM_BOT_TOKEN,
+                },
+                this.logger,
+            );
         }
 
         this.base_logs_url = process.env.LOGS_URL ? process.env.LOGS_URL : undefined;

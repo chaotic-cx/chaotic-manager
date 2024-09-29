@@ -4,11 +4,17 @@ import to from "await-to-js";
 import Dockerode from "dockerode";
 import Docker, { Container } from "dockerode";
 import { type ContainerCreateMountOption, type LibPod, LibpodDockerode } from "./libpod-dockerode";
+import { LoggerInstance } from "moleculer";
 
 export abstract class ContainerManager {
     abstract docker: Dockerode;
     pull_schedule: NodeJS.Timeout | null = null;
     pull_mutex = new Mutex();
+    logger: LoggerInstance;
+
+    constructor(logger: LoggerInstance) {
+        this.logger = logger;
+    }
 
     destroy() {
         if (this.pull_schedule) {
@@ -33,14 +39,14 @@ export abstract class ContainerManager {
                     });
                 });
             });
-            console.log("Downloaded builder image.");
+            this.logger.info("Downloaded builder image.");
         } finally {
             if (!locked) this.pull_mutex.release();
         }
     }
 
     async getImage(imagename: string): Promise<string> {
-        if (this.pull_mutex.isLocked()) console.log("Waiting for container pull to finish...");
+        if (this.pull_mutex.isLocked()) this.logger.info("Waiting for container pull to finish...");
         await this.pull_mutex.acquire();
         try {
             try {
@@ -122,6 +128,10 @@ export abstract class ContainerManager {
 export class DockerManager extends ContainerManager {
     docker: Docker = new Docker();
 
+    constructor(logger: LoggerInstance) {
+        super(logger);
+    }
+
     async create(imagename: string, args: string[], binds: string[] = [], env: string[] = []): Promise<Container> {
         const image = await this.getImage(imagename);
 
@@ -195,8 +205,9 @@ export class PodmanManager extends ContainerManager {
     docker: Docker;
     libPodApi: LibPod;
 
-    constructor() {
-        super();
+    constructor(logger: LoggerInstance) {
+        super(logger);
+
         const socketPath = process.env.DOCKER_SOCKET ? process.env.DOCKER_SOCKET : "/run/podman/podman.sock";
         this.docker = new Docker({ socketPath: socketPath });
         const libPodDockerode = new LibpodDockerode();

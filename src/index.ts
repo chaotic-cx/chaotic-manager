@@ -1,18 +1,18 @@
-if (!process.env.NODE_ENV) process.env.NODE_ENV = "production";
-
 import fs from "fs";
 import commandLineArgs from "command-line-args";
 import IORedis from "ioredis";
-import * as Prometheus from "prom-client";
 import { RedisConnectionManager } from "./redis-connection-manager";
 import { scheduleAutoRepoRemove, schedulePackages } from "./scheduler";
 import { startWebServer } from "./web";
-import { ServiceBroker } from "moleculer";
+import { LoggerConfig, ServiceBroker } from "moleculer";
 import CoordinatorService from "./services/coordinator.service";
 import { BuildClass } from "./types";
 import { DatabaseService } from "./services/database.service";
 import { NotifierService } from "./services/notifier.service";
 import { BuilderService } from "./services/builder.service";
+import { MoleculerConfigCommon, MoleculerConfigLogConsole, MoleculerConfigLogFile } from "./services/moleculer.config";
+
+if (!process.env.NODE_ENV) process.env.NODE_ENV = "production";
 
 const mainDefinitions = [
     { name: "command", defaultOption: true },
@@ -31,7 +31,10 @@ const redisHost = process.env.REDIS_HOST || "localhost";
 const redisPort = Number(process.env.REDIS_PORT) || 6379;
 const redisPassword = process.env.REDIS_PASSWORD || "";
 
-Prometheus.collectDefaultMetrics();
+// Assume a default of logging console, but not to file
+const logToFile = !(process.env.LOG_TO_CONSOLE !== undefined && process.env.LOG_TO_CONSOLE === "true");
+const logToConsole = !(process.env.LOG_TO_CONSOLE !== undefined && process.env.LOG_TO_CONSOLE === "false");
+const logLevel = process.env.LOG_LEVEL || null;
 
 async function main(): Promise<void> {
     const connection = new IORedis(redisPort, redisHost, {
@@ -39,6 +42,12 @@ async function main(): Promise<void> {
         maxRetriesPerRequest: null,
         lazyConnect: true,
     });
+
+    const loggers: LoggerConfig[] = [];
+
+    if (logToConsole) loggers.push(MoleculerConfigLogConsole);
+    if (logToFile) loggers.push(MoleculerConfigLogFile);
+    if (logLevel) loggers.forEach((logger) => (logger.options!.level = logLevel));
 
     const nodeID = process.env.BUILDER_HOSTNAME;
     const broker = new ServiceBroker({
@@ -56,12 +65,16 @@ async function main(): Promise<void> {
                 ? (Number(process.env.BUILDER_CLASS) as BuildClass)
                 : BuildClass.Medium,
         },
+        logger: loggers,
+        ...MoleculerConfigCommon,
     });
+
+    broker.logger.info("Chaotic-AUR build system is starting up...");
 
     switch (mainOptions.command) {
         case "schedule": {
             if (typeof mainOptions._unknown === "undefined" || mainOptions._unknown.length < 1) {
-                console.error("No package names specified");
+                broker.logger.fatal("No package names specified.");
                 process.exit(1);
             }
 
@@ -95,7 +108,7 @@ async function main(): Promise<void> {
         }
         case "auto-repo-remove": {
             if (typeof mainOptions._unknown === "undefined" || mainOptions._unknown.length < 1) {
-                console.error("No pkgbases specified");
+                broker.logger.fatal("No pkgbases specified.");
                 process.exit(1);
             }
             await connection.connect();
@@ -110,7 +123,7 @@ async function main(): Promise<void> {
         }
         case "builder": {
             if (!process.env.SHARED_PATH) {
-                console.error("Config variables incomplete");
+                broker.logger.fatal("Config variables incomplete.");
                 return process.exit(1);
             }
             await connection.connect();
@@ -128,7 +141,7 @@ async function main(): Promise<void> {
                 !process.env.DATABASE_PORT ||
                 !process.env.DATABASE_USER
             ) {
-                console.error("Config variables incomplete");
+                broker.logger.fatal("Config variables incomplete");
                 return process.exit(1);
             }
             await connection.connect();
@@ -140,18 +153,18 @@ async function main(): Promise<void> {
             void broker.start();
 
             if (typeof mainOptions["web-port"] !== "undefined") {
-                void startWebServer(Number(mainOptions["web-port"]), redis_connection_manager);
+                void startWebServer(Number(mainOptions["web-port"]), redis_connection_manager, broker.logger);
             }
             break;
         }
         case "web": {
             await connection.connect();
             const redis_connection_manager = new RedisConnectionManager(connection);
-            void startWebServer(Number(mainOptions["web-port"]) || 8080, redis_connection_manager);
+            void startWebServer(Number(mainOptions["web-port"]) || 8080, redis_connection_manager, broker.logger);
             break;
         }
         default:
-            console.error("Invalid command");
+            broker.logger.fatal("Invalid command!");
             return process.exit(1);
     }
 }

@@ -1,6 +1,7 @@
 import { URL } from "url";
 import to from "await-to-js";
 import type { CoordinatorJob, PacmanRepo } from "./types";
+import { LoggerInstance } from "moleculer";
 
 export type GitlabState = "pending" | "running" | "success" | "failed" | "canceled";
 
@@ -10,6 +11,7 @@ class GitlabNotifier {
         public token: string,
         public check_name: string,
         public base_log_url: URL,
+        public logger: LoggerInstance,
     ) {}
 
     getLogUrl(job: CoordinatorJob) {
@@ -49,12 +51,12 @@ class GitlabNotifier {
             }),
         );
         if (err || !out) {
-            console.error(err);
+            this.logger.error(err);
             return;
         }
 
         if (out.status < 200 || out.status >= 300) {
-            console.error(await out.text());
+            this.logger.error(await out.text());
             return;
         }
     }
@@ -137,7 +139,12 @@ export class RepoManager {
     repos: Record<string, Repo> = {};
     target_repos: Record<string, TargetRepo> = {};
 
-    constructor(public base_log_url: URL | undefined) {}
+    constructor(
+        public base_log_url: URL | undefined,
+        public logger: LoggerInstance,
+    ) {
+        this.logger = logger;
+    }
 
     repoFromObject(obj: object) {
         for (const [key, value] of Object.entries(obj)) {
@@ -181,7 +188,7 @@ export class RepoManager {
 
     notifiersFromObject(obj: object) {
         if (!this.base_log_url) {
-            console.warn("No base log url set, gitlab notifiers disabled");
+            this.logger.warn("No base log url set, gitlab notifiers disabled");
             return;
         }
         for (const [key, value] of Object.entries(obj)) {
@@ -193,11 +200,11 @@ export class RepoManager {
                 throw new Error("Invalid notifier object");
             }
             if (typeof this.repos[key] === "undefined") {
-                console.warn(`Notifier for non-existent repo ${key}`);
+                this.logger.warn(`Notifier for non-existent repo ${key}`);
                 continue;
             }
             this.repos[key].setNotifier(
-                new GitlabNotifier(value["id"], value["token"], value["check_name"], this.base_log_url),
+                new GitlabNotifier(value["id"], value["token"], value["check_name"], this.base_log_url, this.logger),
             );
         }
     }

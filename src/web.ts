@@ -8,8 +8,9 @@ import { ChaoticApi } from "./api";
 import { getMetrics } from "./prometheus";
 import type { RedisConnectionManager } from "./redis-connection-manager";
 import { corsOptions, HTTP_CACHE_MAX_AGE } from "./types";
+import { LoggerInstance } from "moleculer";
 
-export async function startWebServer(port: number, manager: RedisConnectionManager) {
+export async function startWebServer(port: number, manager: RedisConnectionManager, logger: LoggerInstance) {
     const connection = manager.getClient();
     const subscriber = manager.getSubscriber();
 
@@ -169,6 +170,6 @@ export async function startWebServer(port: number, manager: RedisConnectionManag
     );
 
     app.listen(port, () => {
-        console.log(`Web server listening on port ${port}`);
+        logger.info(`Web server listening on port ${port}`);
     });
 }

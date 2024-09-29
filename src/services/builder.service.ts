@@ -38,7 +38,7 @@ export class BuilderService extends Service {
     mountPkgout = "/shared/pkgout";
     mountSrcdest = "/shared/srcdest_cache";
 
-    containerManager: ContainerManager = new DockerManager();
+    containerManager: ContainerManager;
 
     constructor(broker: ServiceBroker, redis_connection_manager: RedisConnectionManager) {
         super(broker);
@@ -58,9 +58,9 @@ export class BuilderService extends Service {
         });
 
         if (this.builder.container_engine === "podman") {
-            this.containerManager = new PodmanManager();
+            this.containerManager = new PodmanManager(this.logger);
         } else {
-            this.containerManager = new DockerManager();
+            this.containerManager = new DockerManager(this.logger);
         }
     }
 
@@ -76,7 +76,7 @@ export class BuilderService extends Service {
         // If this fails, something has gone terribly wrong.
         // The coordinator should never send two jobs to the same builder
         return tryAcquire(this.mutex).runExclusive(async (): Promise<BuildStatusReturn> => {
-            const logger = new BuildsRedisLogger(this.redis_connection_manager.getClient());
+            const logger = new BuildsRedisLogger(this.redis_connection_manager.getClient(), this.logger);
             void logger.from(data.pkgbase, data.timestamp);
             void logger.setDefault();
 
@@ -150,8 +150,8 @@ export class BuilderService extends Service {
                 logger.error(`Failed to upload ${ctx.id}: ${e}`);
 
                 // This does not get logged to redis
-                console.error(sshlogger.dump());
-                console.log("End of SSH log.");
+                this.logger.error(sshlogger.dump());
+                this.logger.info("End of SSH log.");
 
                 return { success: BuildStatus.FAILED };
             }
@@ -194,7 +194,7 @@ export class BuilderService extends Service {
         }
 
         await this.containerManager.kill(data.container!).catch((e) => {
-            console.error(e);
+            this.logger.error(e);
         });
         throw new Error("Job cancelled.");
     }

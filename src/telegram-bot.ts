@@ -1,4 +1,5 @@
 import TelegramBot from "node-telegram-bot-api";
+import { LoggerInstance } from "moleculer";
 
 /**
  * Class for instantiating a Telegram bot, which can be used to query
@@ -9,25 +10,30 @@ export default class ChaoticTelegramBot {
     protected telegramChatId: string;
     protected validChatIds: string[];
     private readonly bot: TelegramBot;
+    private readonly logger: LoggerInstance;
 
-    constructor({
-        telegramToken,
-        telegramChatId,
-        validChatIds,
-    }: {
-        telegramToken: string;
-        telegramChatId: string;
-        validChatIds?: string[];
-    }) {
+    constructor(
+        {
+            telegramToken,
+            telegramChatId,
+            validChatIds,
+        }: {
+            telegramToken: string;
+            telegramChatId: string;
+            validChatIds?: string[];
+        },
+        logger: LoggerInstance,
+    ) {
         this.telegramToken = telegramToken;
         this.telegramChatId = telegramChatId;
         this.validChatIds = validChatIds ?? [];
         this.bot = new TelegramBot(telegramToken, { polling: true });
-        console.log("Telegram bot initialized.");
+        this.logger = logger;
+        this.logger.info("Telegram bot initialized.");
 
         if (this.validChatIds.length > 0) {
             void this.setupListeners();
-            console.log("Set up Telegram bot listeners.");
+            this.logger.info("Set up Telegram bot listeners.");
         }
     }
 
@@ -70,7 +76,7 @@ export default class ChaoticTelegramBot {
                 });
             }
         } catch (e) {
-            console.error("An error occurred:", e);
+            this.logger.error("An error occurred:", e);
         }
     }
 
@@ -82,7 +88,7 @@ export default class ChaoticTelegramBot {
     async setupListeners(): Promise<void> {
         this.bot.on("message", (msg: TelegramBot.Message): void => {
             if (this.isAllowedChat(msg.chat)) {
-                console.error("Unauthorized user tried to send a message");
+                this.logger.error("Unauthorized user tried to send a message.");
                 return;
             } else {
                 this.bot.sendMessage(msg.chat.id, "Received your message");

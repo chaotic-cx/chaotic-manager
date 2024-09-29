@@ -46,8 +46,6 @@ export async function schedulePackages(
     for (const pkg of packages) {
         const [pkgbase, build_class] = pkg.split("/");
 
-        console.debug(pkgbase, build_class, package_dependency_map);
-
         const dependencies = package_dependency_map[pkgbase];
         packageList.push({
             pkgbase,

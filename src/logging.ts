@@ -1,6 +1,7 @@
 import to from "await-to-js";
 import { MetricsTime } from "bullmq";
 import type RedisConnection from "ioredis";
+import { LoggerInstance } from "moleculer";
 
 // Console.log imitation that saves to a variable instead of stdout
 export class SshLogger {
@@ -22,9 +23,11 @@ export class BuildsRedisLogger {
     private key = "";
     private default_key = "";
     private timestamp = 0;
+    private logger: LoggerInstance;
 
-    constructor(connection: RedisConnection) {
+    constructor(connection: RedisConnection, logger: LoggerInstance) {
         this.connection = connection;
+        this.logger = logger;
     }
 
     public async from(pkgbase: string, timestamp?: number) {
@@ -43,7 +46,7 @@ export class BuildsRedisLogger {
     }
 
     private internal_log(arg: string, err = false): void {
-        if (!this.init) return console.warn("Logger not initialized");
+        if (!this.init) return this.logger.warn("Logger not initialized");
         // Pipelining results in a single roundtrip to the server and this prevents requests from getting out of order
         const pipeline = this.connection.pipeline();
         pipeline.publish(this.channel, "LOG" + arg);
@@ -72,7 +75,7 @@ export class BuildsRedisLogger {
     }
 
     public async setDefault() {
-        if (!this.init) return console.warn("Logger not initialized");
+        if (!this.init) return this.logger.warn("Logger not initialized");
         await this.connection.setex(this.default_key, MetricsTime.ONE_WEEK, this.timestamp);
     }
 }

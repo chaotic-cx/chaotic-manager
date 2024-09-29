@@ -9,7 +9,7 @@ import {
 } from "../types";
 import { RedisConnectionManager } from "../redis-connection-manager";
 import { BuildsRedisLogger } from "../logging";
-import { ContainerManager, DockerManager } from "../container-manager";
+import { ContainerManager, DockerManager, PodmanManager } from "../container-manager";
 import { currentTime } from "../utils";
 import fs from "fs";
 
@@ -20,7 +20,7 @@ export class DatabaseService extends Service {
     mutex: Mutex = new Mutex();
     redis_connection_manager: RedisConnectionManager;
     gpg: string = process.env.GPG_PATH || "";
-    container_manager: ContainerManager = new DockerManager();
+    container_manager: ContainerManager;
 
     constructor(broker: ServiceBroker, redis_connection_manager: RedisConnectionManager) {
         super(broker);
@@ -43,6 +43,12 @@ export class DatabaseService extends Service {
                 generateDestFillerFiles: this.generateDestFillerFiles,
             },
         });
+
+        if (process.env.CONTAINER_ENGINE === "podman") {
+            this.container_manager = new PodmanManager(this.logger);
+        } else {
+            this.container_manager = new DockerManager(this.logger);
+        }
     }
 
     fetchUploadInfo(): Database_Action_fetchUploadInfo_Response {
@@ -69,7 +75,7 @@ export class DatabaseService extends Service {
         return await this.mutex.runExclusive(async () => {
             // const repo = this.repo_manager.getRepo(data.repo);
 
-            const logger = new BuildsRedisLogger(this.redis_connection_manager.getClient());
+            const logger = new BuildsRedisLogger(this.redis_connection_manager.getClient(), this.logger);
             void logger.from(data.pkgbase, data.timestamp);
 
             logger.log(`Processing add to db job ${ctx.id} at ${currentTime()}`);
@@ -89,8 +95,7 @@ export class DatabaseService extends Service {
             );
 
             if (err) {
-                console.log(err);
-                logger.error(`Failed to add packages to the database.`);
+                this.logger.warn(err);
                 return {
                     success: false,
                 };
@@ -108,10 +113,10 @@ export class DatabaseService extends Service {
         let ret: DatabaseRemoveStatusReturn = { success: false };
 
         await this.mutex.runExclusive(async () => {
-            console.log(`\r\nProcessing automatic package removal job for ${data.repo} at ${currentTime()}`);
+            this.logger.info(`\r\nProcessing automatic package removal job for ${data.repo} at ${currentTime()}`);
 
             if (data.pkgbases.length === 0) {
-                console.log("Intended package list is empty. Assuming this is in error.");
+                this.logger.info("Intended package list is empty. Assuming this is in error.");
                 throw new Error("Intended package list is empty. Assuming this is in error.");
             }
 
@@ -124,8 +129,8 @@ export class DatabaseService extends Service {
             );
 
             if (err) {
-                console.error(err);
-                console.log("Failed to remove packages from the database.");
+                this.logger.error(err);
+                this.logger.info("Failed to remove packages from the database.");
                 ret.success = false;
             }
         });
