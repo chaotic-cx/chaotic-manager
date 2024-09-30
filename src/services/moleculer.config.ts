@@ -2,7 +2,7 @@ import { ServiceRegistry } from "moleculer";
 
 export const MoleculerConfigCommon = {
     metrics: {
-        enabled: true,
+        enabled: false,
         reporter: [
             {
                 type: "Prometheus",
@@ -16,18 +16,6 @@ export const MoleculerConfigCommon = {
                 },
             },
         ],
-    },
-};
-
-export const MoleculerConfigLogFile = {
-    type: "File",
-    options: {
-        level: "info",
-        folder: "./logs",
-        filename: "chaotic-{date}.log",
-        formatter: "{timestamp} {level} {nodeID}/{mod}: {msg}",
-        eol: "\n",
-        interval: 1000,
     },
 };
 

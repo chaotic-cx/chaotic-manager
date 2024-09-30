@@ -1,26 +1,22 @@
 import Timeout from "await-timeout";
 import to from "await-to-js";
-import { Queue } from "bullmq";
-import cors from "cors";
+// import cors from "cors";
 import express, { type Request, type Response } from "express";
-import { register } from "prom-client";
-import { ChaoticApi } from "./api";
-import { getMetrics } from "./prometheus";
+// import { register } from "prom-client";
+// import { ChaoticApi } from "./api";
+// import { getMetrics } from "./prometheus";
 import type { RedisConnectionManager } from "./redis-connection-manager";
 import { corsOptions, HTTP_CACHE_MAX_AGE } from "./types";
-import { LoggerInstance } from "moleculer";
+import { LoggerInstance, ServiceBroker } from "moleculer";
 
-export async function startWebServer(port: number, manager: RedisConnectionManager, logger: LoggerInstance) {
+export async function startWebServer(broker: ServiceBroker, port: number, manager: RedisConnectionManager, logger: LoggerInstance) {
     const connection = manager.getClient();
     const subscriber = manager.getSubscriber();
 
-    const builder_queue = new Queue("builds", { connection });
-    const database_queue = new Queue("database", { connection });
-
-    const chaoticApi: ChaoticApi = new ChaoticApi({
+    /*const chaoticApi: ChaoticApi = new ChaoticApi({
         builderQueue: builder_queue,
         databaseQueue: database_queue,
-    });
+    });*/
 
     const app = express();
 
@@ -87,32 +83,11 @@ export async function startWebServer(port: number, manager: RedisConnectionManag
         unref.push(forwarder);
         subscriber.on("message", forwarder);
 
-        let busy = false;
-        const [, active] = await to(connection.keys(`bull:[^:]*:[^:]*/${id}`));
-        if (active && active.length > 0) {
-            let full_key;
-            for (const key of active) {
-                // Extract full key from redis via regex
-                const temp_key = key.match(/^bull:[^:]*:([^:]*\/[^:]*)$/)?.[1];
-                if (!temp_key) continue;
-                full_key = temp_key;
-                break;
-            }
-            if (full_key) {
-                const jobs = await Promise.all([builder_queue.getJob(full_key), database_queue.getJob(full_key)]);
-                for (const job of jobs) {
-                    if (!job || !job.data || job.data.timestamp !== Number(timestamp)) continue;
-                    const state = await job.getState();
-                    if (["active", "waiting"].includes(state)) {
-                        busy = true;
-                        break;
-                    }
-                }
-            }
+        let build: boolean = await broker.call("coordinator.jobExists", { pkgbase: id, timestamp: Number(timestamp) });
+        if (!build) {
+            res.end();
         }
-
-        if (!busy) res.end();
-    }
+    };
 
     app.get("/api/logs/:id/:timestamp", getOrStreamLog);
 
@@ -126,7 +101,7 @@ export async function startWebServer(port: number, manager: RedisConnectionManag
         return await getOrStreamLog(req, res);
     });
 
-    app.get("/api/queue/stats", cors(corsOptions), async (req: Request, res: Response): Promise<Response> => {
+    /*app.get("/api/queue/stats", cors(corsOptions), async (req: Request, res: Response): Promise<Response> => {
         const [err, out] = await to(chaoticApi.buildStatsObject());
         if (err || !out) {
             serverError(res, 500, "Internal server error");
@@ -161,7 +136,7 @@ export async function startWebServer(port: number, manager: RedisConnectionManag
         }
         res.setHeader("Content-Type", register.contentType);
         return res.send(out);
-    });
+    });*/
 
     app.use(
         express.static("public", {
@@ -169,7 +144,7 @@ export async function startWebServer(port: number, manager: RedisConnectionManag
         }),
     );
 
-    app.listen(port, () => {
+    let server = app.listen(port, () => {
         logger.info(`Web server listening on port ${port}`);
     });
 }

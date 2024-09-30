@@ -10,7 +10,7 @@ import { BuildClass } from "./types";
 import { DatabaseService } from "./services/database.service";
 import { NotifierService } from "./services/notifier.service";
 import { BuilderService } from "./services/builder.service";
-import { MoleculerConfigCommon, MoleculerConfigLogConsole, MoleculerConfigLogFile } from "./services/moleculer.config";
+import { MoleculerConfigCommon, MoleculerConfigLogConsole } from "./services/moleculer.config";
 
 if (!process.env.NODE_ENV) process.env.NODE_ENV = "production";
 
@@ -32,8 +32,7 @@ const redisPort = Number(process.env.REDIS_PORT) || 6379;
 const redisPassword = process.env.REDIS_PASSWORD || "";
 
 // Assume a default of logging console, but not to file
-const logToFile = !(process.env.LOG_TO_CONSOLE !== undefined && process.env.LOG_TO_CONSOLE === "true");
-const logToConsole = !(process.env.LOG_TO_CONSOLE !== undefined && process.env.LOG_TO_CONSOLE === "false");
+const logToConsole = process.env.LOG_CONSOLE === undefined || process.env.LOG_CONSOLE === "true";
 const logLevel = process.env.LOG_LEVEL || null;
 
 async function main(): Promise<void> {
@@ -46,7 +45,6 @@ async function main(): Promise<void> {
     const loggers: LoggerConfig[] = [];
 
     if (logToConsole) loggers.push(MoleculerConfigLogConsole);
-    if (logToFile) loggers.push(MoleculerConfigLogFile);
     if (logLevel) loggers.forEach((logger) => (logger.options!.level = logLevel));
 
     const nodeID = process.env.BUILDER_HOSTNAME;
@@ -150,17 +148,19 @@ async function main(): Promise<void> {
             broker.createService(new DatabaseService(broker, redis_connection_manager));
             broker.createService(new CoordinatorService(broker, redis_connection_manager));
             broker.createService(new NotifierService(broker));
-            void broker.start();
 
             if (typeof mainOptions["web-port"] !== "undefined") {
-                void startWebServer(Number(mainOptions["web-port"]), redis_connection_manager, broker.logger);
+                void startWebServer(broker, Number(mainOptions["web-port"]), redis_connection_manager, broker.logger);
             }
+
+            void broker.start();
             break;
         }
         case "web": {
             await connection.connect();
             const redis_connection_manager = new RedisConnectionManager(connection);
-            void startWebServer(Number(mainOptions["web-port"]) || 8080, redis_connection_manager, broker.logger);
+            void startWebServer(broker, Number(mainOptions["web-port"]) || 8080, redis_connection_manager, broker.logger);
+            void broker.start();
             break;
         }
         default:

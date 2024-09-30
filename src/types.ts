@@ -1,5 +1,4 @@
 import type { CorsOptions } from "cors";
-import { Container } from "dockerode";
 
 export interface PacmanRepo {
     name: string;
@@ -36,40 +35,6 @@ export interface RemoteSettings {
         }
     >;
     version: number;
-}
-
-export interface BuildJobData {
-    arch: string;
-    srcrepo: string | undefined;
-    timestamp: number;
-    commit: string | undefined;
-    deptree: {
-        dependencies: string[];
-        dependents: string[];
-    } | null;
-    repo_files: string[];
-}
-
-export type DatabaseJobData = Omit<BuildJobData, "repo_files"> & {
-    packages: string[];
-    repo?: string;
-};
-
-export interface DispatchJobData {
-    type: "add-job";
-    data: {
-        target_repo: string;
-        source_repo: string;
-        commit: string | undefined;
-        arch: string;
-        packages: {
-            pkgbase: string;
-            deptree: {
-                dependencies: string[];
-                dependents: string[];
-            } | null;
-        }[];
-    };
 }
 
 export enum BuildStatus {
@@ -170,7 +135,6 @@ export type Builder_Action_BuildPackage_Params = {
     upload_info: Database_Action_fetchUploadInfo_Response;
     timestamp: number;
     commit?: string;
-    container?: Container;
 };
 
 export type BuildStatusReturn = {
@@ -218,6 +182,7 @@ export class CoordinatorJob {
     node: string;
     timestamp: number;
     commit: string | undefined;
+    replacement?: CoordinatorJob;
 
     constructor(
         pkgbase: string,
@@ -238,6 +203,7 @@ export class CoordinatorJob {
         this.pkgnames = pkgnames;
         this.dependencies = dependencies;
         this.timestamp = timestamp;
+        this.commit = commit;
 
         this.node = "";
     }
@@ -256,7 +222,6 @@ export interface FailureNotificationParams {
     pkgbase: string;
     timestamp: number;
     event: string;
-    source_repo: string;
     commit?: string;
     source_repo_url: string;
 }

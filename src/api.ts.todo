@@ -1,4 +1,3 @@
-import type { Metrics, Queue } from "bullmq";
 import type { MetricsReturnObject, PackagesReturnObject, StatsReturnObject } from "./types";
 
 /**

@@ -1,5 +1,4 @@
 import to from "await-to-js";
-import { MetricsTime } from "bullmq";
 import type RedisConnection from "ioredis";
 import { LoggerInstance } from "moleculer";
 
@@ -76,6 +75,6 @@ export class BuildsRedisLogger {
 
     public async setDefault() {
         if (!this.init) return this.logger.warn("Logger not initialized");
-        await this.connection.setex(this.default_key, MetricsTime.ONE_WEEK, this.timestamp);
+        await this.connection.set(this.default_key, this.timestamp, "EX", 60 * 60 * 24 * 7); // 7 days
     }
 }

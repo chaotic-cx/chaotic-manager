@@ -17,6 +17,7 @@ import { ContainerManager, DockerManager, PodmanManager } from "../container-man
 import { to } from "await-to-js";
 import Client, { ScpClient } from "node-scp";
 import { Dirent } from "node:fs";
+import { Container } from "dockerode";
 
 /**
  * The BuilderService class is a moleculer service that provides the buildPackage and cancelBuild actions.
@@ -39,6 +40,8 @@ export class BuilderService extends Service {
     mountSrcdest = "/shared/srcdest_cache";
 
     containerManager: ContainerManager;
+    container: Container | null = null;
+    cancelled: boolean = false;
 
     constructor(broker: ServiceBroker, redis_connection_manager: RedisConnectionManager) {
         super(broker);
@@ -72,15 +75,15 @@ export class BuilderService extends Service {
      */
     async buildPackage(ctx: Context): Promise<BuildStatusReturn> {
         let data = ctx.params as Builder_Action_BuildPackage_Params;
+        this.cancelled = false;
 
         // If this fails, something has gone terribly wrong.
         // The coordinator should never send two jobs to the same builder
-        return tryAcquire(this.mutex).runExclusive(async (): Promise<BuildStatusReturn> => {
+        return await tryAcquire(this.mutex).runExclusive(async (): Promise<BuildStatusReturn> => {
             const logger = new BuildsRedisLogger(this.redis_connection_manager.getClient(), this.logger);
-            void logger.from(data.pkgbase, data.timestamp);
-            void logger.setDefault();
+            await logger.from(data.pkgbase, data.timestamp);
 
-            logger.log(`Processing build job ${ctx.id} at ${currentTime()}`);
+            logger.log(`Processing build job at ${currentTime()}`);
 
             // Make sure the pkgout directory is clean for the current build
             this.ensurePathClean(this.mountPkgout);
@@ -96,7 +99,7 @@ export class BuilderService extends Service {
             const srcdest_package_path = path.join(this.shared_srcdest_cache, data.target_repo, data.pkgbase);
 
             // Append the container object to the job context
-            data.container = await this.containerManager.create(
+            this.container = await this.containerManager.create(
                 data.builder_image,
                 ["build", data.pkgbase],
                 [
@@ -115,7 +118,7 @@ export class BuilderService extends Service {
                 ],
             );
 
-            const [err, out] = await to(this.containerManager.start(data.container, logger.raw_log.bind(logger)));
+            const [err, out] = await to(this.containerManager.start(this.container, logger.raw_log.bind(logger)));
 
             // Remove any filler files from the equation
             const file_list = fs.readdirSync(this.mountPkgout).filter((file): boolean => {
@@ -133,7 +136,7 @@ export class BuilderService extends Service {
                 } else {
                     return { success: BuildStatus.FAILED };
                 }
-            } else logger.log(`Finished build ${ctx.id}. Uploading...`);
+            } else logger.log(`Finished build. Uploading...`);
 
             const sshlogger = new SshLogger();
             try {
@@ -147,7 +150,7 @@ export class BuilderService extends Service {
                 await client.uploadDir(this.mountPkgout, data.upload_info.database.landing_zone);
                 client.close();
             } catch (e) {
-                logger.error(`Failed to upload ${ctx.id}: ${e}`);
+                logger.error(`Failed to upload: ${e}`);
 
                 // This does not get logged to redis
                 this.logger.error(sshlogger.dump());
@@ -156,8 +159,7 @@ export class BuilderService extends Service {
                 return { success: BuildStatus.FAILED };
             }
 
-            this.ensurePathClean(this.mountPkgout, false);
-            logger.log(`Finished upload ${ctx.id}.`);
+            logger.log(`Finished upload.`);
 
             let addToDbParams: Database_Action_AddToDb_Params = {
                 source_repo: data.source_repo,
@@ -178,25 +180,25 @@ export class BuilderService extends Service {
                     packages: file_list,
                 };
             }
+        }).finally(() => {
+            this.container = null;
+            this.ensurePathClean(this.mountPkgout, false);
         });
     }
 
     /**
-     * Cancels a build by killing the container associated with the build job. The idea is that created container
-     * object is appended to the job context by the buildPackage method, so this method can kill it.
-     * @param ctx The moleculer context, containing the Container object to kill
+     * Cancels a build by killing the container associated with the current builder.
      */
-    async cancelBuild(ctx: Context): Promise<void> {
-        let data = ctx.params as Builder_Action_BuildPackage_Params;
-
-        if (!data.container) {
+    async cancelBuild(): Promise<void> {
+        this.cancelled = true;
+        if (!this.mutex.isLocked())
             return;
+        if (this.container) {
+            this.containerManager.kill(this.container).catch((e) => {
+                this.logger.error(e);
+            });
         }
-
-        await this.containerManager.kill(data.container!).catch((e) => {
-            this.logger.error(e);
-        });
-        throw new Error("Job cancelled.");
+        await this.mutex.waitForUnlock();
     }
 
     /**

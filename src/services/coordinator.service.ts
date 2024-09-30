@@ -17,6 +17,7 @@ import { DepGraph } from "dependency-graph";
 import { BuildsRedisLogger } from "../logging";
 import { RedisConnectionManager } from "../redis-connection-manager";
 import { currentTime } from "../utils";
+import { Mutex } from "async-mutex";
 
 /**
  * The coordinator service is responsible for managing the build queue and assigning jobs to the builder nodes.
@@ -33,6 +34,7 @@ export class CoordinatorService extends Service {
     redis_connection_manager: RedisConnectionManager;
     repo_manager = new RepoManager(this.base_logs_url ? new URL(this.base_logs_url) : undefined, this.logger);
     busy_nodes: { [key: string]: CoordinatorJob } = {};
+    mutex: Mutex = new Mutex();
 
     constructor(broker: ServiceBroker, redis_connection_manager: RedisConnectionManager) {
         super(broker);
@@ -47,15 +49,13 @@ export class CoordinatorService extends Service {
                 $noVersionPrefix: true,
             },
             actions: {
-                assignJobs: this.assignJobs,
                 addJobsToQueue: this.addJobsToQueue,
                 autoRepoRemove: this.autoRepoRemove,
+                jobExists: this.jobExists,
             },
             events: {
                 "$node.connected": {
-                    handler(): void {
-                        void broker.call("coordinator.assignJobs");
-                    },
+                    handler: this.assignJobs,
                 },
             },
         });
@@ -76,159 +76,163 @@ export class CoordinatorService extends Service {
         return this.broker.call("database.fetchUploadInfo");
     }
 
-    /**
-     * Assigns jobs to the builder nodes. This function is called recursively to ensure that all available nodes are
-     * utilized and existing build jobs are assigned to them.
-     */
-    async assignJobs(): Promise<void> {
-        let services: any[] = await this.broker.call("$node.services");
-        let nodes: string[] | undefined;
-        for (const entry of services) {
-            if (entry.name === "builder") {
-                nodes = entry.nodes;
-                break;
-            }
-        }
-
-        // Check if any of the nodes are in the busy_nodes list
-        if (!nodes || nodes.length == 0) {
-            this.logger.warn("No builder nodes available.");
-            return;
-        }
-
-        let full_node_list: any[] = await this.broker.call("$node.list");
-        if (!full_node_list || full_node_list.length == 0) {
-            this.logger.error("No nodes listed??");
-            return;
-        }
-
-        // nodes.includes(node.id) -> check if the node is in the list of builder nodes
-        // node.available -> check if the node is available (not offline)
-        // !this.busy_nodes[node.id] -> check if the node is not in the list of busy nodes
-        let available_nodes: any[] = full_node_list.filter(
-            (node: any) => nodes.includes(node.id) && node.available && !this.busy_nodes[node.id],
-        );
-
-        if (available_nodes.length == 0) {
-            return;
-        }
-
-        let graph: DepGraph<CoordinatorJob> = this.constructDependencyGraph(this.queue);
-        let upload_info: Database_Action_fetchUploadInfo_Response = await this.getUploadInfo();
-
-        for (const node of available_nodes) {
-            let jobs: CoordinatorJob[] = this.getPossibleJobs(graph, node.metadata.build_class);
-            if (jobs.length == 0) {
-                continue;
-            }
-            let job: CoordinatorJob | undefined = jobs.shift();
-            if (!job) {
-                continue;
-            }
-
-            this.busy_nodes[node.id] = job;
-            let source_repo: Repo = this.repo_manager.getRepo(job.source_repo);
-            let target_repo: TargetRepo = this.repo_manager.getTargetRepo(job.target_repo);
-            let params: Builder_Action_BuildPackage_Params = {
-                pkgbase: job.pkgbase,
-                target_repo: job.target_repo,
-                source_repo: job.source_repo,
-                source_repo_url: source_repo.getUrl(),
-                extra_repos: target_repo.repoToString(),
-                extra_keyrings: target_repo.keyringsToBashArray(),
-                arch: job.arch,
-                builder_image: this.builder_image,
-                upload_info,
-                timestamp: job.timestamp,
-                commit: job.commit,
-            };
-
-            job.node = node.id;
-
-            let logger = new BuildsRedisLogger(this.redis_connection_manager.getClient(), this.logger);
-            void logger.from(job.pkgbase, job.timestamp);
-            void logger.setDefault();
-
-            this.broker
-                .call<BuildStatusReturn, Builder_Action_BuildPackage_Params>("builder.buildPackage", params, {
-                    nodeID: node.id,
-                })
-                .then((ret: BuildStatusReturn) => {
-                    switch (ret.success) {
-                        case BuildStatus.ALREADY_BUILT: {
-                            source_repo.notify(job, "canceled", "Build skipped because package was already built.");
-                            logger.log(`Job ${job?.toId()} skipped because all packages were already built.`);
-                            break;
-                        }
-                        case BuildStatus.SUCCESS: {
-                            source_repo.notify(job, "success", "Package successfully deployed.");
-                            logger.log(`Build job ${job?.toId()} finished at ${currentTime()}...`);
-
-                            const notify_params: SuccessNotificationParams = {
-                                packages: ret.packages!,
-                                event: `📣 New deployment to ${job.target_repo}`,
-                            };
-                            this.broker.call("notifier.notifyPackages", notify_params);
-                            break;
-                        }
-                        case BuildStatus.SKIPPED: {
-                            source_repo.notify(job, "canceled", "Build skipped intentionally via build tools.");
-                            logger.log(`Job ${job?.toId()} skipped intentionally via build tools.`);
-                            break;
-                        }
-                        case BuildStatus.FAILED: {
-                            source_repo.notify(job, "failed", "Build failed.");
-                            logger.log(`Job ${job?.toId()} failed`);
-
-                            const notify_params: FailureNotificationParams = {
-                                pkgbase: params.pkgbase,
-                                event: `🚨 Failed deploying to ${job.target_repo}`,
-                                source_repo_url: params.source_repo_url,
-                                source_repo: params.source_repo,
-                                timestamp: params.timestamp,
-                                commit: params.commit,
-                            };
-                            this.broker.call("notifier.notifyFailure", notify_params);
-                            break;
-                        }
-                        case BuildStatus.TIMED_OUT: {
-                            source_repo.notify(job, "failed", "Build timed out.");
-                            logger.log(`Job ${job?.toId()} reached a timeout during the build phase.`);
-
-                            const notify_params: FailureNotificationParams = {
-                                pkgbase: params.pkgbase,
-                                event: `⏳ Build for ${params.source_repo} failed due to a timeout`,
-                                source_repo_url: params.source_repo_url,
-                                source_repo: params.source_repo,
-                                timestamp: params.timestamp,
-                                commit: params.commit,
-                            };
-                            this.broker.call("notifier.notifyFailure", notify_params);
-                            break;
-                        }
+    private onJobComplete(promise: Promise<BuildStatusReturn>, job: CoordinatorJob, source_repo: Repo, logger: BuildsRedisLogger, node_id: string): void {
+        promise
+            .then((ret: BuildStatusReturn) => {
+                switch (ret.success) {
+                    case BuildStatus.ALREADY_BUILT: {
+                        source_repo.notify(job, "canceled", "Build skipped because package was already built.");
+                        logger.log(`Job ${job.toId()} skipped because all packages were already built.`);
+                        break;
                     }
-                })
-                .catch((err) => {
-                    this.logger.error("Failed during package deployment:", err);
-                    source_repo.notify(job, "failed", "Build failed.");
-                    logger.log(`Job ${job?.toId()} failed`);
+                    case BuildStatus.SUCCESS: {
+                        source_repo.notify(job, "success", "Package successfully deployed.");
+                        logger.log(`Build job ${job.toId()} finished at ${currentTime()}...`);
 
-                    const notify_params: FailureNotificationParams = {
-                        pkgbase: params.pkgbase,
-                        event: `💥 The code blew up while deploying to ${job.target_repo}`,
-                        source_repo_url: params.source_repo_url,
-                        source_repo: params.source_repo,
-                        timestamp: params.timestamp,
-                        commit: params.commit,
-                    };
-                    this.broker.call("notifier.notifyFailure", notify_params);
-                })
-                .finally(() => {
-                    delete this.queue[job.toId()];
-                    delete this.busy_nodes[node.id];
-                    this.assignJobs();
+                        const notify_params: SuccessNotificationParams = {
+                            packages: ret.packages!,
+                            event: `📣 New deployment to ${job.target_repo}`,
+                        };
+                        this.broker.call("notifier.notifyPackages", notify_params);
+                        break;
+                    }
+                    case BuildStatus.SKIPPED: {
+                        source_repo.notify(job, "canceled", "Build skipped intentionally via build tools.");
+                        logger.log(`Job ${job.toId()} skipped intentionally via build tools.`);
+                        break;
+                    }
+                    case BuildStatus.FAILED: {
+                        source_repo.notify(job, "failed", "Build failed.");
+                        logger.log(`Job ${job.toId()} failed`);
+
+                        const notify_params: FailureNotificationParams = {
+                            pkgbase: job.pkgbase,
+                            event: `🚨 Failed deploying to ${job.target_repo}`,
+                            source_repo_url: source_repo.getUrl(),
+                            timestamp: job.timestamp,
+                            commit: job.commit,
+                        };
+                        this.broker.call("notifier.notifyFailure", notify_params);
+                        break;
+                    }
+                    case BuildStatus.TIMED_OUT: {
+                        source_repo.notify(job, "failed", "Build timed out.");
+                        logger.log(`Job ${job.toId()} reached a timeout during the build phase.`);
+
+                        const notify_params: FailureNotificationParams = {
+                            pkgbase: job.pkgbase,
+                            event: `⏳ Build for ${job.target_repo} failed due to a timeout`,
+                            source_repo_url: source_repo.getUrl(),
+                            timestamp: job.timestamp,
+                            commit: job.commit,
+                        };
+                        this.broker.call("notifier.notifyFailure", notify_params);
+                        break;
+                    }
+                }
+            })
+            .catch((err) => {
+                this.logger.error("Failed during package deployment:", err);
+                source_repo.notify(job, "failed", "Build failed.");
+                logger.log(`Job ${job?.toId()} failed`);
+
+                const notify_params: FailureNotificationParams = {
+                    pkgbase: job.pkgbase,
+                    event: `💥 The code blew up while deploying to ${job.target_repo}`,
+                    source_repo_url: source_repo.getUrl(),
+                    timestamp: job.timestamp,
+                    commit: job.commit,
+                };
+                this.broker.call("notifier.notifyFailure", notify_params);
+            })
+            .finally(() => {
+                logger.end_log();
+                let job_id = job.toId();
+                if (job.replacement)
+                    this.queue[job_id] = job.replacement;
+                else
+                    delete this.queue[job_id];
+                delete this.busy_nodes[node_id];
+                void this.assignJobs();
+            });
+    }
+
+    private async assignJobs(): Promise<void> {
+        await this.mutex.runExclusive(async () => {
+            // Fetch the list of available builder nodes
+            let services: any[] = await this.broker.call("$node.services");
+            let nodes: string[] | undefined;
+            for (const entry of services) {
+                if (entry.name === "builder") {
+                    nodes = entry.nodes;
+                    break;
+                }
+            }
+
+            // If no builder nodes are available, we log a warning and return
+            if (!nodes || nodes.length == 0) {
+                this.logger.warn("No builder nodes available.");
+                return;
+            }
+
+            // Fetch the full list of nodes
+            let full_node_list: any[] = await this.broker.call("$node.list");
+            if (!full_node_list || full_node_list.length == 0) {
+                return;
+            }
+
+            // nodes.includes(node.id) -> check if the node is in the list of builder nodes
+            // node.available -> check if the node is available (not offline)
+            // !this.busy_nodes[node.id] -> check if the node is not in the list of busy nodes
+            let available_nodes: any[] = full_node_list.filter(
+                (node: any) => nodes.includes(node.id) && node.available && !this.busy_nodes[node.id],
+            );
+
+            if (available_nodes.length == 0) {
+                return;
+            }
+
+            let graph: DepGraph<CoordinatorJob> = this.constructDependencyGraph(this.queue);
+            let upload_info: Database_Action_fetchUploadInfo_Response = await this.getUploadInfo();
+
+            for (const node of available_nodes) {
+                let jobs: CoordinatorJob[] = this.getPossibleJobs(graph, node.metadata.build_class);
+                if (jobs.length == 0) {
+                    continue;
+                }
+                let job: CoordinatorJob | undefined = jobs.shift();
+                if (!job) {
+                    continue;
+                }
+
+                this.busy_nodes[node.id] = job;
+                let source_repo: Repo = this.repo_manager.getRepo(job.source_repo);
+                let target_repo: TargetRepo = this.repo_manager.getTargetRepo(job.target_repo);
+                let params: Builder_Action_BuildPackage_Params = {
+                    pkgbase: job.pkgbase,
+                    target_repo: job.target_repo,
+                    source_repo: job.source_repo,
+                    source_repo_url: source_repo.getUrl(),
+                    extra_repos: target_repo.repoToString(),
+                    extra_keyrings: target_repo.keyringsToBashArray(),
+                    arch: job.arch,
+                    builder_image: this.builder_image,
+                    upload_info,
+                    timestamp: job.timestamp,
+                    commit: job.commit,
+                };
+
+                job.node = node.id;
+
+                let logger = new BuildsRedisLogger(this.redis_connection_manager.getClient(), this.logger);
+                await logger.from(job.pkgbase, job.timestamp);
+
+                let promise = this.broker.call<BuildStatusReturn, Builder_Action_BuildPackage_Params>("builder.buildPackage", params, {
+                    nodeID: node.id,
                 });
-        }
+                this.onJobComplete(promise, job, source_repo, logger, node.id);
+            }
+        });
     }
 
     /**
@@ -247,7 +251,7 @@ export class CoordinatorService extends Service {
                     data.target_repo,
                     data.source_repo,
                     data.arch,
-                    pkg.build_class || 0,
+                    pkg.build_class || 1,
                     pkg.pkgnames,
                     pkg.dependencies,
                     timestamp,
@@ -255,15 +259,35 @@ export class CoordinatorService extends Service {
                 ),
             );
         }
+
         for (const job of jobs) {
+            let log = new BuildsRedisLogger(this.redis_connection_manager.getClient(), this.logger);
+            log.from(job.pkgbase, job.timestamp).then(async () => {
+                await log.setDefault();
+                await log.log(`Added to build queue at ${currentTime()}. Waiting for builder...`);
+            });
+
             let id = job.toId();
-            if (this.queue[id]) {
-                // Job already in queue
-                // TODO: cancel jobs if they are currently active
-                continue;
+            let entry = this.queue[id];
+            // Is queued
+            if (entry) {
+                // Is running
+                if (entry.node) {
+                    ctx.call("builder.cancelBuild", undefined, { nodeID: entry.node });
+                    entry.replacement = job;
+                    continue;
+                    // Not running
+                } else {
+                    let log = new BuildsRedisLogger(this.redis_connection_manager.getClient(), this.logger);
+                    log.from(entry.pkgbase, entry.timestamp).then(() => {
+                        log.end_log();
+                    });
+                }
             }
-            this.queue[job.toId()] = job;
+            this.queue[id] = job;
         }
+
+        this.assignJobs();
     }
 
     /**
@@ -282,11 +306,11 @@ export class CoordinatorService extends Service {
         );
 
         if (result.success) {
-            void this.broker.call("notifier.notifyGeneric", {
+            await this.broker.call("notifier.notifyGeneric", {
                 message: `✅ Cleanup job for ${data.repo} finished successfully`,
             });
         } else {
-            void this.broker.call("notifier.notifyGeneric", {
+            await this.broker.call("notifier.notifyGeneric", {
                 message: `🚫 Cleanup job ${data.repo} failed to remove packages`,
             });
         }
@@ -405,6 +429,16 @@ export class CoordinatorService extends Service {
         }
 
         return jobs;
+    }
+
+    public jobExists(ctx: Context): boolean {
+        let data: { pkgbase: string; timestamp: Number } = ctx.params as any;
+        for (const job of Object.values(this.queue)) {
+            if (job.pkgbase === data.pkgbase && job.timestamp === data.timestamp) {
+                return true;
+            }
+        }
+        return false;
     }
 }
 
