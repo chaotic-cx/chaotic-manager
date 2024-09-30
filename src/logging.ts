@@ -46,7 +46,7 @@ export class BuildsRedisLogger {
 
     private internal_log(arg: string, err = false): void {
         if (!this.init) return this.logger.warn("Logger not initialized");
-        // Pipelining results in a single roundtrip to the server and this prevents requests from getting out of order
+        // Pipelining results in a single roundtrip to the server, and this prevents requests from getting out of order
         const pipeline = this.connection.pipeline();
         pipeline.publish(this.channel, "LOG" + arg);
         pipeline.append(this.key, arg);
