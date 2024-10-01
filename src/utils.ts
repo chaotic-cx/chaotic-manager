@@ -20,3 +20,16 @@ export function createLiveLogUrl(baseLogUrl: string, pkgbase: string, timestamp:
     url.searchParams.set("id", pkgbase);
     return url;
 }
+
+/**
+ * Converts high-precision timer to milliseconds.
+ * @param start The object created by process.hrtime when starting the timer
+ * @returns Elapsed time in milliseconds
+ */
+export function getDurationInMilliseconds(start: [number, number]): number {
+    const NS_PER_SEC = 1e9;
+    const NS_TO_MS = 1e6;
+    const diff = process.hrtime(start);
+
+    return (diff[0] * NS_PER_SEC + diff[1]) / NS_TO_MS;
+}

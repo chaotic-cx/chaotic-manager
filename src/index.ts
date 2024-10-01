@@ -33,13 +33,20 @@ const redisPassword = process.env.REDIS_PASSWORD || "";
 
 async function main(): Promise<void> {
     const connection = new IORedis(redisPort, redisHost, {
-        password: redisPassword,
-        maxRetriesPerRequest: null,
         lazyConnect: true,
+        maxRetriesPerRequest: null,
+        password: redisPassword,
     });
 
     const nodeID = process.env.BUILDER_HOSTNAME;
     const broker = new ServiceBroker({
+        logger: MoleculerConfigLog,
+        metadata: {
+            build_class: process.env.BUILDER_CLASS
+                ? (Number(process.env.BUILDER_CLASS) as BuildClass)
+                : BuildClass.Medium,
+        },
+        metrics: enableMetrics(mainOptions.command === "database"),
         nodeID,
         transporter: {
             type: "Redis",
@@ -49,13 +56,6 @@ async function main(): Promise<void> {
                 password: connection.options.password,
             },
         },
-        metadata: {
-            build_class: process.env.BUILDER_CLASS
-                ? (Number(process.env.BUILDER_CLASS) as BuildClass)
-                : BuildClass.Medium,
-        },
-        logger: MoleculerConfigLog,
-        metrics: enableMetrics(mainOptions.command === "database"),
         ...MoleculerConfigCommon,
     });
 
@@ -133,7 +133,7 @@ async function main(): Promise<void> {
                 !process.env.DATABASE_PORT ||
                 !process.env.DATABASE_USER
             ) {
-                broker.logger.fatal("Config variables incomplete");
+                broker.logger.fatal("Config variables incomplete.");
                 return process.exit(1);
             }
             await connection.connect();
@@ -144,7 +144,7 @@ async function main(): Promise<void> {
             broker.createService(new NotifierService(broker, chaoticLogger));
 
             if (typeof mainOptions["web-port"] !== "undefined") {
-                await startWebServer(broker, Number(mainOptions["web-port"]), redis_connection_manager, chaoticLogger);
+                await startWebServer(broker, Number(mainOptions["web-port"]), redis_connection_manager);
             }
 
             await broker.start();
@@ -158,12 +158,7 @@ async function main(): Promise<void> {
         case "web": {
             await connection.connect();
             const redis_connection_manager = new RedisConnectionManager(connection);
-            void startWebServer(
-                broker,
-                Number(mainOptions["web-port"]) || 8080,
-                redis_connection_manager,
-                broker.logger,
-            );
+            void startWebServer(broker, Number(mainOptions["web-port"]) || 8080, redis_connection_manager);
             void broker.start();
             break;
         }

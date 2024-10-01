@@ -1,22 +1,18 @@
 import Timeout from "await-timeout";
 import to from "await-to-js";
 // import cors from "cors";
-import express, { type Request, type Response } from "express";
-// import { register } from "prom-client";
-// import { ChaoticApi } from "./api";
-// import { getMetrics } from "./prometheus";
+import express, { type NextFunction, type Request, type Response } from "express";
 import type { RedisConnectionManager } from "./redis-connection-manager";
 import { HTTP_CACHE_MAX_AGE } from "./types";
 import { LoggerInstance, ServiceBroker } from "moleculer";
+import { getDurationInMilliseconds } from "./utils";
 
-export async function startWebServer(
-    broker: ServiceBroker,
-    port: number,
-    manager: RedisConnectionManager,
-    logger: LoggerInstance,
-) {
+export async function startWebServer(broker: ServiceBroker, port: number, manager: RedisConnectionManager) {
     const connection = manager.getClient();
     const subscriber = manager.getSubscriber();
+
+    const chaoticLogger: LoggerInstance = broker.getLogger("CHAOTIC");
+    const httpLogger: LoggerInstance = broker.getLogger("HTTP");
 
     /*const chaoticApi: ChaoticApi = new ChaoticApi({
         builderQueue: builder_queue,
@@ -24,6 +20,33 @@ export async function startWebServer(
     });*/
 
     const app = express();
+
+    // If behind a proxy
+    if (process.env.TRUST_PROXY) {
+        app.set("trust proxy", process.env.TRUST_PROXY);
+    }
+
+    // Log HTTP requests if not explicitly denied
+    if (!process.env.NO_HTTP_LOG) {
+        app.use(function (req: Request, res: Response, next: NextFunction) {
+            // Measure time to answer
+            const start: [number, number] = process.hrtime();
+
+            function afterResponse() {
+                const untilAnswer = getDurationInMilliseconds(start);
+
+                res.removeListener("finish", afterResponse);
+                res.removeListener("close", afterResponse);
+                httpLogger.info(
+                    `${req.method} ${req.ip} ${req.path} ${res.statusCode} ${untilAnswer.toLocaleString()}ms`,
+                );
+            }
+
+            res.on("finish", afterResponse);
+            res.on("close", afterResponse);
+            next();
+        });
+    }
 
     function serverError(res: Response, code: number, message: string): void {
         res.setHeader("Cache-Control", "no-cache");
@@ -146,6 +169,14 @@ export async function startWebServer(
         return res.send(out);
     });*/
 
+    // Error handling
+    app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
+        chaoticLogger.error(err.stack);
+        res.status(500).send(
+            "This application had a sudden increase of chaotic matters and couldn't serve your request!",
+        );
+    });
+
     app.use(
         express.static("public", {
             maxAge: HTTP_CACHE_MAX_AGE,
@@ -153,6 +184,6 @@ export async function startWebServer(
     );
 
     const server = app.listen(port, () => {
-        logger.info(`Web server listening on port ${port}`);
+        chaoticLogger.info(`Web server listening on port ${port}`);
     });
 }
