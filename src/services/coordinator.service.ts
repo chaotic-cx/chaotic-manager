@@ -6,6 +6,8 @@ import {
     Coordinator_Action_AddJobsToQueue_Params,
     Coordinator_Action_AutoRepoRemove_Params,
     CoordinatorJob,
+    CoordinatorJobSavable,
+    current_version,
     Database_Action_AutoRepoRemove_Params,
     Database_Action_fetchUploadInfo_Response,
     DatabaseRemoveStatusReturn,
@@ -19,6 +21,47 @@ import { RedisConnectionManager } from "../redis-connection-manager";
 import { currentTime } from "../utils";
 import { Mutex } from "async-mutex";
 
+class CoordinatorTrackedJob extends CoordinatorJob {
+    replacement?: CoordinatorTrackedJob;
+    logger: BuildsRedisLogger;
+    node?: string;
+
+    constructor(
+        pkgbase: string,
+        target_repo: string,
+        source_repo: string,
+        arch: string,
+        build_class: number,
+        pkgnames: string[] | undefined,
+        dependencies: string[] | undefined,
+        commit: string | undefined,
+        timestamp: number,
+        logger: BuildsRedisLogger,
+    ) {
+        super(pkgbase, target_repo, source_repo, arch, build_class, pkgnames, dependencies, commit, timestamp);
+        this.logger = logger;
+        this.node = undefined;
+    }
+
+    toSavable(): CoordinatorJob {
+        if (this.replacement)
+            return this.replacement.toSavable();
+        let base: any = structuredClone(this);
+        delete base.logger;
+        delete base.node;
+        delete base.timestamp;
+        return base;
+    }
+}
+
+function toTracked(job: CoordinatorJobSavable, timestamp: number, logger: BuildsRedisLogger): CoordinatorTrackedJob {
+    let ret: any = job;
+    ret.timestamp = timestamp;
+    ret.logger = logger;
+    ret.logger.from(ret.pkgbase, ret.timestamp);
+    return ret;
+}
+
 /**
  * The coordinator service is responsible for managing the build queue and assigning jobs to the builder nodes.
  */
@@ -30,16 +73,21 @@ export class CoordinatorService extends Service {
     builder_image =
         process.env.BUILDER_IMAGE || "registry.gitlab.com/garuda-linux/tools/chaotic-manager/builder:latest";
 
-    queue: { [key: string]: CoordinatorJob } = {};
+    queue: { [key: string]: CoordinatorTrackedJob } = {};
     redis_connection_manager: RedisConnectionManager;
     repo_manager = new RepoManager(this.base_logs_url ? new URL(this.base_logs_url) : undefined, this.logger);
-    busy_nodes: { [key: string]: CoordinatorJob } = {};
+    busy_nodes: { [key: string]: CoordinatorTrackedJob } = {};
     mutex: Mutex = new Mutex();
+
+    active: boolean = false;
 
     constructor(broker: ServiceBroker, redis_connection_manager: RedisConnectionManager) {
         super(broker);
 
         this.initRepoManager(this.repo_manager);
+        this.redis_connection_manager = redis_connection_manager;
+
+        console.log(this.redis_connection_manager)
 
         this.parseServiceSchema({
             name: "coordinator",
@@ -57,13 +105,13 @@ export class CoordinatorService extends Service {
                 "$node.connected": {
                     handler: this.assignJobs,
                 },
+                "started": {
+                    handler: this.start,
+                },
+                "stopped": {
+                    handler: this.stop,
+                },
             },
-        });
-
-        this.redis_connection_manager = redis_connection_manager;
-
-        this.broker.waitForServices(["$node"]).then(() => {
-            void this.assignJobs();
         });
     }
 
@@ -76,18 +124,18 @@ export class CoordinatorService extends Service {
         return this.broker.call("database.fetchUploadInfo");
     }
 
-    private onJobComplete(promise: Promise<BuildStatusReturn>, job: CoordinatorJob, source_repo: Repo, logger: BuildsRedisLogger, node_id: string): void {
+    private onJobComplete(promise: Promise<BuildStatusReturn>, job: CoordinatorTrackedJob, source_repo: Repo, node_id: string): void {
         promise
             .then((ret: BuildStatusReturn) => {
                 switch (ret.success) {
                     case BuildStatus.ALREADY_BUILT: {
                         source_repo.notify(job, "canceled", "Build skipped because package was already built.");
-                        logger.log(`Job ${job.toId()} skipped because all packages were already built.`);
+                        job.logger.log(`Job ${job.toId()} skipped because all packages were already built.`);
                         break;
                     }
                     case BuildStatus.SUCCESS: {
                         source_repo.notify(job, "success", "Package successfully deployed.");
-                        logger.log(`Build job ${job.toId()} finished at ${currentTime()}...`);
+                        job.logger.log(`Build job ${job.toId()} finished at ${currentTime()}...`);
 
                         const notify_params: SuccessNotificationParams = {
                             packages: ret.packages!,
@@ -98,12 +146,12 @@ export class CoordinatorService extends Service {
                     }
                     case BuildStatus.SKIPPED: {
                         source_repo.notify(job, "canceled", "Build skipped intentionally via build tools.");
-                        logger.log(`Job ${job.toId()} skipped intentionally via build tools.`);
+                        job.logger.log(`Job ${job.toId()} skipped intentionally via build tools.`);
                         break;
                     }
                     case BuildStatus.FAILED: {
                         source_repo.notify(job, "failed", "Build failed.");
-                        logger.log(`Job ${job.toId()} failed`);
+                        job.logger.log(`Job ${job.toId()} failed`);
 
                         const notify_params: FailureNotificationParams = {
                             pkgbase: job.pkgbase,
@@ -115,9 +163,19 @@ export class CoordinatorService extends Service {
                         this.broker.call("notifier.notifyFailure", notify_params);
                         break;
                     }
+                    case BuildStatus.CANCELED: {
+                        if (job.replacement) {
+                            source_repo.notify(job, "canceled", "Build canceled and replaced.");
+                            job.logger.log(`Job ${job.toId()} was canceled and replaced by a newer build request.`);
+                        } else {
+                            source_repo.notify(job, "canceled", "Build canceled.");
+                            job.logger.log(`Job ${job.toId()} was canceled.`);
+                        }
+                        break;
+                    }
                     case BuildStatus.TIMED_OUT: {
                         source_repo.notify(job, "failed", "Build timed out.");
-                        logger.log(`Job ${job.toId()} reached a timeout during the build phase.`);
+                        job.logger.log(`Job ${job.toId()} reached a timeout during the build phase.`);
 
                         const notify_params: FailureNotificationParams = {
                             pkgbase: job.pkgbase,
@@ -134,7 +192,7 @@ export class CoordinatorService extends Service {
             .catch((err) => {
                 this.logger.error("Failed during package deployment:", err);
                 source_repo.notify(job, "failed", "Build failed.");
-                logger.log(`Job ${job?.toId()} failed`);
+                job.logger.log(`Job ${job?.toId()} failed`);
 
                 const notify_params: FailureNotificationParams = {
                     pkgbase: job.pkgbase,
@@ -146,7 +204,7 @@ export class CoordinatorService extends Service {
                 this.broker.call("notifier.notifyFailure", notify_params);
             })
             .finally(() => {
-                logger.end_log();
+                job.logger.end_log();
                 let job_id = job.toId();
                 if (job.replacement)
                     this.queue[job_id] = job.replacement;
@@ -158,6 +216,8 @@ export class CoordinatorService extends Service {
     }
 
     private async assignJobs(): Promise<void> {
+        if (!this.active)
+            return;
         await this.mutex.runExclusive(async () => {
             // Fetch the list of available builder nodes
             let services: any[] = await this.broker.call("$node.services");
@@ -192,15 +252,15 @@ export class CoordinatorService extends Service {
                 return;
             }
 
-            let graph: DepGraph<CoordinatorJob> = this.constructDependencyGraph(this.queue);
+            let graph: DepGraph<CoordinatorTrackedJob> = this.constructDependencyGraph(this.queue);
             let upload_info: Database_Action_fetchUploadInfo_Response = await this.getUploadInfo();
 
             for (const node of available_nodes) {
-                let jobs: CoordinatorJob[] = this.getPossibleJobs(graph, node.metadata.build_class);
+                let jobs: CoordinatorTrackedJob[] = this.getPossibleJobs(graph, node.metadata.build_class);
                 if (jobs.length == 0) {
                     continue;
                 }
-                let job: CoordinatorJob | undefined = jobs.shift();
+                let job: CoordinatorTrackedJob | undefined = jobs.shift();
                 if (!job) {
                     continue;
                 }
@@ -224,13 +284,10 @@ export class CoordinatorService extends Service {
 
                 job.node = node.id;
 
-                let logger = new BuildsRedisLogger(this.redis_connection_manager.getClient(), this.logger);
-                await logger.from(job.pkgbase, job.timestamp);
-
                 let promise = this.broker.call<BuildStatusReturn, Builder_Action_BuildPackage_Params>("builder.buildPackage", params, {
                     nodeID: node.id,
                 });
-                this.onJobComplete(promise, job, source_repo, logger, node.id);
+                this.onJobComplete(promise, job, source_repo, node.id);
             }
         });
     }
@@ -242,11 +299,15 @@ export class CoordinatorService extends Service {
     async addJobsToQueue(ctx: Context): Promise<void> {
         const timestamp: number = Date.now();
         const data = ctx.params as Coordinator_Action_AddJobsToQueue_Params;
-        const jobs: CoordinatorJob[] = [];
+        const jobs: CoordinatorTrackedJob[] = [];
+
+        const redis = this.redis_connection_manager.getClient();
 
         for (const pkg of data.packages) {
+            let logger = new BuildsRedisLogger(redis, this.logger);
+            logger.from(pkg.pkgbase, timestamp);
             jobs.push(
-                new CoordinatorJob(
+                new CoordinatorTrackedJob(
                     pkg.pkgbase,
                     data.target_repo,
                     data.source_repo,
@@ -254,18 +315,20 @@ export class CoordinatorService extends Service {
                     pkg.build_class || 1,
                     pkg.pkgnames,
                     pkg.dependencies,
-                    timestamp,
                     data.commit,
+                    timestamp,
+                    logger
                 ),
             );
         }
 
         for (const job of jobs) {
             let log = new BuildsRedisLogger(this.redis_connection_manager.getClient(), this.logger);
-            log.from(job.pkgbase, job.timestamp).then(async () => {
+            log.from(job.pkgbase, job.timestamp);
+            (async () => {
                 await log.setDefault();
                 await log.log(`Added to build queue at ${currentTime()}. Waiting for builder...`);
-            });
+            })();
 
             let id = job.toId();
             let entry = this.queue[id];
@@ -274,14 +337,15 @@ export class CoordinatorService extends Service {
                 // Is running
                 if (entry.node) {
                     ctx.call("builder.cancelBuild", undefined, { nodeID: entry.node });
+                    entry.logger.log(`Job cancellation requested at ${currentTime()}. Job is being replaced by newer build request.`);
                     entry.replacement = job;
                     continue;
                     // Not running
                 } else {
-                    let log = new BuildsRedisLogger(this.redis_connection_manager.getClient(), this.logger);
-                    log.from(entry.pkgbase, entry.timestamp).then(() => {
-                        log.end_log();
-                    });
+                    (async () => {
+                        await entry.logger.log(`Job was canceled and replaced with a new job before execution.`);
+                        await entry.logger.end_log();
+                    })();
                 }
             }
             this.queue[id] = job;
@@ -380,8 +444,8 @@ export class CoordinatorService extends Service {
      * @returns The dependency graph as a DepGraph object.
      * @private
      */
-    private constructDependencyGraph(queue: { [key: string]: CoordinatorJob }): DepGraph<CoordinatorJob> {
-        const graph = new DepGraph<CoordinatorJob>({ circular: true });
+    private constructDependencyGraph(queue: { [key: string]: CoordinatorTrackedJob }): DepGraph<CoordinatorTrackedJob> {
+        const graph = new DepGraph<CoordinatorTrackedJob>({ circular: true });
         const mapped_pkgbases = new Map<string, string>(); // pkgname -> pkgbase
         const mapped_deps = new Map<string, string[]>(); // pkgbase -> [dependencies]
 
@@ -417,12 +481,12 @@ export class CoordinatorService extends Service {
      * @returns A list of possible jobs that can be assigned to the builder node.
      * @private
      */
-    private getPossibleJobs(graph: DepGraph<CoordinatorJob>, builder_class: number): CoordinatorJob[] {
-        const jobs: CoordinatorJob[] = [];
+    private getPossibleJobs(graph: DepGraph<CoordinatorTrackedJob>, builder_class: number): CoordinatorTrackedJob[] {
+        const jobs: CoordinatorTrackedJob[] = [];
         const nodes: string[] = graph.overallOrder(true);
 
         for (const node of nodes) {
-            const job: CoordinatorJob = graph.getNodeData(node);
+            const job: CoordinatorTrackedJob = graph.getNodeData(node);
             if (job.build_class <= builder_class) {
                 jobs.push(job);
             }
@@ -439,6 +503,63 @@ export class CoordinatorService extends Service {
             }
         }
         return false;
+    }
+
+    private async saveQueue(): Promise<void> {
+        let save_queue: CoordinatorJob[] = [];
+        for (const job of Object.values(this.queue)) {
+            save_queue.push(job.toSavable());
+        }
+        await this.redis_connection_manager.getClient().set("build-queue", JSON.stringify({
+            save_queue,
+            version: current_version
+        }));
+    }
+
+    async start(): Promise<void> {
+        let timestamp = Date.now();
+        let client = this.redis_connection_manager.getClient();
+        try {
+            let queue = await client.get("build-queue");
+            if (queue) {
+                let data = JSON.parse(queue);
+                if (data.version === current_version) {
+                    for (const savedJob of data.save_queue) {
+                        let logger = new BuildsRedisLogger(client, this.logger);
+                        let job = toTracked(savedJob, timestamp, logger);
+                        let id = job.toId();
+                        job.logger.log(`Restored job ${id} at ${currentTime()}`);
+                        this.queue[id] = job;
+                    }
+                }
+            }
+        } catch (error) {
+            console.error("Error restoring build queue:", error);
+        }
+
+        this.broker.waitForServices(["$node"]).then(() => {
+            this.active = true;
+            void this.assignJobs();
+        });
+    }
+
+    async stop(): Promise<void> {
+        // Make sure no new scheduler jobs are started
+        this.active = false;
+
+        await this.saveQueue();
+
+        let promises: Promise<void>[] = [];
+        for (const job of Object.values(this.queue)) {
+            if (job.node) {
+                job.logger.log(`Job cancellation requested at ${currentTime()}. Coordinator is shutting down.`);
+                promises.push(this.broker.call("builder.cancelBuild", undefined, { nodeID: job.node }));
+            }
+            else
+                job.logger.log(`Job was canceled before execution. Coordinator is shutting down.`);
+        }
+
+        await Promise.all(promises);
     }
 }
 

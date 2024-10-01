@@ -116,6 +116,7 @@ async function main(): Promise<void> {
                 mainOptions["target-repo"] || "chaotic-aur",
                 mainOptions._unknown,
             );
+            await broker.stop();
             connection.quit();
             return;
         }
@@ -150,10 +151,15 @@ async function main(): Promise<void> {
             broker.createService(new NotifierService(broker));
 
             if (typeof mainOptions["web-port"] !== "undefined") {
-                void startWebServer(broker, Number(mainOptions["web-port"]), redis_connection_manager, broker.logger);
+                await startWebServer(broker, Number(mainOptions["web-port"]), redis_connection_manager, broker.logger);
             }
 
-            void broker.start();
+            await broker.start();
+
+            process.on("SIGINT", async () => {
+                await broker.stop();
+                redis_connection_manager.shutdown();
+            });
             break;
         }
         case "web": {

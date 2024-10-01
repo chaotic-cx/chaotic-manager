@@ -43,6 +43,7 @@ export enum BuildStatus {
     SKIPPED = 2,
     FAILED = 3,
     TIMED_OUT = 4,
+    CANCELED = 5,
 }
 
 // The object the API should return on /api/packages calls
@@ -75,7 +76,7 @@ export interface MetricsReturnObject {
     };
 }
 
-export const current_version = 8;
+export const current_version = 10;
 
 const ONE_UNIX_DAY = 1000 * 60 * 60 * 24;
 const ONE_UNIX_MONTH = 1000 * 60 * 60 * 24 * 30;
@@ -171,19 +172,25 @@ export enum BuildClass {
     "Heavy" = 2,
 }
 
-export class CoordinatorJob {
-    pkgbase: string;
-    target_repo: string;
-    source_repo: string;
-    arch: string;
-    build_class: number;
-    pkgnames: string[] | undefined;
-    dependencies: string[] | undefined;
-    node: string;
-    timestamp: number;
-    commit: string | undefined;
-    replacement?: CoordinatorJob;
+export class CoordinatorJobSavable {
+    constructor(
+        public pkgbase: string,
+        public target_repo: string,
+        public source_repo: string,
+        public arch: string,
+        public build_class: number,
+        public pkgnames: string[] | undefined,
+        public dependencies: string[] | undefined,
+        public commit: string | undefined,
+    ) {
+    }
 
+    toId(): string {
+        return `${this.target_repo}/${this.arch}/${this.pkgbase}`;
+    }
+}
+
+export class CoordinatorJob extends CoordinatorJobSavable {
     constructor(
         pkgbase: string,
         target_repo: string,
@@ -192,24 +199,10 @@ export class CoordinatorJob {
         build_class: number,
         pkgnames: string[] | undefined,
         dependencies: string[] | undefined,
-        timestamp: number,
         commit: string | undefined,
+        public timestamp: number,
     ) {
-        this.pkgbase = pkgbase;
-        this.target_repo = target_repo;
-        this.source_repo = source_repo;
-        this.arch = arch;
-        this.build_class = build_class;
-        this.pkgnames = pkgnames;
-        this.dependencies = dependencies;
-        this.timestamp = timestamp;
-        this.commit = commit;
-
-        this.node = "";
-    }
-
-    toId(): string {
-        return `${this.target_repo}/${this.arch}/${this.pkgbase}`;
+        super(pkgbase, target_repo, source_repo, arch, build_class, pkgnames, dependencies, commit);
     }
 }
 

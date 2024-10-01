@@ -118,7 +118,23 @@ export class BuilderService extends Service {
                 ],
             );
 
+            if (this.cancelled) {
+                await this.containerManager.kill(this.container).catch((e) => {
+                    console.error(e);
+                });
+                return {
+                    success: BuildStatus.CANCELED,
+                };
+            }
+
             const [err, out] = await to(this.containerManager.start(this.container, logger.raw_log.bind(logger)));
+
+            if (this.cancelled) {
+                // At this point, the container has already stopped, there is no need to kill it
+                return {
+                    success: BuildStatus.CANCELED,
+                };
+            }
 
             // Remove any filler files from the equation
             const file_list = fs.readdirSync(this.mountPkgout).filter((file): boolean => {

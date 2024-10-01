@@ -17,6 +17,7 @@ export const MoleculerConfigCommon = {
             },
         ],
     },
+    skipProcessEventRegistration: true,
 };
 
 export const MoleculerConfigLogConsole = {

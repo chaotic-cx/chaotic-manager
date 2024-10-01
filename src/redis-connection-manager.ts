@@ -2,7 +2,7 @@ import type RedisConnection from "ioredis";
 
 export class RedisConnectionManager {
     private subscriber: RedisConnection | undefined;
-
+    private clients: RedisConnection[] = [];
     constructor(private client: RedisConnection) {}
 
     public getClient(): RedisConnection {
@@ -17,6 +17,14 @@ export class RedisConnectionManager {
     }
 
     public getNewClient(redisopts: any): RedisConnection {
-        return this.client.duplicate(redisopts);
+        let newClient = this.client.duplicate(redisopts);
+        this.clients.push(newClient);
+        return newClient;
+    }
+
+    public shutdown(): void {
+        this.clients.forEach((client) => client.disconnect());
+        if (this.subscriber) this.subscriber.disconnect();
+        this.client.disconnect();
     }
 }

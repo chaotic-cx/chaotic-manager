@@ -29,15 +29,17 @@ export class BuildsRedisLogger {
         this.logger = logger;
     }
 
-    public async from(pkgbase: string, timestamp?: number) {
+    public async fromDefault(pkgbase: string) {
         this.default_key = "build-logs:" + pkgbase + ":default";
+        const [err, out] = await to(this.connection.get(this.default_key));
+        if (err || !out) throw new Error("Job not found");
+        let timestamp = Number.parseInt(out);
+        this.from(pkgbase, timestamp);
+    }
 
-        if (timestamp === undefined) {
-            const [err, out] = await to(this.connection.get(this.default_key));
-            if (err || !out) throw new Error("Job not found");
-            timestamp = Number.parseInt(out);
-        }
 
+    public from(pkgbase: string, timestamp: number) {
+        this.default_key = "build-logs:" + pkgbase + ":default";
         this.channel = "build-logs." + pkgbase + "." + timestamp;
         this.key = "build-logs:" + pkgbase + ":" + timestamp;
         this.timestamp = timestamp;

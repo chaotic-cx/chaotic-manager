@@ -3,7 +3,7 @@ set -e
 
 if [ -z "$1" ]; then
     echo "Usage 1: bash start-dev.sh docker"
-    echo " -> Uses docker-compose to start the development environment using Docker containers."
+    echo " -> Uses docker-compose to start the development environment using Docker containers in a configuration that matches production."
     echo "Usage 2: bash start-dev.sh native"
     echo " -> Uses tsc-watch to start the development environment natively. This responds to code changes instantly."
     echo " -> However, it still uses Docker to set up the landing_zone."
