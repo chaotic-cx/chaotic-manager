@@ -10,7 +10,7 @@ export default class ChaoticTelegramBot {
     protected telegramChatId: string;
     protected validChatIds: string[];
     private readonly bot: TelegramBot;
-    private readonly logger: LoggerInstance;
+    private readonly chaoticLogger: LoggerInstance;
 
     constructor(
         {
@@ -28,12 +28,12 @@ export default class ChaoticTelegramBot {
         this.telegramChatId = telegramChatId;
         this.validChatIds = validChatIds ?? [];
         this.bot = new TelegramBot(telegramToken, { polling: true });
-        this.logger = logger;
-        this.logger.info("Telegram bot initialized.");
+        this.chaoticLogger = logger;
+        this.chaoticLogger.info("Telegram bot initialized.");
 
         if (this.validChatIds.length > 0) {
             void this.setupListeners();
-            this.logger.info("Set up Telegram bot listeners.");
+            this.chaoticLogger.info("Set up Telegram bot listeners.");
         }
     }
 
@@ -76,7 +76,7 @@ export default class ChaoticTelegramBot {
                 });
             }
         } catch (e) {
-            this.logger.error("An error occurred:", e);
+            this.chaoticLogger.error("An error occurred:", e);
         }
     }
 
@@ -88,7 +88,7 @@ export default class ChaoticTelegramBot {
     async setupListeners(): Promise<void> {
         this.bot.on("message", (msg: TelegramBot.Message): void => {
             if (this.isAllowedChat(msg.chat)) {
-                this.logger.error("Unauthorized user tried to send a message.");
+                this.chaoticLogger.error("Unauthorized user tried to send a message.");
                 return;
             } else {
                 this.bot.sendMessage(msg.chat.id, "Received your message");

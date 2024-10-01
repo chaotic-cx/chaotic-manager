@@ -11,7 +11,7 @@ class GitlabNotifier {
         public token: string,
         public check_name: string,
         public base_log_url: URL,
-        public logger: LoggerInstance,
+        public chaoticLogger: LoggerInstance,
     ) {}
 
     getLogUrl(job: CoordinatorJob) {
@@ -51,12 +51,12 @@ class GitlabNotifier {
             }),
         );
         if (err || !out) {
-            this.logger.error(err);
+            this.chaoticLogger.error(err);
             return;
         }
 
         if (out.status < 200 || out.status >= 300) {
-            this.logger.error(await out.text());
+            this.chaoticLogger.error(await out.text());
             return;
         }
     }
@@ -141,9 +141,9 @@ export class RepoManager {
 
     constructor(
         public base_log_url: URL | undefined,
-        public logger: LoggerInstance,
+        public chaoticLogger: LoggerInstance,
     ) {
-        this.logger = logger;
+        this.chaoticLogger = chaoticLogger;
     }
 
     repoFromObject(obj: object) {
@@ -188,7 +188,7 @@ export class RepoManager {
 
     notifiersFromObject(obj: object) {
         if (!this.base_log_url) {
-            this.logger.warn("No base log url set, gitlab notifiers disabled");
+            this.chaoticLogger.warn("No base log url set, GitLab notifiers disabled");
             return;
         }
         for (const [key, value] of Object.entries(obj)) {
@@ -200,11 +200,17 @@ export class RepoManager {
                 throw new Error("Invalid notifier object");
             }
             if (typeof this.repos[key] === "undefined") {
-                this.logger.warn(`Notifier for non-existent repo ${key}`);
+                this.chaoticLogger.warn(`Notifier for non-existent repo ${key}`);
                 continue;
             }
             this.repos[key].setNotifier(
-                new GitlabNotifier(value["id"], value["token"], value["check_name"], this.base_log_url, this.logger),
+                new GitlabNotifier(
+                    value["id"],
+                    value["token"],
+                    value["check_name"],
+                    this.base_log_url,
+                    this.chaoticLogger,
+                ),
             );
         }
     }

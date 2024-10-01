@@ -22,21 +22,20 @@ export class BuildsRedisLogger {
     private key = "";
     private default_key = "";
     private timestamp = 0;
-    private logger: LoggerInstance;
+    private chaoticLogger: LoggerInstance;
 
-    constructor(connection: RedisConnection, logger: LoggerInstance) {
+    constructor(connection: RedisConnection, chaoticLogger: LoggerInstance) {
         this.connection = connection;
-        this.logger = logger;
+        this.chaoticLogger = chaoticLogger;
     }
 
     public async fromDefault(pkgbase: string) {
         this.default_key = "build-logs:" + pkgbase + ":default";
         const [err, out] = await to(this.connection.get(this.default_key));
         if (err || !out) throw new Error("Job not found");
-        let timestamp = Number.parseInt(out);
+        const timestamp = Number.parseInt(out);
         this.from(pkgbase, timestamp);
     }
-
 
     public from(pkgbase: string, timestamp: number) {
         this.default_key = "build-logs:" + pkgbase + ":default";
@@ -47,7 +46,7 @@ export class BuildsRedisLogger {
     }
 
     private internal_log(arg: string, err = false): void {
-        if (!this.init) return this.logger.warn("Logger not initialized");
+        if (!this.init) return this.chaoticLogger.warn("Logger not initialized");
         // Pipelining results in a single roundtrip to the server, and this prevents requests from getting out of order
         const pipeline = this.connection.pipeline();
         pipeline.publish(this.channel, "LOG" + arg);
@@ -76,7 +75,7 @@ export class BuildsRedisLogger {
     }
 
     public async setDefault() {
-        if (!this.init) return this.logger.warn("Logger not initialized");
+        if (!this.init) return this.chaoticLogger.warn("Logger not initialized");
         await this.connection.set(this.default_key, this.timestamp, "EX", 60 * 60 * 24 * 7); // 7 days
     }
 }

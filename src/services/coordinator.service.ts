@@ -24,7 +24,7 @@ import { MoleculerConfigCommonService } from "./moleculer.config";
 
 class CoordinatorTrackedJob extends CoordinatorJob {
     replacement?: CoordinatorTrackedJob;
-    logger: BuildsRedisLogger;
+    redisLogger: BuildsRedisLogger;
     node?: string;
 
     constructor(
@@ -37,10 +37,10 @@ class CoordinatorTrackedJob extends CoordinatorJob {
         dependencies: string[] | undefined,
         commit: string | undefined,
         timestamp: number,
-        logger: BuildsRedisLogger,
+        redisLogger: BuildsRedisLogger,
     ) {
         super(pkgbase, target_repo, source_repo, arch, build_class, pkgnames, dependencies, commit, timestamp);
-        this.logger = logger;
+        this.redisLogger = redisLogger;
         this.node = undefined;
     }
 
@@ -142,12 +142,12 @@ export class CoordinatorService extends Service {
                 switch (ret.success) {
                     case BuildStatus.ALREADY_BUILT: {
                         void source_repo.notify(job, "canceled", "Build skipped because package was already built.");
-                        job.logger.log(`Job ${job.toId()} skipped because all packages were already built.`);
+                        job.redisLogger.log(`Job ${job.toId()} skipped because all packages were already built.`);
                         break;
                     }
                     case BuildStatus.SUCCESS: {
                         void source_repo.notify(job, "success", "Package successfully deployed.");
-                        job.logger.log(`Build job ${job.toId()} finished at ${currentTime()}...`);
+                        job.redisLogger.log(`Build job ${job.toId()} finished at ${currentTime()}...`);
 
                         const notify_params: SuccessNotificationParams = {
                             packages: ret.packages!,
@@ -158,12 +158,12 @@ export class CoordinatorService extends Service {
                     }
                     case BuildStatus.SKIPPED: {
                         void source_repo.notify(job, "canceled", "Build skipped intentionally via build tools.");
-                        job.logger.log(`Job ${job.toId()} skipped intentionally via build tools.`);
+                        job.redisLogger.log(`Job ${job.toId()} skipped intentionally via build tools.`);
                         break;
                     }
                     case BuildStatus.FAILED: {
                         void source_repo.notify(job, "failed", "Build failed.");
-                        job.logger.log(`Job ${job.toId()} failed`);
+                        job.redisLogger.log(`Job ${job.toId()} failed`);
 
                         const notify_params: FailureNotificationParams = {
                             pkgbase: job.pkgbase,
@@ -178,16 +178,18 @@ export class CoordinatorService extends Service {
                     case BuildStatus.CANCELED: {
                         if (job.replacement) {
                             void source_repo.notify(job, "canceled", "Build canceled and replaced.");
-                            job.logger.log(`Job ${job.toId()} was canceled and replaced by a newer build request.`);
+                            job.redisLogger.log(
+                                `Job ${job.toId()} was canceled and replaced by a newer build request.`,
+                            );
                         } else {
                             void source_repo.notify(job, "canceled", "Build canceled.");
-                            job.logger.log(`Job ${job.toId()} was canceled.`);
+                            job.redisLogger.log(`Job ${job.toId()} was canceled.`);
                         }
                         break;
                     }
                     case BuildStatus.TIMED_OUT: {
                         void source_repo.notify(job, "failed", "Build timed out.");
-                        job.logger.log(`Job ${job.toId()} reached a timeout during the build phase.`);
+                        job.redisLogger.log(`Job ${job.toId()} reached a timeout during the build phase.`);
 
                         const notify_params: FailureNotificationParams = {
                             pkgbase: job.pkgbase,
@@ -204,7 +206,7 @@ export class CoordinatorService extends Service {
             .catch((err) => {
                 this.chaoticLogger.error("Failed during package deployment:", err);
                 void source_repo.notify(job, "failed", "Build failed.");
-                job.logger.log(`Job ${job?.toId()} failed`);
+                job.redisLogger.log(`Job ${job?.toId()} failed`);
 
                 const notify_params: FailureNotificationParams = {
                     pkgbase: job.pkgbase,
@@ -216,7 +218,7 @@ export class CoordinatorService extends Service {
                 void this.broker.call("notifier.notifyFailure", notify_params);
             })
             .finally(() => {
-                void job.logger.end_log();
+                void job.redisLogger.end_log();
                 let job_id = job.toId();
                 if (job.replacement) this.queue[job_id] = job.replacement;
                 else delete this.queue[job_id];
@@ -350,7 +352,7 @@ export class CoordinatorService extends Service {
                 // Is running
                 if (entry.node) {
                     ctx.call("builder.cancelBuild", undefined, { nodeID: entry.node });
-                    entry.logger.log(
+                    entry.redisLogger.log(
                         `Job cancellation requested at ${currentTime()}. Job is being replaced by newer build request.`,
                     );
                     entry.replacement = job;
@@ -358,8 +360,8 @@ export class CoordinatorService extends Service {
                     // Not running
                 } else {
                     (async () => {
-                        await entry.logger.log(`Job was canceled and replaced with a new job before execution.`);
-                        await entry.logger.end_log();
+                        await entry.redisLogger.log(`Job was canceled and replaced with a new job before execution.`);
+                        await entry.redisLogger.end_log();
                     })();
                 }
             }
@@ -546,7 +548,7 @@ export class CoordinatorService extends Service {
                         let logger = new BuildsRedisLogger(client, this.chaoticLogger);
                         let job = toTracked(savedJob, timestamp, logger);
                         let id = job.toId();
-                        job.logger.log(`Restored job ${id} at ${currentTime()}`);
+                        job.redisLogger.log(`Restored job ${id} at ${currentTime()}`);
                         this.queue[id] = job;
                     }
                 }
@@ -570,9 +572,9 @@ export class CoordinatorService extends Service {
         let promises: Promise<void>[] = [];
         for (const job of Object.values(this.queue)) {
             if (job.node) {
-                job.logger.log(`Job cancellation requested at ${currentTime()}. Coordinator is shutting down.`);
+                job.redisLogger.log(`Job cancellation requested at ${currentTime()}. Coordinator is shutting down.`);
                 promises.push(this.broker.call("builder.cancelBuild", undefined, { nodeID: job.node }));
-            } else job.logger.log(`Job was canceled before execution. Coordinator is shutting down.`);
+            } else job.redisLogger.log(`Job was canceled before execution. Coordinator is shutting down.`);
         }
 
         await Promise.all(promises);

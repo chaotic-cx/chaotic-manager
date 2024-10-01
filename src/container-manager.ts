@@ -10,10 +10,10 @@ export abstract class ContainerManager {
     abstract docker: Dockerode;
     pull_schedule: NodeJS.Timeout | null = null;
     pull_mutex = new Mutex();
-    logger: LoggerInstance;
+    chaoticLogger: LoggerInstance;
 
-    constructor(logger: LoggerInstance) {
-        this.logger = logger;
+    protected constructor(chaoticLogger: LoggerInstance) {
+        this.chaoticLogger = chaoticLogger;
     }
 
     destroy() {
@@ -39,14 +39,14 @@ export abstract class ContainerManager {
                     });
                 });
             });
-            this.logger.info("Downloaded builder image.");
+            this.chaoticLogger.info("Downloaded builder image.");
         } finally {
             if (!locked) this.pull_mutex.release();
         }
     }
 
     async getImage(imagename: string): Promise<string> {
-        if (this.pull_mutex.isLocked()) this.logger.info("Waiting for container pull to finish...");
+        if (this.pull_mutex.isLocked()) this.chaoticLogger.info("Waiting for container pull to finish...");
         await this.pull_mutex.acquire();
         try {
             try {
@@ -101,7 +101,7 @@ export abstract class ContainerManager {
             }),
         );
 
-        if (out[0]) console.error(out[0]);
+        if (out[0]) this.chaoticLogger.error(out[0]);
         return out;
     }
 
@@ -118,7 +118,7 @@ export abstract class ContainerManager {
         try {
             await this.pullImage(imagename, true);
         } catch (err) {
-            console.error(err);
+            this.chaoticLogger.error(err);
         }
         this.pull_schedule = setTimeout(this.scheduledPull.bind(this, imagename), 7200000);
         this.pull_mutex.release();
