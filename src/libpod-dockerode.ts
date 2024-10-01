@@ -307,8 +307,7 @@ export interface ContainerStore {
     stopped: number;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-empty-interface
-export type GraphOptions = {};
+export interface GraphOptions {}
 
 export interface GraphStatus {
     "Backing Filesystem": string;
@@ -350,21 +349,37 @@ export interface GetImagesOptions {
 // API of libpod that we want to expose on our side
 export interface LibPod {
     createPod(podOptions: PodCreateOptions): Promise<{ Id: string }>;
+
     createPodmanContainer(containerCreateOptions: ContainerCreateOptions): Promise<{ Id: string; Warnings: string[] }>;
+
     listPods(): Promise<PodInfo[]>;
+
     listPodmanContainers(opts?: { all: boolean }): Promise<PodmanContainerInfo[]>;
+
     prunePods(): Promise<void>;
+
     podmanAttach(containerId: string): Promise<NodeJS.ReadWriteStream>;
+
     getPodInspect(podId: string): Promise<PodInspectInfo>;
+
     startPod(podId: string): Promise<void>;
+
     stopPod(podId: string): Promise<void>;
+
     removePod(podId: string, options?: PodRemoveOptions): Promise<void>;
+
     restartPod(podId: string): Promise<void>;
+
     generateKube(names: string[]): Promise<string>;
+
     playKube(yamlContentFilePath: string): Promise<PlayKubeInfo>;
+
     pruneAllImages(dangling: boolean): Promise<void>;
+
     podmanInfo(): Promise<Info>;
+
     getImages(options: GetImagesOptions): Promise<NodeJS.ReadableStream>;
+
     podmanWait(podId: string): Promise<unknown>;
 }
 

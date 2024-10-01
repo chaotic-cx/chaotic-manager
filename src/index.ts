@@ -10,7 +10,7 @@ import { BuildClass } from "./types";
 import { DatabaseService } from "./services/database.service";
 import { NotifierService } from "./services/notifier.service";
 import { BuilderService } from "./services/builder.service";
-import { MoleculerConfigCommon, MoleculerConfigLog } from "./services/moleculer.config";
+import { enableMetrics, MoleculerConfigCommon, MoleculerConfigLog } from "./services/moleculer.config";
 
 if (!process.env.NODE_ENV) process.env.NODE_ENV = "production";
 
@@ -55,6 +55,7 @@ async function main(): Promise<void> {
                 : BuildClass.Medium,
         },
         logger: MoleculerConfigLog,
+        metrics: enableMetrics(mainOptions.command === "database"),
         ...MoleculerConfigCommon,
     });
 
