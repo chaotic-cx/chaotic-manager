@@ -2,7 +2,7 @@
 {pkgs ? import <nixpkgs> {}}:
 pkgs.mkShell {
   buildInputs = [
-    pkgs.yarn
+    pkgs.corepack
     pkgs.nodejs
     pkgs.redis
     pkgs.psmisc

@@ -13,3 +13,5 @@ biome.json
 docker-compose-podman.yml
 docker-compose.yml
 result*
+/.yarn
+/.pnp.*
