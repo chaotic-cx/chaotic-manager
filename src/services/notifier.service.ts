@@ -1,11 +1,12 @@
 import ChaoticTelegramBot from "../telegram-bot";
-import { Service, ServiceBroker } from "moleculer";
+import { LoggerInstance, Service, ServiceBroker } from "moleculer";
 import {
     type FailureNotificationParams,
     type GenericNotificationParams,
     type SuccessNotificationParams,
 } from "../types";
 import { to } from "await-to-js";
+import { MoleculerConfigCommonService } from "./moleculer.config";
 
 /**
  * Notifier class to send messages to the implemented destinations.
@@ -14,17 +15,19 @@ import { to } from "await-to-js";
 export class NotifierService extends Service {
     private readonly telegramBot: ChaoticTelegramBot | undefined;
     private readonly base_logs_url: string | undefined;
+    chaoticLogger: LoggerInstance;
 
-    constructor(broker: ServiceBroker) {
+    constructor(broker: ServiceBroker, chaoticLogger: LoggerInstance) {
         super(broker);
 
+        this.chaoticLogger = chaoticLogger;
         if (process.env.TELEGRAM_BOT_TOKEN !== undefined && process.env.TELEGRAM_CHAT_ID !== undefined) {
             this.telegramBot = new ChaoticTelegramBot(
                 {
                     telegramChatId: process.env.TELEGRAM_CHAT_ID,
                     telegramToken: process.env.TELEGRAM_BOT_TOKEN,
                 },
-                this.logger,
+                this.chaoticLogger,
             );
         }
 
@@ -33,16 +36,13 @@ export class NotifierService extends Service {
 
         this.parseServiceSchema({
             name: "notifier",
-            version: 1,
 
-            settings: {
-                $noVersionPrefix: true,
-            },
             actions: {
                 notifyPackages: this.createDeploymentNotification,
                 notifyFailure: this.createFailedBuildNotification,
                 notifyGeneric: this.createTrivialNotification,
             },
+            ...MoleculerConfigCommonService,
         });
     }
 
@@ -57,7 +57,7 @@ export class NotifierService extends Service {
                 void this.telegramBot.notify(params.message);
             }
         } catch (err) {
-            console.error(`Notifier: fatal error ${err}`);
+            this.chaoticLogger.error(`Failed sending general notification: ${err}`);
         }
     }
 
@@ -74,7 +74,7 @@ export class NotifierService extends Service {
             }
             void this.createTrivialNotification({ message: text });
         } catch (err) {
-            console.error(`Notifier: fatal error ${err}`);
+            this.chaoticLogger.error(`Failed sending deployment notification: ${err}`);
         }
     }
 
@@ -109,7 +109,7 @@ export class NotifierService extends Service {
             }
             void this.createTrivialNotification({ message: text });
         } catch (err) {
-            console.error(`Notifier: fatal error ${err}`);
+            this.chaoticLogger.error(`Failed sending build failure notification: ${err}`);
         }
     }
 
@@ -120,6 +120,6 @@ export class NotifierService extends Service {
      */
     async createTrivialNotification(params: GenericNotificationParams): Promise<void> {
         const [err]: [Error, undefined] | [null, void] = await to(this.notify({ message: params.message }));
-        if (err) console.error(err);
+        if (err) this.chaoticLogger.error(err);
     }
 }

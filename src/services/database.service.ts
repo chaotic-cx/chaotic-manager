@@ -1,4 +1,4 @@
-import { Context, Service, ServiceBroker } from "moleculer";
+import { Context, LoggerInstance, Service, ServiceBroker } from "moleculer";
 import { Mutex } from "async-mutex";
 import {
     Database_Action_AddToDb_Params,
@@ -12,6 +12,7 @@ import { BuildsRedisLogger } from "../logging";
 import { ContainerManager, DockerManager, PodmanManager } from "../container-manager";
 import { currentTime } from "../utils";
 import fs from "fs";
+import { MoleculerConfigCommonService } from "./moleculer.config";
 
 export class DatabaseService extends Service {
     landing_zone: string = process.env.LANDING_ZONE_PATH || "";
@@ -21,18 +22,20 @@ export class DatabaseService extends Service {
     redis_connection_manager: RedisConnectionManager;
     gpg: string = process.env.GPG_PATH || "";
     container_manager: ContainerManager;
+    chaoticLogger: LoggerInstance;
 
-    constructor(broker: ServiceBroker, redis_connection_manager: RedisConnectionManager) {
+    constructor(
+        broker: ServiceBroker,
+        redis_connection_manager: RedisConnectionManager,
+        chaoticLogger: LoggerInstance,
+    ) {
         super(broker);
         this.redis_connection_manager = redis_connection_manager;
+        this.chaoticLogger = chaoticLogger;
 
         this.parseServiceSchema({
             name: "database",
-            version: 1,
 
-            settings: {
-                $noVersionPrefix: true,
-            },
             actions: {
                 fetchUploadInfo: {
                     cache: true,
@@ -42,12 +45,13 @@ export class DatabaseService extends Service {
                 autoRepoRemove: this.autoRepoRemove,
                 generateDestFillerFiles: this.generateDestFillerFiles,
             },
+            ...MoleculerConfigCommonService,
         });
 
         if (process.env.CONTAINER_ENGINE === "podman") {
-            this.container_manager = new PodmanManager(this.logger);
+            this.container_manager = new PodmanManager(this.chaoticLogger);
         } else {
-            this.container_manager = new DockerManager(this.logger);
+            this.container_manager = new DockerManager(this.chaoticLogger);
         }
     }
 
@@ -75,7 +79,7 @@ export class DatabaseService extends Service {
         return await this.mutex.runExclusive(async () => {
             // const repo = this.repo_manager.getRepo(data.repo);
 
-            const logger = new BuildsRedisLogger(this.redis_connection_manager.getClient(), this.logger);
+            const logger = new BuildsRedisLogger(this.redis_connection_manager.getClient(), this.chaoticLogger);
             void logger.from(data.pkgbase, data.timestamp);
 
             logger.log(`Processing add to db job ${ctx.id} at ${currentTime()}`);
@@ -95,7 +99,7 @@ export class DatabaseService extends Service {
             );
 
             if (err) {
-                this.logger.warn(err);
+                this.chaoticLogger.warn(err);
                 return {
                     success: false,
                 };
@@ -113,10 +117,12 @@ export class DatabaseService extends Service {
         let ret: DatabaseRemoveStatusReturn = { success: false };
 
         await this.mutex.runExclusive(async () => {
-            this.logger.info(`\r\nProcessing automatic package removal job for ${data.repo} at ${currentTime()}`);
+            this.chaoticLogger.info(
+                `\r\nProcessing automatic package removal job for ${data.repo} at ${currentTime()}`,
+            );
 
             if (data.pkgbases.length === 0) {
-                this.logger.info("Intended package list is empty. Assuming this is in error.");
+                this.chaoticLogger.info("Intended package list is empty. Assuming this is in error.");
                 throw new Error("Intended package list is empty. Assuming this is in error.");
             }
 
@@ -129,8 +135,8 @@ export class DatabaseService extends Service {
             );
 
             if (err) {
-                this.logger.error(err);
-                this.logger.info("Failed to remove packages from the database.");
+                this.chaoticLogger.error(err);
+                this.chaoticLogger.info("Failed to remove packages from the database.");
                 ret.success = false;
             }
         });

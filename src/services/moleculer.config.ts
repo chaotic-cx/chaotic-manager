@@ -20,14 +20,29 @@ export const MoleculerConfigCommon = {
     skipProcessEventRegistration: true,
 };
 
-export const MoleculerConfigLogConsole = {
+export const MoleculerConfigLog = {
     type: "Console",
     options: {
-        level: "debug",
+        level: {
+            "*": process.env.NODE_ENV === "production" ? "warn" : "debug",
+            BROKER: process.env.NODE_ENV === "production" ? "warn" : "debug",
+            TRANSPORTER: process.env.NODE_ENV === "production" ? "warn" : "debug",
+            NOTIFIER: process.env.NODE_ENV === "production" ? "warn" : "debug",
+            TRANSIT: process.env.NODE_ENV === "production" ? "warn" : "debug",
+            REGISTRY: process.env.NODE_ENV === "production" ? "warn" : "debug",
+            CHAOTIC: process.env.NODE_ENV === "production" ? "info" : "debug",
+        },
         colors: true,
-        moduleColors: false,
-        formatter: "{timestamp} {level} {nodeID}/{mod}: {msg}",
+        moduleColors: true,
+        formatter: "{timestamp} {level} {mod}: {msg}",
         objectPrinter: null,
         autoPadding: true,
+    },
+};
+
+export const MoleculerConfigCommonService = {
+    version: 1,
+    settings: {
+        $noVersionPrefix: true,
     },
 };

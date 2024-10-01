@@ -1,4 +1,4 @@
-import { Context, Service, ServiceBroker } from "moleculer";
+import { Context, LoggerInstance, Service, ServiceBroker } from "moleculer";
 import { RedisConnectionManager } from "../redis-connection-manager";
 import { Mutex, tryAcquire } from "async-mutex";
 import { BuildsRedisLogger, SshLogger } from "../logging";
@@ -18,6 +18,7 @@ import { to } from "await-to-js";
 import Client, { ScpClient } from "node-scp";
 import { Dirent } from "node:fs";
 import { Container } from "dockerode";
+import { MoleculerConfigCommonService } from "./moleculer.config";
 
 /**
  * The BuilderService class is a moleculer service that provides the buildPackage and cancelBuild actions.
@@ -30,7 +31,7 @@ export class BuilderService extends Service {
         ci_code_skip: Number(process.env.CI_CODE_SKIP) || 123,
         name: process.env.BUILDER_HOSTNAME || "chaotic-builder",
         timeout: Number(process.env.BUILDER_TIMEOUT) || 3600,
-        container_engine: process.env.BUILDER_PODMAN ? "podman" : "docker",
+        container_engine: process.env.CONTAINER_ENGINE ? "podman" : "docker",
     };
 
     shared_srcdest_cache: string = path.join(process.env.SHARED_PATH || "", "srcdest_cache");
@@ -42,28 +43,30 @@ export class BuilderService extends Service {
     containerManager: ContainerManager;
     container: Container | null = null;
     cancelled: boolean = false;
+    chaoticLogger: LoggerInstance;
 
-    constructor(broker: ServiceBroker, redis_connection_manager: RedisConnectionManager) {
+    constructor(
+        broker: ServiceBroker,
+        redis_connection_manager: RedisConnectionManager,
+        chaoticLogger: LoggerInstance,
+    ) {
         super(broker);
         this.redis_connection_manager = redis_connection_manager;
+        this.chaoticLogger = chaoticLogger;
 
         this.parseServiceSchema({
             name: "builder",
-            version: 1,
-
-            settings: {
-                $noVersionPrefix: true,
-            },
             actions: {
                 buildPackage: this.buildPackage,
                 cancelBuild: this.cancelBuild,
             },
+            ...MoleculerConfigCommonService,
         });
 
         if (this.builder.container_engine === "podman") {
-            this.containerManager = new PodmanManager(this.logger);
+            this.containerManager = new PodmanManager(this.chaoticLogger);
         } else {
-            this.containerManager = new DockerManager(this.logger);
+            this.containerManager = new DockerManager(this.chaoticLogger);
         }
     }
 
@@ -79,127 +82,129 @@ export class BuilderService extends Service {
 
         // If this fails, something has gone terribly wrong.
         // The coordinator should never send two jobs to the same builder
-        return await tryAcquire(this.mutex).runExclusive(async (): Promise<BuildStatusReturn> => {
-            const logger = new BuildsRedisLogger(this.redis_connection_manager.getClient(), this.logger);
-            await logger.from(data.pkgbase, data.timestamp);
+        return await tryAcquire(this.mutex)
+            .runExclusive(async (): Promise<BuildStatusReturn> => {
+                const logger = new BuildsRedisLogger(this.redis_connection_manager.getClient(), this.chaoticLogger);
+                await logger.from(data.pkgbase, data.timestamp);
 
-            logger.log(`Processing build job at ${currentTime()}`);
+                logger.log(`Processing build job at ${currentTime()}`);
 
-            // Make sure the pkgout directory is clean for the current build
-            this.ensurePathClean(this.mountPkgout);
+                // Make sure the pkgout directory is clean for the current build
+                this.ensurePathClean(this.mountPkgout);
 
-            // Generate filler files in the pkgout directory.
-            // Goal: Avoid building packages that are already in the target repo
-            await this.generateDestFillerFiles(ctx, data.target_repo, data.arch, this.mountPkgout);
+                // Generate filler files in the pkgout directory.
+                // Goal: Avoid building packages that are already in the target repo
+                await this.generateDestFillerFiles(ctx, data.target_repo, data.arch, this.mountPkgout);
 
-            // Clean the source cache of any old source files
-            this.clearSourceCache(this.mountSrcdest, data.target_repo);
+                // Clean the source cache of any old source files
+                this.clearSourceCache(this.mountSrcdest, data.target_repo);
 
-            // Generate the folder path for the specific package source cache
-            const srcdest_package_path = path.join(this.shared_srcdest_cache, data.target_repo, data.pkgbase);
+                // Generate the folder path for the specific package source cache
+                const srcdest_package_path = path.join(this.shared_srcdest_cache, data.target_repo, data.pkgbase);
 
-            // Append the container object to the job context
-            this.container = await this.containerManager.create(
-                data.builder_image,
-                ["build", data.pkgbase],
-                [
-                    srcdest_package_path + ":/home/builder/srcdest_cached",
-                    this.shared_pkgout + ":/home/builder/pkgout",
-                    this.shared_sources + ":/pkgbuilds",
-                ],
-                [
-                    "BUILDER_HOSTNAME=" + this.builder.name,
-                    "BUILDER_TIMEOUT=" + this.builder.timeout,
-                    "CI_CODE_SKIP=" + this.builder.ci_code_skip,
-                    "EXTRA_PACMAN_REPOS=" + data.extra_repos,
-                    "EXTRA_PACMAN_KEYRINGS=" + data.extra_keyrings,
-                    "PACKAGE_REPO_ID=" + data.source_repo,
-                    "PACKAGE_REPO_URL=" + data.source_repo_url,
-                ],
-            );
+                // Append the container object to the job context
+                this.container = await this.containerManager.create(
+                    data.builder_image,
+                    ["build", data.pkgbase],
+                    [
+                        srcdest_package_path + ":/home/builder/srcdest_cached",
+                        this.shared_pkgout + ":/home/builder/pkgout",
+                        this.shared_sources + ":/pkgbuilds",
+                    ],
+                    [
+                        "BUILDER_HOSTNAME=" + this.builder.name,
+                        "BUILDER_TIMEOUT=" + this.builder.timeout,
+                        "CI_CODE_SKIP=" + this.builder.ci_code_skip,
+                        "EXTRA_PACMAN_REPOS=" + data.extra_repos,
+                        "EXTRA_PACMAN_KEYRINGS=" + data.extra_keyrings,
+                        "PACKAGE_REPO_ID=" + data.source_repo,
+                        "PACKAGE_REPO_URL=" + data.source_repo_url,
+                    ],
+                );
 
-            if (this.cancelled) {
-                await this.containerManager.kill(this.container).catch((e) => {
-                    console.error(e);
+                if (this.cancelled) {
+                    await this.containerManager.kill(this.container).catch((e) => {
+                        console.error(e);
+                    });
+                    return {
+                        success: BuildStatus.CANCELED,
+                    };
+                }
+
+                const [err, out] = await to(this.containerManager.start(this.container, logger.raw_log.bind(logger)));
+
+                if (this.cancelled) {
+                    // At this point, the container has already stopped, there is no need to kill it
+                    return {
+                        success: BuildStatus.CANCELED,
+                    };
+                }
+
+                // Remove any filler files from the equation
+                const file_list = fs.readdirSync(this.mountPkgout).filter((file): boolean => {
+                    const stats = fs.statSync(path.join(this.mountPkgout, file));
+                    return stats.isFile() && stats.size > 0;
                 });
-                return {
-                    success: BuildStatus.CANCELED,
-                };
-            }
 
-            const [err, out] = await to(this.containerManager.start(this.container, logger.raw_log.bind(logger)));
+                if (err || out.StatusCode !== 0 || file_list.length === 0) {
+                    if (!err && out.StatusCode === 13) {
+                        return { success: BuildStatus.ALREADY_BUILT };
+                    } else if (out.StatusCode === this.builder.ci_code_skip) {
+                        return { success: BuildStatus.SKIPPED };
+                    } else if (out.StatusCode === 124) {
+                        return { success: BuildStatus.TIMED_OUT };
+                    } else {
+                        return { success: BuildStatus.FAILED };
+                    }
+                } else logger.log(`Finished build. Uploading...`);
 
-            if (this.cancelled) {
-                // At this point, the container has already stopped, there is no need to kill it
-                return {
-                    success: BuildStatus.CANCELED,
-                };
-            }
+                const sshlogger = new SshLogger();
+                try {
+                    const client: ScpClient = await Client({
+                        host: String(data.upload_info.database.ssh.host),
+                        port: Number(data.upload_info.database.ssh.port),
+                        username: String(data.upload_info.database.ssh.user),
+                        privateKey: fs.readFileSync("sshkey"),
+                        debug: sshlogger.log.bind(sshlogger),
+                    });
+                    await client.uploadDir(this.mountPkgout, data.upload_info.database.landing_zone);
+                    client.close();
+                } catch (e) {
+                    logger.error(`Failed to upload: ${e}`);
 
-            // Remove any filler files from the equation
-            const file_list = fs.readdirSync(this.mountPkgout).filter((file): boolean => {
-                const stats = fs.statSync(path.join(this.mountPkgout, file));
-                return stats.isFile() && stats.size > 0;
-            });
+                    // This does not get logged to redis
+                    this.chaoticLogger.error(sshlogger.dump());
+                    this.chaoticLogger.info("End of SSH log.");
 
-            if (err || out.StatusCode !== 0 || file_list.length === 0) {
-                if (!err && out.StatusCode === 13) {
-                    return { success: BuildStatus.ALREADY_BUILT };
-                } else if (out.StatusCode === this.builder.ci_code_skip) {
-                    return { success: BuildStatus.SKIPPED };
-                } else if (out.StatusCode === 124) {
-                    return { success: BuildStatus.TIMED_OUT };
-                } else {
                     return { success: BuildStatus.FAILED };
                 }
-            } else logger.log(`Finished build. Uploading...`);
 
-            const sshlogger = new SshLogger();
-            try {
-                const client: ScpClient = await Client({
-                    host: String(data.upload_info.database.ssh.host),
-                    port: Number(data.upload_info.database.ssh.port),
-                    username: String(data.upload_info.database.ssh.user),
-                    privateKey: fs.readFileSync("sshkey"),
-                    debug: sshlogger.log.bind(sshlogger),
-                });
-                await client.uploadDir(this.mountPkgout, data.upload_info.database.landing_zone);
-                client.close();
-            } catch (e) {
-                logger.error(`Failed to upload: ${e}`);
+                logger.log(`Finished upload.`);
 
-                // This does not get logged to redis
-                this.logger.error(sshlogger.dump());
-                this.logger.info("End of SSH log.");
-
-                return { success: BuildStatus.FAILED };
-            }
-
-            logger.log(`Finished upload.`);
-
-            let addToDbParams: Database_Action_AddToDb_Params = {
-                source_repo: data.source_repo,
-                target_repo: data.target_repo,
-                arch: data.arch,
-                pkgbase: data.pkgbase,
-                pkgfiles: file_list,
-                builder_image: data.builder_image,
-                timestamp: data.timestamp,
-            };
-            let addToDbReturn: { success: boolean } = await ctx.call("database.addToDb", addToDbParams);
-
-            if (!addToDbReturn.success) {
-                return { success: BuildStatus.FAILED };
-            } else {
-                return {
-                    success: BuildStatus.SUCCESS,
-                    packages: file_list,
+                let addToDbParams: Database_Action_AddToDb_Params = {
+                    source_repo: data.source_repo,
+                    target_repo: data.target_repo,
+                    arch: data.arch,
+                    pkgbase: data.pkgbase,
+                    pkgfiles: file_list,
+                    builder_image: data.builder_image,
+                    timestamp: data.timestamp,
                 };
-            }
-        }).finally(() => {
-            this.container = null;
-            this.ensurePathClean(this.mountPkgout, false);
-        });
+                let addToDbReturn: { success: boolean } = await ctx.call("database.addToDb", addToDbParams);
+
+                if (!addToDbReturn.success) {
+                    return { success: BuildStatus.FAILED };
+                } else {
+                    return {
+                        success: BuildStatus.SUCCESS,
+                        packages: file_list,
+                    };
+                }
+            })
+            .finally(() => {
+                this.container = null;
+                this.ensurePathClean(this.mountPkgout, false);
+            });
     }
 
     /**
@@ -207,11 +212,10 @@ export class BuilderService extends Service {
      */
     async cancelBuild(): Promise<void> {
         this.cancelled = true;
-        if (!this.mutex.isLocked())
-            return;
+        if (!this.mutex.isLocked()) return;
         if (this.container) {
             this.containerManager.kill(this.container).catch((e) => {
-                this.logger.error(e);
+                this.chaoticLogger.error(e);
             });
         }
         await this.mutex.waitForUnlock();

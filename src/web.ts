@@ -6,10 +6,15 @@ import express, { type Request, type Response } from "express";
 // import { ChaoticApi } from "./api";
 // import { getMetrics } from "./prometheus";
 import type { RedisConnectionManager } from "./redis-connection-manager";
-import { corsOptions, HTTP_CACHE_MAX_AGE } from "./types";
+import { HTTP_CACHE_MAX_AGE } from "./types";
 import { LoggerInstance, ServiceBroker } from "moleculer";
 
-export async function startWebServer(broker: ServiceBroker, port: number, manager: RedisConnectionManager, logger: LoggerInstance) {
+export async function startWebServer(
+    broker: ServiceBroker,
+    port: number,
+    manager: RedisConnectionManager,
+    logger: LoggerInstance,
+) {
     const connection = manager.getClient();
     const subscriber = manager.getSubscriber();
 
@@ -83,11 +88,14 @@ export async function startWebServer(broker: ServiceBroker, port: number, manage
         unref.push(forwarder);
         subscriber.on("message", forwarder);
 
-        let build: boolean = await broker.call("coordinator.jobExists", { pkgbase: id, timestamp: Number(timestamp) });
+        const build: boolean = await broker.call("coordinator.jobExists", {
+            pkgbase: id,
+            timestamp: Number(timestamp),
+        });
         if (!build) {
             res.end();
         }
-    };
+    }
 
     app.get("/api/logs/:id/:timestamp", getOrStreamLog);
 
@@ -144,7 +152,7 @@ export async function startWebServer(broker: ServiceBroker, port: number, manage
         }),
     );
 
-    let server = app.listen(port, () => {
+    const server = app.listen(port, () => {
         logger.info(`Web server listening on port ${port}`);
     });
 }
