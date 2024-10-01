@@ -3,9 +3,12 @@ import to from "await-to-js";
 // import cors from "cors";
 import express, { type NextFunction, type Request, type Response } from "express";
 import type { RedisConnectionManager } from "./redis-connection-manager";
-import { HTTP_CACHE_MAX_AGE } from "./types";
+import { corsOptions, HTTP_CACHE_MAX_AGE } from "./types";
 import { LoggerInstance, ServiceBroker } from "moleculer";
 import { getDurationInMilliseconds } from "./utils";
+import cors from "cors";
+import * as http from "node:http";
+import { RequestOptions } from "node:http";
 
 export async function startWebServer(broker: ServiceBroker, port: number, manager: RedisConnectionManager) {
     const connection = manager.getClient();
@@ -157,17 +160,45 @@ export async function startWebServer(broker: ServiceBroker, port: number, manage
             return res;
         }
         return res.json(out);
-    });
-
-    app.get("/metrics", cors(corsOptions), async (req: Request, res: Response): Promise<Response> => {
-        const [err, out] = await to(getMetrics(builder_queue, database_queue));
-        if (err || !out) {
-            serverError(res, 500, "Internal server error");
-            return res;
-        }
-        res.setHeader("Content-Type", register.contentType);
-        return res.send(out);
     });*/
+
+    // Forward Prometheus metrics to the metrics endpoint of the app server
+    app.get("/metrics", cors(corsOptions), (req: Request, res: Response) => {
+        const options: RequestOptions = {
+            host: "127.0.0.1",
+            port: 3030,
+            path: "/metrics",
+            method: "GET",
+            headers: req.headers,
+        };
+        const forwardRequest = http
+            .request(options, (pres) => {
+                pres.setEncoding("utf8");
+                if (pres.statusCode != null) {
+                    res.writeHead(pres.statusCode);
+                }
+                pres.on("data", (chunk) => {
+                    res.write(chunk);
+                });
+                pres.on("close", () => {
+                    res.end();
+                });
+                pres.on("end", () => {
+                    res.end();
+                });
+            })
+            .on("error", (err: Error) => {
+                chaoticLogger.error(err.message);
+                try {
+                    res.writeHead(500);
+                    res.write(err.message);
+                } catch (err: any) {
+                    chaoticLogger.error(err.message);
+                }
+                res.end();
+            });
+        forwardRequest.end();
+    });
 
     // Error handling
     app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
