@@ -29,26 +29,29 @@ export function enableMetrics(isDatabase: boolean) {
     }
 }
 
-export const MoleculerConfigLog = {
-    type: "Console",
-    options: {
-        autoPadding: true,
-        colors: true,
-        formatter: "{timestamp} {level} {mod}: {msg}",
-        level: {
-            "*": process.env.NODE_ENV === "production" ? "warn" : "debug",
-            BROKER: process.env.NODE_ENV === "production" ? "warn" : "debug",
-            CHAOTIC: process.env.NODE_ENV === "production" ? "info" : "debug",
-            METRICS: process.env.NODE_ENV === "production" ? "warn" : "info",
-            NOTIFIER: process.env.NODE_ENV === "production" ? "warn" : "debug",
-            REGISTRY: process.env.NODE_ENV === "production" ? "warn" : "debug",
-            TRANSIT: process.env.NODE_ENV === "production" ? "warn" : "debug",
-            TRANSPORTER: process.env.NODE_ENV === "production" ? "warn" : "debug",
+export function MoleculerConfigLog(NODE_ENV: string) {
+    const isProd = NODE_ENV === "production";
+    return {
+        type: "Console",
+        options: {
+            autoPadding: true,
+            colors: true,
+            formatter: "{timestamp} {level} {mod}: {msg}",
+            level: {
+                "*": isProd ? "warn" : "debug",
+                BROKER: isProd ? "warn" : "debug",
+                CHAOTIC: isProd ? "info" : "debug",
+                METRICS: isProd ? "warn" : "info",
+                NOTIFIER: isProd ? "warn" : "debug",
+                REGISTRY: isProd ? "warn" : "debug",
+                TRANSIT: isProd ? "warn" : "debug",
+                TRANSPORTER: isProd ? "warn" : "debug",
+            },
+            moduleColors: true,
+            objectPrinter: null,
         },
-        moduleColors: true,
-        objectPrinter: null,
-    },
-};
+    };
+}
 
 export const MoleculerConfigCommonService = {
     settings: {

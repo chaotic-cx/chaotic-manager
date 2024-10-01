@@ -38,9 +38,9 @@ async function main(): Promise<void> {
         password: redisPassword,
     });
 
-    const nodeID = process.env.BUILDER_HOSTNAME;
+    const nodeID = process.env.BUILDER_HOSTNAME || "chaotic-builder";
     const broker = new ServiceBroker({
-        logger: MoleculerConfigLog,
+        logger: MoleculerConfigLog(process.env.NODE_ENV!),
         metadata: {
             build_class: process.env.BUILDER_CLASS
                 ? (Number(process.env.BUILDER_CLASS) as BuildClass)
