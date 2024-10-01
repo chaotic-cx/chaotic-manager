@@ -31,6 +31,7 @@
     },
     "scripts": {
         "build": "tsc && webpack",
+        "build-docs": "typedoc --out docs 'src/**.ts'",
         "format:check": "prettier --check .",
         "format:write": "prettier --write .",
         "lint:check": "eslint .",
@@ -56,6 +57,7 @@
         "@types/supertest": "^6.0.2",
         "eslint": "^9.9.1",
         "eslint-config-prettier": "^9.1.0",
+        "eslint-plugin-tsdoc": "^0.3.0",
         "jest": "^29.7.0",
         "prettier": "^3.3.3",
         "prettier-plugin-organize-imports": "^4.0.0",
@@ -65,6 +67,7 @@
         "ts-node": "^10.9.2",
         "tsc-watch": "^6.2.0",
         "typed-moleculer": "^4.1.2",
+        "typedoc": "^0.26.7",
         "typescript-eslint": "^8.2.0"
     }
 }

@@ -3,6 +3,7 @@
 .idea
 .pre-commit-config.yaml
 /dist
+/docs
 /dump.rdb
 /gpg
 /node_modules
