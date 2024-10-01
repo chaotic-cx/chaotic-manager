@@ -1,14 +1,14 @@
+import * as http from "node:http";
+import type { RequestOptions } from "node:http";
 import Timeout from "await-timeout";
 import to from "await-to-js";
+import cors from "cors";
 // import cors from "cors";
 import express, { type NextFunction, type Request, type Response } from "express";
+import type { LoggerInstance, ServiceBroker } from "moleculer";
 import type { RedisConnectionManager } from "./redis-connection-manager";
-import { corsOptions, HTTP_CACHE_MAX_AGE } from "./types";
-import { LoggerInstance, ServiceBroker } from "moleculer";
+import { HTTP_CACHE_MAX_AGE, corsOptions } from "./types";
 import { getDurationInMilliseconds } from "./utils";
-import cors from "cors";
-import * as http from "node:http";
-import { RequestOptions } from "node:http";
 
 export async function startWebServer(broker: ServiceBroker, port: number, manager: RedisConnectionManager) {
     const connection = manager.getClient();
@@ -31,7 +31,7 @@ export async function startWebServer(broker: ServiceBroker, port: number, manage
 
     // Log HTTP requests if not explicitly denied
     if (!process.env.NO_HTTP_LOG) {
-        app.use(function (req: Request, res: Response, next: NextFunction) {
+        app.use((req: Request, res: Response, next: NextFunction) => {
             // Measure time to answer
             const start: [number, number] = process.hrtime();
 

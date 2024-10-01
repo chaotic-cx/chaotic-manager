@@ -1,10 +1,10 @@
+import type { ServiceBroker } from "moleculer";
 import type {
     BuildClass,
     Coordinator_Action_AddJobsToQueue_Params,
     Coordinator_Action_AutoRepoRemove_Params,
     Coordinator_Action_PackageMetaData_List,
 } from "./types";
-import { ServiceBroker } from "moleculer";
 
 export async function schedulePackages(
     broker: ServiceBroker,

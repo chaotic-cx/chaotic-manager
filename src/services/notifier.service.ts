@@ -1,11 +1,11 @@
-import ChaoticTelegramBot from "../telegram-bot";
-import { LoggerInstance, Service, ServiceBroker } from "moleculer";
-import {
-    type FailureNotificationParams,
-    type GenericNotificationParams,
-    type SuccessNotificationParams,
-} from "../types";
 import { to } from "await-to-js";
+import { type LoggerInstance, Service, type ServiceBroker } from "moleculer";
+import ChaoticTelegramBot from "../telegram-bot";
+import type {
+    FailureNotificationParams,
+    GenericNotificationParams,
+    SuccessNotificationParams,
+} from "../types";
 import { MoleculerConfigCommonService } from "./moleculer.config";
 
 /**

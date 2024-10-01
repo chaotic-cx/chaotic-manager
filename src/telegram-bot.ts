@@ -1,5 +1,5 @@
+import type { LoggerInstance } from "moleculer";
 import TelegramBot from "node-telegram-bot-api";
-import { LoggerInstance } from "moleculer";
 
 /**
  * Class for instantiating a Telegram bot, which can be used to query

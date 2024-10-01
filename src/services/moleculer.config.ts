@@ -1,4 +1,4 @@
-import { ServiceRegistry } from "moleculer";
+import type { ServiceRegistry } from "moleculer";
 
 export const MoleculerConfigCommon = {
     skipProcessEventRegistration: true,

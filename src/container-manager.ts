@@ -1,10 +1,10 @@
 import { Stream } from "stream";
 import { Mutex } from "async-mutex";
 import to from "await-to-js";
-import Dockerode from "dockerode";
-import Docker, { Container } from "dockerode";
+import type Dockerode from "dockerode";
+import Docker, { type Container } from "dockerode";
+import type { LoggerInstance } from "moleculer";
 import { type ContainerCreateMountOption, type LibPod, LibpodDockerode } from "./libpod-dockerode";
-import { LoggerInstance } from "moleculer";
 
 export abstract class ContainerManager {
     abstract docker: Dockerode;

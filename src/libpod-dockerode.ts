@@ -307,7 +307,7 @@ export interface ContainerStore {
     stopped: number;
 }
 
-export interface GraphOptions {}
+export type GraphOptions = {}
 
 export interface GraphStatus {
     "Backing Filesystem": string;

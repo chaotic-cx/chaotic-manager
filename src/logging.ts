@@ -1,6 +1,6 @@
 import to from "await-to-js";
 import type RedisConnection from "ioredis";
-import { LoggerInstance } from "moleculer";
+import type { LoggerInstance } from "moleculer";
 
 // Console.log imitation that saves to a variable instead of stdout
 export class SshLogger {

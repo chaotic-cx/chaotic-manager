@@ -1,23 +1,23 @@
-import { Context, LoggerInstance, Service, ServiceBroker } from "moleculer";
+import fs from "fs";
 import { Mutex } from "async-mutex";
-import {
+import { type Context, type LoggerInstance, Service, type ServiceBroker } from "moleculer";
+import { type ContainerManager, DockerManager, PodmanManager } from "../container-manager";
+import { BuildsRedisLogger } from "../logging";
+import type { RedisConnectionManager } from "../redis-connection-manager";
+import type {
+    DatabaseRemoveStatusReturn,
     Database_Action_AddToDb_Params,
     Database_Action_AutoRepoRemove_Params,
-    Database_Action_fetchUploadInfo_Response,
     Database_Action_GenerateDestFillerFiles_Params,
-    DatabaseRemoveStatusReturn,
+    Database_Action_fetchUploadInfo_Response,
 } from "../types";
-import { RedisConnectionManager } from "../redis-connection-manager";
-import { BuildsRedisLogger } from "../logging";
-import { ContainerManager, DockerManager, PodmanManager } from "../container-manager";
 import { currentTime } from "../utils";
-import fs from "fs";
 import { MoleculerConfigCommonService } from "./moleculer.config";
 
 export class DatabaseService extends Service {
     landing_zone: string = process.env.LANDING_ZONE_PATH || "";
     repo_root: string = process.env.REPO_PATH || "";
-    repo_root_mount: string = "/repo_root";
+    repo_root_mount = "/repo_root";
     mutex: Mutex = new Mutex();
     redis_connection_manager: RedisConnectionManager;
     gpg: string = process.env.GPG_PATH || "";
@@ -114,7 +114,7 @@ export class DatabaseService extends Service {
     // Remove all packages from the database that do not belong to the list of pkgbases
     async autoRepoRemove(ctx: Context): Promise<DatabaseRemoveStatusReturn> {
         const data = ctx.params as Database_Action_AutoRepoRemove_Params;
-        let ret: DatabaseRemoveStatusReturn = { success: false };
+        const ret: DatabaseRemoveStatusReturn = { success: false };
 
         await this.mutex.runExclusive(async () => {
             this.chaoticLogger.info(
@@ -145,8 +145,8 @@ export class DatabaseService extends Service {
     }
 
     async generateDestFillerFiles(ctx: Context): Promise<string[]> {
-        let data = ctx.params as Database_Action_GenerateDestFillerFiles_Params;
-        let directory = `${this.repo_root_mount}/${data.target_repo}/${data.arch}`;
+        const data = ctx.params as Database_Action_GenerateDestFillerFiles_Params;
+        const directory = `${this.repo_root_mount}/${data.target_repo}/${data.arch}`;
         if (fs.existsSync(directory)) {
             return fs.readdirSync(directory);
         }

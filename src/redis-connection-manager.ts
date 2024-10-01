@@ -17,7 +17,7 @@ export class RedisConnectionManager {
     }
 
     public getNewClient(redisopts: any): RedisConnection {
-        let newClient = this.client.duplicate(redisopts);
+        const newClient = this.client.duplicate(redisopts);
         this.clients.push(newClient);
         return newClient;
     }

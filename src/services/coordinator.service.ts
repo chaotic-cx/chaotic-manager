@@ -1,25 +1,25 @@
-import { Context, LoggerInstance, Service, ServiceBroker } from "moleculer";
-import {
-    Builder_Action_BuildPackage_Params,
-    BuildStatus,
-    BuildStatusReturn,
-    Coordinator_Action_AddJobsToQueue_Params,
-    Coordinator_Action_AutoRepoRemove_Params,
-    CoordinatorJob,
-    CoordinatorJobSavable,
-    current_version,
-    Database_Action_AutoRepoRemove_Params,
-    Database_Action_fetchUploadInfo_Response,
-    DatabaseRemoveStatusReturn,
-    FailureNotificationParams,
-    SuccessNotificationParams,
-} from "../types";
-import { Repo, RepoManager, TargetRepo } from "../repo-manager";
-import { DepGraph } from "dependency-graph";
-import { BuildsRedisLogger } from "../logging";
-import { RedisConnectionManager } from "../redis-connection-manager";
-import { currentTime } from "../utils";
 import { Mutex } from "async-mutex";
+import { DepGraph } from "dependency-graph";
+import { type Context, type LoggerInstance, Service, type ServiceBroker } from "moleculer";
+import { BuildsRedisLogger } from "../logging";
+import type { RedisConnectionManager } from "../redis-connection-manager";
+import { type Repo, RepoManager, type TargetRepo } from "../repo-manager";
+import {
+    BuildStatus,
+    type BuildStatusReturn,
+    type Builder_Action_BuildPackage_Params,
+    CoordinatorJob,
+    type CoordinatorJobSavable,
+    type Coordinator_Action_AddJobsToQueue_Params,
+    type Coordinator_Action_AutoRepoRemove_Params,
+    type DatabaseRemoveStatusReturn,
+    type Database_Action_AutoRepoRemove_Params,
+    type Database_Action_fetchUploadInfo_Response,
+    type FailureNotificationParams,
+    type SuccessNotificationParams,
+    current_version,
+} from "../types";
+import { currentTime } from "../utils";
 import { MoleculerConfigCommonService } from "./moleculer.config";
 
 class CoordinatorTrackedJob extends CoordinatorJob {
@@ -46,7 +46,7 @@ class CoordinatorTrackedJob extends CoordinatorJob {
 
     toSavable(): CoordinatorJob {
         if (this.replacement) return this.replacement.toSavable();
-        let base: any = structuredClone(this);
+        const base: any = structuredClone(this);
         delete base.logger;
         delete base.node;
         delete base.timestamp;
@@ -55,7 +55,7 @@ class CoordinatorTrackedJob extends CoordinatorJob {
 }
 
 function toTracked(job: CoordinatorJobSavable, timestamp: number, logger: BuildsRedisLogger): CoordinatorTrackedJob {
-    let ret: any = job;
+    const ret: any = job;
     ret.timestamp = timestamp;
     ret.logger = logger;
     ret.logger.from(ret.pkgbase, ret.timestamp);
@@ -80,7 +80,7 @@ export class CoordinatorService extends Service {
     mutex: Mutex = new Mutex();
     chaoticLogger: LoggerInstance;
 
-    active: boolean = false;
+    active = false;
 
     constructor(
         broker: ServiceBroker,
@@ -219,7 +219,7 @@ export class CoordinatorService extends Service {
             })
             .finally(() => {
                 void job.redisLogger.end_log();
-                let job_id = job.toId();
+                const job_id = job.toId();
                 if (job.replacement) this.queue[job_id] = job.replacement;
                 else delete this.queue[job_id];
                 delete this.busy_nodes[node_id];
@@ -231,7 +231,7 @@ export class CoordinatorService extends Service {
         if (!this.active) return;
         await this.mutex.runExclusive(async () => {
             // Fetch the list of available builder nodes
-            let services: any[] = await this.broker.call("$node.services");
+            const services: any[] = await this.broker.call("$node.services");
             let nodes: string[] | undefined;
             for (const entry of services) {
                 if (entry.name === "builder") {
@@ -247,7 +247,7 @@ export class CoordinatorService extends Service {
             }
 
             // Fetch the full list of nodes
-            let full_node_list: any[] = await this.broker.call("$node.list");
+            const full_node_list: any[] = await this.broker.call("$node.list");
             if (!full_node_list || full_node_list.length == 0) {
                 return;
             }
@@ -255,7 +255,7 @@ export class CoordinatorService extends Service {
             // nodes.includes(node.id) -> check if the node is in the list of builder nodes
             // node.available -> check if the node is available (not offline)
             // !this.busy_nodes[node.id] -> check if the node is not in the list of busy nodes
-            let available_nodes: any[] = full_node_list.filter(
+            const available_nodes: any[] = full_node_list.filter(
                 (node: any) => nodes.includes(node.id) && node.available && !this.busy_nodes[node.id],
             );
 
@@ -263,23 +263,23 @@ export class CoordinatorService extends Service {
                 return;
             }
 
-            let graph: DepGraph<CoordinatorTrackedJob> = this.constructDependencyGraph(this.queue);
-            let upload_info: Database_Action_fetchUploadInfo_Response = await this.getUploadInfo();
+            const graph: DepGraph<CoordinatorTrackedJob> = this.constructDependencyGraph(this.queue);
+            const upload_info: Database_Action_fetchUploadInfo_Response = await this.getUploadInfo();
 
             for (const node of available_nodes) {
-                let jobs: CoordinatorTrackedJob[] = this.getPossibleJobs(graph, node.metadata.build_class);
+                const jobs: CoordinatorTrackedJob[] = this.getPossibleJobs(graph, node.metadata.build_class);
                 if (jobs.length == 0) {
                     continue;
                 }
-                let job: CoordinatorTrackedJob | undefined = jobs.shift();
+                const job: CoordinatorTrackedJob | undefined = jobs.shift();
                 if (!job) {
                     continue;
                 }
 
                 this.busy_nodes[node.id] = job;
-                let source_repo: Repo = this.repo_manager.getRepo(job.source_repo);
-                let target_repo: TargetRepo = this.repo_manager.getTargetRepo(job.target_repo);
-                let params: Builder_Action_BuildPackage_Params = {
+                const source_repo: Repo = this.repo_manager.getRepo(job.source_repo);
+                const target_repo: TargetRepo = this.repo_manager.getTargetRepo(job.target_repo);
+                const params: Builder_Action_BuildPackage_Params = {
                     pkgbase: job.pkgbase,
                     target_repo: job.target_repo,
                     source_repo: job.source_repo,
@@ -295,7 +295,7 @@ export class CoordinatorService extends Service {
 
                 job.node = node.id;
 
-                let promise = this.broker.call<BuildStatusReturn, Builder_Action_BuildPackage_Params>(
+                const promise = this.broker.call<BuildStatusReturn, Builder_Action_BuildPackage_Params>(
                     "builder.buildPackage",
                     params,
                     {
@@ -319,7 +319,7 @@ export class CoordinatorService extends Service {
         const redis = this.redis_connection_manager.getClient();
 
         for (const pkg of data.packages) {
-            let logger = new BuildsRedisLogger(redis, this.chaoticLogger);
+            const logger = new BuildsRedisLogger(redis, this.chaoticLogger);
             logger.from(pkg.pkgbase, timestamp);
             jobs.push(
                 new CoordinatorTrackedJob(
@@ -338,15 +338,15 @@ export class CoordinatorService extends Service {
         }
 
         for (const job of jobs) {
-            let log = new BuildsRedisLogger(this.redis_connection_manager.getClient(), this.chaoticLogger);
+            const log = new BuildsRedisLogger(this.redis_connection_manager.getClient(), this.chaoticLogger);
             log.from(job.pkgbase, job.timestamp);
             (async () => {
                 await log.setDefault();
                 await log.log(`Added to build queue at ${currentTime()}. Waiting for builder...`);
             })();
 
-            let id = job.toId();
-            let entry = this.queue[id];
+            const id = job.toId();
+            const entry = this.queue[id];
             // Is queued
             if (entry) {
                 // Is running
@@ -405,7 +405,7 @@ export class CoordinatorService extends Service {
     private initRepoManager(repo_manager: RepoManager): void {
         if (this.package_repos) {
             try {
-                let obj = JSON.parse(this.package_repos);
+                const obj = JSON.parse(this.package_repos);
                 repo_manager.repoFromObject(obj);
             } catch (error) {
                 this.chaoticLogger.error(error);
@@ -423,7 +423,7 @@ export class CoordinatorService extends Service {
 
         if (this.package_target_repos) {
             try {
-                let obj = JSON.parse(this.package_target_repos);
+                const obj = JSON.parse(this.package_target_repos);
                 repo_manager.targetRepoFromObject(obj);
             } catch (error) {
                 this.chaoticLogger.error(error);
@@ -447,7 +447,7 @@ export class CoordinatorService extends Service {
 
         if (this.package_repos_notifiers) {
             try {
-                let obj = JSON.parse(this.package_repos_notifiers);
+                const obj = JSON.parse(this.package_repos_notifiers);
                 repo_manager.notifiersFromObject(obj);
             } catch (error) {
                 this.chaoticLogger.error(error);
@@ -513,7 +513,7 @@ export class CoordinatorService extends Service {
     }
 
     public jobExists(ctx: Context): boolean {
-        let data: { pkgbase: string; timestamp: Number } = ctx.params as any;
+        const data: { pkgbase: string; timestamp: number } = ctx.params as any;
         for (const job of Object.values(this.queue)) {
             if (job.pkgbase === data.pkgbase && job.timestamp === data.timestamp) {
                 return true;
@@ -523,7 +523,7 @@ export class CoordinatorService extends Service {
     }
 
     private async saveQueue(): Promise<void> {
-        let save_queue: CoordinatorJob[] = [];
+        const save_queue: CoordinatorJob[] = [];
         for (const job of Object.values(this.queue)) {
             save_queue.push(job.toSavable());
         }
@@ -537,17 +537,17 @@ export class CoordinatorService extends Service {
     }
 
     async start(): Promise<void> {
-        let timestamp = Date.now();
-        let client = this.redis_connection_manager.getClient();
+        const timestamp = Date.now();
+        const client = this.redis_connection_manager.getClient();
         try {
-            let queue = await client.get("build-queue");
+            const queue = await client.get("build-queue");
             if (queue) {
-                let data = JSON.parse(queue);
+                const data = JSON.parse(queue);
                 if (data.version === current_version) {
                     for (const savedJob of data.save_queue) {
-                        let logger = new BuildsRedisLogger(client, this.chaoticLogger);
-                        let job = toTracked(savedJob, timestamp, logger);
-                        let id = job.toId();
+                        const logger = new BuildsRedisLogger(client, this.chaoticLogger);
+                        const job = toTracked(savedJob, timestamp, logger);
+                        const id = job.toId();
                         job.redisLogger.log(`Restored job ${id} at ${currentTime()}`);
                         this.queue[id] = job;
                     }
@@ -569,7 +569,7 @@ export class CoordinatorService extends Service {
 
         await this.saveQueue();
 
-        let promises: Promise<void>[] = [];
+        const promises: Promise<void>[] = [];
         for (const job of Object.values(this.queue)) {
             if (job.node) {
                 job.redisLogger.log(`Job cancellation requested at ${currentTime()}. Coordinator is shutting down.`);

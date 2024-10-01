@@ -1,23 +1,23 @@
-import { Context, LoggerInstance, Service, ServiceBroker } from "moleculer";
-import { RedisConnectionManager } from "../redis-connection-manager";
-import { Mutex, tryAcquire } from "async-mutex";
-import { BuildsRedisLogger, SshLogger } from "../logging";
-import { currentTime } from "../utils";
 import fs from "fs";
+import type { Dirent } from "node:fs";
 import path from "path";
+import { Mutex, tryAcquire } from "async-mutex";
+import { to } from "await-to-js";
+import type { Container } from "dockerode";
+import { type Context, type LoggerInstance, Service, type ServiceBroker } from "moleculer";
+import Client, { type ScpClient } from "node-scp";
+import { type ContainerManager, DockerManager, PodmanManager } from "../container-manager";
+import { BuildsRedisLogger, SshLogger } from "../logging";
+import type { RedisConnectionManager } from "../redis-connection-manager";
 import {
-    Builder_Action_BuildPackage_Params,
     BuildStatus,
-    BuildStatusReturn,
-    Database_Action_AddToDb_Params,
-    Database_Action_GenerateDestFillerFiles_Params,
+    type BuildStatusReturn,
+    type Builder_Action_BuildPackage_Params,
+    type Database_Action_AddToDb_Params,
+    type Database_Action_GenerateDestFillerFiles_Params,
     SOURCECACHE_MAX_LIFETIME,
 } from "../types";
-import { ContainerManager, DockerManager, PodmanManager } from "../container-manager";
-import { to } from "await-to-js";
-import Client, { ScpClient } from "node-scp";
-import { Dirent } from "node:fs";
-import { Container } from "dockerode";
+import { currentTime } from "../utils";
 import { MoleculerConfigCommonService } from "./moleculer.config";
 
 /**
@@ -42,7 +42,7 @@ export class BuilderService extends Service {
 
     containerManager: ContainerManager;
     container: Container | null = null;
-    cancelled: boolean = false;
+    cancelled = false;
     chaoticLogger: LoggerInstance;
 
     constructor(
@@ -77,7 +77,7 @@ export class BuilderService extends Service {
      * @returns The exit code of the build action as a BuildStatusReturn object
      */
     async buildPackage(ctx: Context): Promise<BuildStatusReturn> {
-        let data = ctx.params as Builder_Action_BuildPackage_Params;
+        const data = ctx.params as Builder_Action_BuildPackage_Params;
         this.cancelled = false;
 
         // If this fails, something has gone terribly wrong.
@@ -181,7 +181,7 @@ export class BuilderService extends Service {
 
                 logger.log(`Finished upload.`);
 
-                let addToDbParams: Database_Action_AddToDb_Params = {
+                const addToDbParams: Database_Action_AddToDb_Params = {
                     source_repo: data.source_repo,
                     target_repo: data.target_repo,
                     arch: data.arch,
@@ -190,7 +190,7 @@ export class BuilderService extends Service {
                     builder_image: data.builder_image,
                     timestamp: data.timestamp,
                 };
-                let addToDbReturn: { success: boolean } = await ctx.call("database.addToDb", addToDbParams);
+                const addToDbReturn: { success: boolean } = await ctx.call("database.addToDb", addToDbParams);
 
                 if (!addToDbReturn.success) {
                     return { success: BuildStatus.FAILED };
@@ -247,11 +247,11 @@ export class BuilderService extends Service {
         arch: string,
         destdir: string,
     ): Promise<void> {
-        let generateDestFillerFilesParams: Database_Action_GenerateDestFillerFiles_Params = {
+        const generateDestFillerFilesParams: Database_Action_GenerateDestFillerFiles_Params = {
             target_repo: target_repo,
             arch: arch,
         };
-        let repo_files: string[] = await ctx.call("database.generateDestFillerFiles", generateDestFillerFilesParams);
+        const repo_files: string[] = await ctx.call("database.generateDestFillerFiles", generateDestFillerFilesParams);
         for (const line of repo_files) {
             const filepath = path.join(destdir, line);
             fs.writeFileSync(filepath, "");

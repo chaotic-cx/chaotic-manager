@@ -1,16 +1,16 @@
 import fs from "fs";
 import commandLineArgs from "command-line-args";
 import IORedis from "ioredis";
+import { ServiceBroker } from "moleculer";
 import { RedisConnectionManager } from "./redis-connection-manager";
 import { scheduleAutoRepoRemove, schedulePackages } from "./scheduler";
-import { startWebServer } from "./web";
-import { ServiceBroker } from "moleculer";
-import CoordinatorService from "./services/coordinator.service";
-import { BuildClass } from "./types";
-import { DatabaseService } from "./services/database.service";
-import { NotifierService } from "./services/notifier.service";
 import { BuilderService } from "./services/builder.service";
-import { enableMetrics, MoleculerConfigCommon, MoleculerConfigLog } from "./services/moleculer.config";
+import CoordinatorService from "./services/coordinator.service";
+import { DatabaseService } from "./services/database.service";
+import { MoleculerConfigCommon, MoleculerConfigLog, enableMetrics } from "./services/moleculer.config";
+import { NotifierService } from "./services/notifier.service";
+import { BuildClass } from "./types";
+import { startWebServer } from "./web";
 
 if (!process.env.NODE_ENV) process.env.NODE_ENV = "production";
 
