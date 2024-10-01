@@ -892,6 +892,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@material/material-color-utilities@npm:^0.2.7":
+  version: 0.2.7
+  resolution: "@material/material-color-utilities@npm:0.2.7"
+  checksum: 10c0/7734f8d7cffe6a92d47fcca82b4846e39ffd79be9c057f3299466696dcdee5379b8a8a3aa6a9692d40bd6900905f689105d9a8ce47882ab22348df10621f70cd
+  languageName: node
+  linkType: hard
+
 "@microsoft/tsdoc-config@npm:0.17.0":
   version: 0.17.0
   resolution: "@microsoft/tsdoc-config@npm:0.17.0"
@@ -2529,9 +2536,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"chaotic-runner@workspace:.":
+"chaotic-manager@workspace:.":
   version: 0.0.0-use.local
-  resolution: "chaotic-runner@workspace:."
+  resolution: "chaotic-manager@workspace:."
   dependencies:
     "@eslint/js": "npm:^9.9.1"
     "@jest/globals": "npm:^29.7.0"
@@ -2577,6 +2584,7 @@ __metadata:
     tsc-watch: "npm:^6.2.0"
     typed-moleculer: "npm:^4.1.2"
     typedoc: "npm:^0.26.7"
+    typedoc-material-theme: "npm:^1.1.0"
     typescript: "npm:^5.5.4"
     typescript-eslint: "npm:^8.2.0"
     webpack: "npm:^5.94.0"
@@ -8447,6 +8455,17 @@ __metadata:
   peerDependencies:
     moleculer: ^0.14.28
   checksum: 10c0/77f06e1fdb30de2bce4778b20f2cda9ef8119e83cbc167a69bca5e6a371cf57ca8801936f327cc60260ac64dea312e5e5a06237b8589b78b4c4a8d0194f7c9cc
+  languageName: node
+  linkType: hard
+
+"typedoc-material-theme@npm:^1.1.0":
+  version: 1.1.0
+  resolution: "typedoc-material-theme@npm:1.1.0"
+  dependencies:
+    "@material/material-color-utilities": "npm:^0.2.7"
+  peerDependencies:
+    typedoc: ^0.25.13 || ^0.26.3
+  checksum: 10c0/523bd30b3a13b47e29d20d2f72abdde80f1b15bbd9c6012777edc29e4c0fc8b76fdfdece8c543d5942f6ac7db62c14d90e4872c31490a98815c3919771104527
   languageName: node
   linkType: hard
 

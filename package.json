@@ -1,5 +1,5 @@
 {
-    "name": "chaotic-runner",
+    "name": "chaotic-manager",
     "version": "1.0.0",
     "main": "dist/index.js",
     "author": "Garuda Team",
@@ -31,7 +31,7 @@
     },
     "scripts": {
         "build": "tsc && webpack",
-        "build-docs": "typedoc --out docs 'src/**.ts'",
+        "build-docs": "typedoc --out docs 'src/*.ts' 'src/*/*.ts' --plugin typedoc-material-theme --themeColor '#1e1e2e'",
         "format:check": "prettier --check .",
         "format:write": "prettier --write .",
         "lint:check": "eslint .",
@@ -68,6 +68,7 @@
         "tsc-watch": "^6.2.0",
         "typed-moleculer": "^4.1.2",
         "typedoc": "^0.26.7",
+        "typedoc-material-theme": "^1.1.0",
         "typescript-eslint": "^8.2.0"
     },
     "packageManager": "yarn@4.5.0"
