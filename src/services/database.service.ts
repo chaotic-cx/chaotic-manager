@@ -107,7 +107,7 @@ export class DatabaseService extends Service {
             }
 
             logger.log(`Successfully added packages to the database.`);
-            this.chaoticLogger.info(`Successfully added packages to the database.`);
+            this.chaoticLogger.info(`Successfully added new packages to the database.`);
 
             return {
                 success: true,

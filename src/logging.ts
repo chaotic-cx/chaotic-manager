@@ -68,7 +68,8 @@ export class BuildsRedisLogger {
                     line.startsWith("Job cancellation requested at ") ||
                     line.startsWith("Job was canceled and replaced with") ||
                     line.startsWith("Restored job ") ||
-                    line.startsWith("Job was canceled before execution.")
+                    line.startsWith("Job was canceled before execution.") ||
+                    line.startsWith("Successfully added packages ")
                 )
             ) {
                 this.buildLogger.info(line);

@@ -239,7 +239,9 @@ export class CoordinatorService extends Service {
                         }
                         case BuildStatus.CANCELED_REQUEUE: {
                             source_repo.notify(job, "canceled", "Builder shutdown requested.");
-                            job.redisLogger.log(`Job ${job.toId()} was canceled and requeued due to builder shutdown.`);
+                            job.redisLogger.log(
+                                `Job ${job.toId()} was canceled and re-queued due to builder shutdown.`,
+                            );
                             const new_job = job.toSavable();
                             job.replacement = toTracked(new_job, job.timestamp, job.redisLogger);
                             break;
@@ -394,7 +396,6 @@ export class CoordinatorService extends Service {
                     job.timer = await this.broker.call("chaoticMetrics.startHistogramTimer", metricsParams);
 
                     this.chaoticLogger.info(`Assigning job for ${job.pkgbase} to node ${node.id}`);
-                    this.chaoticLogger.info(job);
 
                     const promise = this.broker.call<BuildStatusReturn, Builder_Action_BuildPackage_Params>(
                         "builder.buildPackage",
