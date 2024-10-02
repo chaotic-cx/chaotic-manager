@@ -23,6 +23,7 @@ export class DatabaseService extends Service {
     gpg: string = process.env.GPG_PATH || "";
     container_manager: ContainerManager;
     chaoticLogger: LoggerInstance = this.broker.getLogger("CHAOTIC");
+    active: boolean = true;
 
     constructor(broker: ServiceBroker, redis_connection_manager: RedisConnectionManager) {
         super(broker);
@@ -30,7 +31,6 @@ export class DatabaseService extends Service {
 
         this.parseServiceSchema({
             name: "database",
-
             actions: {
                 fetchUploadInfo: {
                     cache: true,
@@ -72,6 +72,11 @@ export class DatabaseService extends Service {
     async addToDb(ctx: Context): Promise<{ success: boolean }> {
         const data = ctx.params as Database_Action_AddToDb_Params;
         return await this.mutex.runExclusive(async () => {
+            if (!this.active) {
+                return {
+                    success: false,
+                };
+            }
             // const repo = this.repo_manager.getRepo(data.repo);
 
             const logger = new BuildsRedisLogger(this.redis_connection_manager.getClient(), this.chaoticLogger);
@@ -113,9 +118,14 @@ export class DatabaseService extends Service {
     // Remove all packages from the database that do not belong to the list of pkgbases
     async autoRepoRemove(ctx: Context): Promise<DatabaseRemoveStatusReturn> {
         const data = ctx.params as Database_Action_AutoRepoRemove_Params;
-        const ret: DatabaseRemoveStatusReturn = { success: false };
 
-        await this.mutex.runExclusive(async () => {
+        return await this.mutex.runExclusive(async () => {
+            if (!this.active) {
+                return {
+                    success: false,
+                };
+            }
+
             this.chaoticLogger.info(`Processing automatic package removal job for ${data.repo}`);
 
             if (data.pkgbases.length === 0) {
@@ -133,12 +143,15 @@ export class DatabaseService extends Service {
 
             if (err) {
                 this.chaoticLogger.error(err);
-                this.chaoticLogger.error("Failed to remove packages from the database.");
-                ret.success = false;
+                this.chaoticLogger.info("Failed to remove packages from the database.");
+                return {
+                    success: false,
+                };
             }
+            return {
+                success: true,
+            };
         });
-
-        return ret;
     }
 
     async generateDestFillerFiles(ctx: Context): Promise<string[]> {
@@ -148,5 +161,14 @@ export class DatabaseService extends Service {
             return fs.readdirSync(directory);
         }
         return [];
+    }
+
+    async stop(): Promise<void> {
+        this.active = false;
+        await this.mutex.waitForUnlock();
+    }
+
+    async stopped(): Promise<void> {
+        await this.schema.stop.bind(this.schema)();
     }
 }

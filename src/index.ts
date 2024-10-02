@@ -39,6 +39,7 @@ async function main(): Promise<void> {
         maxRetriesPerRequest: null,
         password: redisPassword,
     });
+    const redis_connection_manager = new RedisConnectionManager(connection);
 
     // Assign random nodeIDs to prevent a nodeID conflict, which is a fatal error for Moleculer
     const nodeID = process.env.BUILDER_HOSTNAME || generateNodeId(mainOptions.command);
@@ -51,7 +52,7 @@ async function main(): Promise<void> {
                 : BuildClass.Medium,
         },
         metrics: enableMetrics(mainOptions.command === "database"),
-        nodeID,
+        nodeID: nodeID,
         transporter: {
             type: "Redis",
             options: {
@@ -64,7 +65,6 @@ async function main(): Promise<void> {
     });
 
     const chaoticLogger = broker.getLogger("CHAOTIC");
-    chaoticLogger.info("Chaotic-AUR build system is starting up...");
 
     switch (mainOptions.command) {
         case "schedule": {
@@ -86,7 +86,6 @@ async function main(): Promise<void> {
                 deptree = undefined;
             }
 
-            await connection.connect();
             await broker.start();
             await schedulePackages(
                 broker,
@@ -97,8 +96,8 @@ async function main(): Promise<void> {
                 mainOptions.commit,
                 deptree ? deptree : mainOptions.deptree,
             );
-            await broker.stop();
-            connection.quit();
+            broker.stop();
+            redis_connection_manager.shutdown();
             return;
         }
         case "auto-repo-remove": {
@@ -106,26 +105,27 @@ async function main(): Promise<void> {
                 broker.logger.fatal("No pkgbases specified.");
                 process.exit(1);
             }
-            await connection.connect();
+            await broker.start();
             await scheduleAutoRepoRemove(
                 broker,
                 mainOptions.arch || "x86_64",
                 mainOptions["target-repo"] || "chaotic-aur",
                 mainOptions._unknown,
             );
-            await broker.stop();
+            broker.stop();
             connection.quit();
-            return;
+            break;
         }
         case "builder": {
-            if (!process.env.SHARED_PATH) {
+            if (!process.env.SHARED_PATH || !process.env.BUILDER_HOSTNAME) {
                 broker.logger.fatal("Config variables incomplete.");
                 return process.exit(1);
             }
-            await connection.connect();
-            const redis_connection_manager = new RedisConnectionManager(connection);
+
+            chaoticLogger.info("Starting builder instance...");
+
             broker.createService(new BuilderService(broker, redis_connection_manager));
-            void broker.start();
+            broker.start();
             break;
         }
         case "database": {
@@ -140,8 +140,9 @@ async function main(): Promise<void> {
                 broker.logger.fatal("Config variables incomplete.");
                 return process.exit(1);
             }
-            await connection.connect();
-            const redis_connection_manager = new RedisConnectionManager(connection);
+            chaoticLogger.info("Starting database instance...");
+
+            broker.options.nodeID = "database";
 
             broker.createService(new DatabaseService(broker, redis_connection_manager));
             broker.createService(new CoordinatorService(broker, redis_connection_manager));
@@ -149,26 +150,23 @@ async function main(): Promise<void> {
             broker.createService(new WebService(broker, Number(mainOptions["web-port"]), redis_connection_manager));
             broker.createService(new MetricsService(broker));
 
-            await broker.start();
-
-            process.on("SIGINT", async () => {
-                await broker.stop();
-                redis_connection_manager.shutdown();
-            });
+            broker.start();
             break;
         }
         case "web": {
-            await connection.connect();
-            const redis_connection_manager = new RedisConnectionManager(connection);
             broker.createService(new WebService(broker, Number(mainOptions["web-port"]), redis_connection_manager));
 
-            await broker.start();
+            broker.start();
             break;
         }
         default:
             broker.logger.fatal("Invalid command!");
             return process.exit(1);
     }
+    process.on("SIGTERM", async () => {
+        await broker.stop();
+        redis_connection_manager.shutdown();
+    });
 }
 
 void main();

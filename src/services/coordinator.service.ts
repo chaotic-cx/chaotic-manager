@@ -5,11 +5,12 @@ import { BuildsRedisLogger } from "../logging";
 import type { RedisConnectionManager } from "../redis-connection-manager";
 import { type Repo, RepoManager, type TargetRepo } from "../repo-manager";
 import {
+    BuildClass,
     BuildStatus,
     type BuildStatusReturn,
     type Builder_Action_BuildPackage_Params,
     CoordinatorJob,
-    type CoordinatorJobSavable,
+    CoordinatorJobSavable,
     type Coordinator_Action_AddJobsToQueue_Params,
     type Coordinator_Action_AutoRepoRemove_Params,
     type DatabaseRemoveStatusReturn,
@@ -17,6 +18,7 @@ import {
     type Database_Action_fetchUploadInfo_Response,
     type FailureNotificationParams,
     type MetricsCounterLabels,
+    MAX_SHUTDOWN_TIME,
     type SuccessNotificationParams,
     current_version,
 } from "../types";
@@ -49,22 +51,35 @@ class CoordinatorTrackedJob extends CoordinatorJob {
         if (timer) this.timer = timer;
     }
 
-    toSavable(): CoordinatorJob {
+    toSavable(): CoordinatorJobSavable {
         if (this.replacement) return this.replacement.toSavable();
-        const base: any = structuredClone(this);
-        delete base.logger;
-        delete base.node;
-        delete base.timestamp;
+        const base = new CoordinatorJobSavable(
+            this.pkgbase,
+            this.target_repo,
+            this.source_repo,
+            this.arch,
+            this.build_class,
+            this.pkgnames,
+            this.dependencies,
+            this.commit,
+        );
         return base;
     }
 }
 
 function toTracked(job: CoordinatorJobSavable, timestamp: number, logger: BuildsRedisLogger): CoordinatorTrackedJob {
-    const ret: any = job;
-    ret.timestamp = timestamp;
-    ret.logger = logger;
-    ret.logger.from(ret.pkgbase, ret.timestamp);
-    return ret;
+    return new CoordinatorTrackedJob(
+        job.pkgbase,
+        job.target_repo,
+        job.source_repo,
+        job.arch,
+        job.build_class,
+        job.pkgnames,
+        job.dependencies,
+        job.commit,
+        timestamp,
+        logger,
+    );
 }
 
 /**
@@ -79,15 +94,15 @@ export class CoordinatorService extends Service {
         process.env.BUILDER_IMAGE || "registry.gitlab.com/garuda-linux/tools/chaotic-manager/builder:latest";
 
     queue: { [key: string]: CoordinatorTrackedJob } = {};
-    redis_connection_manager: RedisConnectionManager;
     repo_manager: RepoManager;
     busy_nodes: { [key: string]: CoordinatorTrackedJob } = {};
     mutex: Mutex = new Mutex();
     chaoticLogger: LoggerInstance = this.broker.getLogger("CHAOTIC");
 
-    active = false;
+    active: boolean = false;
+    drainedNotifier: (() => void) | null = null;
 
-    constructor(broker: ServiceBroker, redis_connection_manager: RedisConnectionManager) {
+    constructor(broker: ServiceBroker, private redis_connection_manager: RedisConnectionManager) {
         super(broker);
 
         this.repo_manager = new RepoManager(
@@ -95,9 +110,6 @@ export class CoordinatorService extends Service {
             this.chaoticLogger,
         );
         this.initRepoManager(this.repo_manager);
-        this.redis_connection_manager = redis_connection_manager;
-
-        this.chaoticLogger.debug(this.redis_connection_manager);
 
         this.parseServiceSchema({
             name: "coordinator",
@@ -111,11 +123,8 @@ export class CoordinatorService extends Service {
                 "$node.connected": {
                     handler: this.assignJobs,
                 },
-                started: {
+                "$broker.started": {
                     handler: this.start,
-                },
-                stopped: {
-                    handler: this.stop,
                 },
             },
             ...MoleculerConfigCommonService,
@@ -155,89 +164,92 @@ export class CoordinatorService extends Service {
         };
 
         promise
-            .then((ret: BuildStatusReturn) => {
-                switch (ret.success) {
-                    case BuildStatus.ALREADY_BUILT: {
-                        void source_repo.notify(job, "canceled", "Build skipped because package was already built.");
-                        job.redisLogger.log(`Job ${job.toId()} skipped because all packages were already built.`);
-
-                        metricsParams.status = BuildStatus.ALREADY_BUILT;
-                        void this.broker.call("chaotic-metrics.incCounterAlreadyBuilt", metricsParams);
-                        break;
+            .then(async (ret: BuildStatusReturn) => {
+                try {
+                    // Special logic, don't be needlessly noisy and prevent other logic
+                    if (!this.active && (ret.success === BuildStatus.CANCELED || ret.success === BuildStatus.CANCELED_REQUEUE)) {
+                        await source_repo.notify(job, "canceled", "Build canceled due to coordinator shutdown.");
+                        return;
                     }
-                    case BuildStatus.SUCCESS: {
-                        void source_repo.notify(job, "success", "Package successfully deployed.");
-                        job.redisLogger.log(`Build job ${job.toId()} finished at ${currentTime()}...`);
-
-                        const notify_params: SuccessNotificationParams = {
-                            packages: ret.packages!,
-                            event: `📣 New deployment to ${job.target_repo}`,
-                        };
-                        void this.broker.call("notifier.notifyPackages", notify_params);
-
-                        metricsParams.status = BuildStatus.SUCCESS;
-                        void this.broker.call("chaotic-metrics.incCounterBuildSuccess", metricsParams);
-                        break;
-                    }
-                    case BuildStatus.SKIPPED: {
-                        void source_repo.notify(job, "canceled", "Build skipped intentionally via build tools.");
-                        job.redisLogger.log(`Job ${job.toId()} skipped intentionally via build tools.`);
-
-                        metricsParams.status = BuildStatus.SKIPPED;
-                        void this.broker.call("chaotic-metrics.incCounterBuildSkipped", metricsParams);
-                        break;
-                    }
-                    case BuildStatus.FAILED: {
-                        void source_repo.notify(job, "failed", "Build failed.");
-                        job.redisLogger.log(`Job ${job.toId()} failed`);
-
-                        const notify_params: FailureNotificationParams = {
-                            pkgbase: job.pkgbase,
-                            event: `🚨 Failed deploying to ${job.target_repo}`,
-                            source_repo_url: source_repo.getUrl(),
-                            timestamp: job.timestamp,
-                            commit: job.commit,
-                        };
-                        void this.broker.call("notifier.notifyFailure", notify_params);
-
-                        metricsParams.status = BuildStatus.FAILED;
-                        void this.broker.call("chaotic-metrics.incCounterBuildFailure", metricsParams);
-                        break;
-                    }
-                    case BuildStatus.CANCELED: {
-                        metricsParams.status = BuildStatus.CANCELED;
-
-                        if (job.replacement) {
-                            void source_repo.notify(job, "canceled", "Build canceled and replaced.");
-                            job.redisLogger.log(
-                                `Job ${job.toId()} was canceled and replaced by a newer build request.`,
-                            );
-                            metricsParams.replaced = true;
-                            void this.broker.call("chaotic-metrics.incCounterBuildCancelled", metricsParams);
-                        } else {
-                            void source_repo.notify(job, "canceled", "Build canceled.");
-                            job.redisLogger.log(`Job ${job.toId()} was canceled.`);
-                            void this.broker.call("chaotic-metrics.incCounterBuildCancelled", metricsParams);
+                    switch (ret.success) {
+                        case BuildStatus.ALREADY_BUILT: {
+                            void source_repo.notify(job, "canceled", "Build skipped because package was already built.");
+                            job.redisLogger.log(`Job ${job.toId()} skipped because all packages were already built.`);
+                            void this.broker.call("chaotic-metrics.incCounterAlreadyBuilt");
+                            break;
                         }
-                        break;
-                    }
-                    case BuildStatus.TIMED_OUT: {
-                        void source_repo.notify(job, "failed", "Build timed out.");
-                        job.redisLogger.log(`Job ${job.toId()} reached a timeout during the build phase.`);
+                        case BuildStatus.SUCCESS: {
+                            void source_repo.notify(job, "success", "Package successfully deployed.");
+                            job.redisLogger.log(`Build job ${job.toId()} finished at ${currentTime()}...`);
 
-                        const notify_params: FailureNotificationParams = {
-                            pkgbase: job.pkgbase,
-                            event: `⏳ Build for ${job.target_repo} failed due to a timeout`,
-                            source_repo_url: source_repo.getUrl(),
-                            timestamp: job.timestamp,
-                            commit: job.commit,
-                        };
-                        void this.broker.call("notifier.notifyFailure", notify_params);
+                            const notify_params: SuccessNotificationParams = {
+                                packages: ret.packages!,
+                                event: `📣 New deployment to ${job.target_repo}`,
+                            };
+                            void this.broker.call("notifier.notifyPackages", notify_params);
+                            void this.broker.call("chaotic-metrics.incCounterBuildSuccess");
+                            break;
+                        }
+                        case BuildStatus.SKIPPED: {
+                            void source_repo.notify(job, "canceled", "Build skipped intentionally via build tools.");
+                            job.redisLogger.log(`Job ${job.toId()} skipped intentionally via build tools.`);
+                            void this.broker.call("chaotic-metrics.incCounterBuildSkipped");
+                            break;
+                        }
+                        case BuildStatus.FAILED: {
+                            void source_repo.notify(job, "failed", "Build failed.");
+                            job.redisLogger.log(`Job ${job.toId()} failed`);
 
-                        metricsParams.status = BuildStatus.TIMED_OUT;
-                        void this.broker.call("chaotic-metrics.incCounterBuildTimeout", metricsParams);
-                        break;
+                            const notify_params: FailureNotificationParams = {
+                                pkgbase: job.pkgbase,
+                                event: `🚨 Failed deploying to ${job.target_repo}`,
+                                source_repo_url: source_repo.getUrl(),
+                                timestamp: job.timestamp,
+                                commit: job.commit,
+                            };
+                            void this.broker.call("notifier.notifyFailure", notify_params);
+                            void this.broker.call("chaotic-metrics.incCounterBuildFailure");
+                            break;
+                        }
+                        case BuildStatus.CANCELED: {
+                            if (job.replacement) {
+                                void source_repo.notify(job, "canceled", "Build canceled and replaced.");
+                                job.redisLogger.log(
+                                    `Job ${job.toId()} was canceled and replaced by a newer build request.`,
+                                );
+                                void this.broker.call("chaotic-metrics.incCounterBuildCancelled", { replaced: true });
+                            } else {
+                                void source_repo.notify(job, "canceled", "Build canceled.");
+                                job.redisLogger.log(`Job ${job.toId()} was canceled.`);
+                                void this.broker.call("chaotic-metrics.incCounterBuildCancelled", { replaced: false });
+                            }
+                            break;
+                        }
+                        case BuildStatus.CANCELED_REQUEUE: {
+                            source_repo.notify(job, "canceled", "Builder shutdown requested.");
+                            job.redisLogger.log(`Job ${job.toId()} was canceled and requeued due to builder shutdown.`);
+                            let new_job = job.toSavable();
+                            job.replacement = toTracked(new_job, job.timestamp, job.redisLogger);
+                            break;
+                        }
+                        case BuildStatus.TIMED_OUT: {
+                            void source_repo.notify(job, "failed", "Build timed out.");
+                            job.redisLogger.log(`Job ${job.toId()} reached a timeout during the build phase.`);
+
+                            const notify_params: FailureNotificationParams = {
+                                pkgbase: job.pkgbase,
+                                event: `⏳ Build for ${job.target_repo} failed due to a timeout`,
+                                source_repo_url: source_repo.getUrl(),
+                                timestamp: job.timestamp,
+                                commit: job.commit,
+                            };
+                            void this.broker.call("notifier.notifyFailure", notify_params);
+                            void this.broker.call("chaotic-metrics.incCounterBuildTimeout");
+                            break;
+                        }
                     }
+                } catch (err) {
+                    this.chaoticLogger.error("Failed during coordinator job completion:", err);
                 }
             })
             .catch((err) => {
@@ -253,13 +265,14 @@ export class CoordinatorService extends Service {
                     commit: job.commit,
                 };
                 void this.broker.call("notifier.notifyFailure", notify_params);
-
                 metricsParams.status = BuildStatus.SOFTWARE_FAILURE;
                 void this.broker.call("chaotic-metrics.incCounterSoftwareFailure", metricsParams);
             })
             .finally(() => {
-                void this.broker.call("chaotic-metrics.incCounterBuildTotal", metricsParams);
-                if (job.timer) job.timer();
+                if (this.active) {
+                    void this.broker.call("chaotic-metrics.incCounterBuildTotal", metricsParams);
+                    if (job.timer) job.timer();
+                }
 
                 void job.redisLogger.end_log();
                 const job_id = job.toId();
@@ -267,6 +280,9 @@ export class CoordinatorService extends Service {
                 else delete this.queue[job_id];
                 delete this.busy_nodes[node_id];
                 void this.assignJobs();
+                if (this.drainedNotifier && Object.keys(this.queue).length === 0) {
+                    this.drainedNotifier();
+                }
             });
     }
 
@@ -325,7 +341,6 @@ export class CoordinatorService extends Service {
                     continue;
                 }
 
-                this.busy_nodes[node.id] = job;
                 const source_repo: Repo = this.repo_manager.getRepo(job.source_repo);
                 const target_repo: TargetRepo = this.repo_manager.getTargetRepo(job.target_repo);
                 const params: Builder_Action_BuildPackage_Params = {
@@ -343,6 +358,7 @@ export class CoordinatorService extends Service {
                 };
 
                 job.node = node.id;
+                this.busy_nodes[node.id] = job;
 
                 const promise = this.broker.call<BuildStatusReturn, Builder_Action_BuildPackage_Params>(
                     "builder.buildPackage",
@@ -353,6 +369,8 @@ export class CoordinatorService extends Service {
                 );
                 this.onJobComplete(promise, job, source_repo, node.id);
             }
+        }).finally(async () => {
+            await this.saveQueue();
         });
     }
 
@@ -376,7 +394,7 @@ export class CoordinatorService extends Service {
                     data.target_repo,
                     data.source_repo,
                     data.arch,
-                    pkg.build_class || 1,
+                    pkg.build_class || BuildClass.Medium,
                     pkg.pkgnames,
                     pkg.dependencies,
                     data.commit,
@@ -424,7 +442,7 @@ export class CoordinatorService extends Service {
             this.queue[id] = job;
         }
 
-        void this.assignJobs();
+        this.assignJobs();
     }
 
     /**
@@ -560,7 +578,7 @@ export class CoordinatorService extends Service {
 
         for (const node of nodes) {
             const job: CoordinatorTrackedJob = graph.getNodeData(node);
-            if (job.build_class <= builder_class) {
+            if (job.build_class <= builder_class && !job.node) {
                 jobs.push(job);
             }
         }
@@ -588,7 +606,7 @@ export class CoordinatorService extends Service {
      * @private
      */
     private async saveQueue(): Promise<void> {
-        const save_queue: CoordinatorJob[] = [];
+        const save_queue: CoordinatorJobSavable[] = [];
         for (const job of Object.values(this.queue)) {
             save_queue.push(job.toSavable());
         }
@@ -639,25 +657,36 @@ export class CoordinatorService extends Service {
         // Make sure no new scheduler jobs are started
         this.active = false;
 
+        let timeout: NodeJS.Timeout | null = null;
+        let drained = new Promise((resolve: any) => {
+            if (Object.keys(this.busy_nodes).length === 0)
+                resolve();
+            else {
+                this.drainedNotifier = resolve;
+                timeout = setTimeout(() => {
+                    this.chaoticLogger.error("Coordinator shutdown timeout reached. Forcing shutdown.");
+                    resolve();
+                }, MAX_SHUTDOWN_TIME);
+            }
+        });
+
         await this.saveQueue();
 
-        const promises: Promise<void>[] = [];
         for (const job of Object.values(this.queue)) {
             if (job.node) {
                 job.redisLogger.log(`Job cancellation requested at ${currentTime()}. Coordinator is shutting down.`);
-                this.chaoticLogger.info(
-                    `Job for ${job.pkgbase} was canceled before execution. Coordinator is shutting down.`,
-                );
-                promises.push(this.broker.call("builder.cancelBuild", undefined, { nodeID: job.node }));
-            } else {
-                job.redisLogger.log(`Job was canceled before execution. Coordinator is shutting down.`);
-                this.chaoticLogger.info(
-                    `Job for ${job.pkgbase} canceled before execution. Coordinator is shutting down.`,
-                );
-            }
+                // Make sure not to requeue the job
+                job.replacement = undefined;
+                this.broker.call("builder.cancelBuild", undefined, { nodeID: job.node }).catch((err) => { this.chaoticLogger.error(`Failed to cancel build ${job.toId()}:`, err); });
+            } else job.redisLogger.log(`Job was canceled before execution. Coordinator is shutting down.`);
         }
 
-        await Promise.all(promises);
+        await drained;
+        if (timeout) clearTimeout(timeout);
+    }
+
+    async stopped(): Promise<void> {
+        await this.schema.stop.bind(this.schema)();
     }
 }
 

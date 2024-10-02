@@ -13,9 +13,9 @@ export class WebService extends Service {
     private app = express();
     private chaoticLogger: LoggerInstance = this.broker.getLogger("CHAOTIC");
     private httpLogger: LoggerInstance = this.broker.getLogger("HTTP");
-    connection: RedisConnection;
-    subscriber: RedisConnection;
-    server: http.Server | null = null;
+    private connection: RedisConnection;
+    private subscriber: RedisConnection;
+    private server: http.Server | null = null;
 
     constructor(
         broker: ServiceBroker,
@@ -53,9 +53,9 @@ export class WebService extends Service {
             });
         }
 
-        this.app.get("/api/logs/:id/:timestamp", this.getOrStreamLog);
-        this.app.get("/api/logs/:id", this.getOrStreamLogFromID);
-        this.app.get("/metrics", this.getMetrics);
+        this.app.get("/api/logs/:id/:timestamp", this.getOrStreamLog.bind(this));
+        this.app.get("/api/logs/:id", this.getOrStreamLogFromID.bind(this));
+        this.app.get("/metrics", this.getMetrics.bind(this));
 
         // Error handling
         this.app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
@@ -74,10 +74,7 @@ export class WebService extends Service {
         this.parseServiceSchema({
             name: "web",
             events: {
-                stopped: {
-                    handler: this.stop,
-                },
-                started: {
+                "$broker.started": {
                     handler: this.start,
                 },
             },
@@ -214,4 +211,8 @@ export class WebService extends Service {
         this.server!.close();
         this.server = null;
     }
-}
+
+    stopped() {
+        this.schema.stop.bind(this.schema)();
+    }
+};

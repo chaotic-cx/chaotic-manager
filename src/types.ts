@@ -44,7 +44,8 @@ export enum BuildStatus {
     FAILED = 3,
     TIMED_OUT = 4,
     CANCELED = 5,
-    SOFTWARE_FAILURE = 6,
+    CANCELED_REQUEUE = 6,
+    SOFTWARE_FAILURE = 7,
 }
 
 // The object the API should return on /api/packages calls
@@ -81,6 +82,8 @@ export const current_version = 10;
 
 const ONE_UNIX_DAY = 1000 * 60 * 60 * 24;
 const ONE_UNIX_MONTH = 1000 * 60 * 60 * 24 * 30;
+
+export const MAX_SHUTDOWN_TIME = 1000 * 30;
 
 export const SOURCECACHE_MAX_LIFETIME = ONE_UNIX_MONTH;
 export const HTTP_CACHE_MAX_AGE = ONE_UNIX_DAY;

@@ -2,6 +2,7 @@ import type { ServiceRegistry } from "moleculer";
 
 export const MoleculerConfigCommon = {
     skipProcessEventRegistration: true,
+    trackContext: true,
 };
 
 export function enableMetrics(isDatabase: boolean) {

@@ -45,6 +45,11 @@ export class BuilderService extends Service {
     cancelled = false;
     chaoticLogger: LoggerInstance = this.broker.getLogger("CHAOTIC");
 
+    scpClient: ScpClient | null = null;
+
+    cancelledCode: BuildStatus.CANCELED | BuildStatus.CANCELED_REQUEUE = BuildStatus.CANCELED;
+    active: boolean = true;
+
     constructor(broker: ServiceBroker, redis_connection_manager: RedisConnectionManager) {
         super(broker);
         this.redis_connection_manager = redis_connection_manager;
@@ -79,6 +84,11 @@ export class BuilderService extends Service {
         // The coordinator should never send two jobs to the same builder
         return await tryAcquire(this.mutex)
             .runExclusive(async (): Promise<BuildStatusReturn> => {
+                if (!this.active) {
+                    return {
+                        success: BuildStatus.CANCELED_REQUEUE
+                    };
+                }
                 const logger = new BuildsRedisLogger(this.redis_connection_manager.getClient(), this.chaoticLogger);
                 logger.from(data.pkgbase, data.timestamp);
 
@@ -123,7 +133,7 @@ export class BuilderService extends Service {
                         this.chaoticLogger.error(e);
                     });
                     return {
-                        success: BuildStatus.CANCELED,
+                        success: this.cancelledCode,
                     };
                 }
 
@@ -132,7 +142,7 @@ export class BuilderService extends Service {
                 if (this.cancelled) {
                     // At this point, the container has already stopped; there is no need to kill it
                     return {
-                        success: BuildStatus.CANCELED,
+                        success: this.cancelledCode,
                     };
                 }
 
@@ -159,16 +169,27 @@ export class BuilderService extends Service {
 
                 const sshlogger = new SshLogger();
                 try {
-                    const client: ScpClient = await Client({
+                    this.scpClient = await Client({
                         host: String(data.upload_info.database.ssh.host),
                         port: Number(data.upload_info.database.ssh.port),
                         username: String(data.upload_info.database.ssh.user),
                         privateKey: fs.readFileSync("sshkey"),
                         debug: sshlogger.log.bind(sshlogger),
                     });
-                    await client.uploadDir(this.mountPkgout, data.upload_info.database.landing_zone);
-                    client.close();
+                    if (this.cancelled) {
+                        return {
+                            success: this.cancelledCode,
+                        };
+                    }
+                    await this.scpClient.uploadDir(this.mountPkgout, data.upload_info.database.landing_zone);
+                    this.scpClient.close();
                 } catch (e) {
+                    if (this.cancelled) {
+                        return {
+                            success: this.cancelledCode,
+                        };
+                    }
+
                     logger.error(`Failed to upload: ${e}`);
 
                     // This does not get logged to redis
@@ -176,10 +197,19 @@ export class BuilderService extends Service {
                     this.chaoticLogger.info("End of SSH log.");
 
                     return { success: BuildStatus.FAILED };
+                } finally {
+                    if (this.scpClient)
+                        this.scpClient = null;
                 }
 
                 logger.log(`Finished upload.`);
                 this.chaoticLogger.info(`Finished upload of ${data.pkgbase}`);
+
+                if (this.cancelled) {
+                    return {
+                        success: this.cancelledCode,
+                    };
+                }
 
                 const addToDbParams: Database_Action_AddToDb_Params = {
                     source_repo: data.source_repo,
@@ -211,12 +241,16 @@ export class BuilderService extends Service {
      * Cancels a build by killing the container associated with the current builder.
      */
     async cancelBuild(): Promise<void> {
-        this.cancelled = true;
-        if (!this.mutex.isLocked()) return;
-        if (this.container) {
-            this.containerManager.kill(this.container).catch((e) => {
-                this.chaoticLogger.error(e);
-            });
+        if (!this.cancelled) {
+            this.cancelled = true;
+            if (!this.mutex.isLocked()) return;
+            if (this.container) {
+                this.containerManager.kill(this.container).catch((e) => {
+                    this.chaoticLogger.error(e);
+                });
+            } else if (this.scpClient) {
+                this.scpClient.close();
+            }
         }
         await this.mutex.waitForUnlock();
     }
@@ -251,6 +285,7 @@ export class BuilderService extends Service {
             target_repo: target_repo,
             arch: arch,
         };
+        await this.broker.waitForServices(["database"], 1000);
         const repo_files: string[] = await ctx.call("database.generateDestFillerFiles", generateDestFillerFilesParams);
         for (const line of repo_files) {
             const filepath = path.join(destdir, line);
@@ -282,5 +317,16 @@ export class BuilderService extends Service {
             }
             fs.rmSync(filePath, { recursive: true, force: true });
         }
+    }
+
+    async stop(): Promise<void> {
+        this.active = false;
+        if (!this.cancelled)
+            this.cancelledCode = BuildStatus.CANCELED_REQUEUE;
+        await this.cancelBuild();
+    }
+
+    async stopped(): Promise<void> {
+        await this.schema.stop.bind(this.schema)();
     }
 }
