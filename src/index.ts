@@ -10,7 +10,7 @@ import { DatabaseService } from "./services/database.service";
 import { MoleculerConfigCommon, MoleculerConfigLog, enableMetrics } from "./services/moleculer.config";
 import { NotifierService } from "./services/notifier.service";
 import { BuildClass } from "./types";
-import { startWebServer } from "./web";
+import { WebService } from "./services/web.service";
 
 if (!process.env.NODE_ENV) process.env.NODE_ENV = "production";
 
@@ -142,10 +142,7 @@ async function main(): Promise<void> {
             broker.createService(new DatabaseService(broker, redis_connection_manager, chaoticLogger));
             broker.createService(new CoordinatorService(broker, redis_connection_manager, chaoticLogger));
             broker.createService(new NotifierService(broker, chaoticLogger));
-
-            if (typeof mainOptions["web-port"] !== "undefined") {
-                await startWebServer(broker, Number(mainOptions["web-port"]), redis_connection_manager);
-            }
+            broker.createService(new WebService(broker, Number(mainOptions["web-port"]), redis_connection_manager));
 
             await broker.start();
 
@@ -158,8 +155,9 @@ async function main(): Promise<void> {
         case "web": {
             await connection.connect();
             const redis_connection_manager = new RedisConnectionManager(connection);
-            void startWebServer(broker, Number(mainOptions["web-port"]) || 8080, redis_connection_manager);
-            void broker.start();
+            broker.createService(new WebService(broker, Number(mainOptions["web-port"]), redis_connection_manager));
+
+            await broker.start();
             break;
         }
         default:
