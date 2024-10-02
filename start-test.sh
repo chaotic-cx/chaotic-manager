@@ -92,7 +92,8 @@ docker compose up &
 sleep 10
 
 if [ "$1" == "native" ]; then
-    echo "DATABASE_HOST=127.0.0.1
+    echo "BUILDER_HOSTNAME=chaotic-test-builder
+DATABASE_HOST=127.0.0.1
 DATABASE_PORT=2891
 DATABASE_USER=package-deployer
 GPG_PATH='$(pwd)/gpg'

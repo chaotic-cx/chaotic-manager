@@ -58,5 +58,7 @@ export function generateNodeId(command: string) {
             id += "web-server";
             break;
     }
+
+    id += "-" + Math.random().toString(36).substring(2, 7);
     return id;
 }

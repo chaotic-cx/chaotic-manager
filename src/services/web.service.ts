@@ -2,11 +2,12 @@ import type { RequestOptions } from "https";
 import * as http from "node:http";
 import Timeout from "await-timeout";
 import to from "await-to-js";
+import cors from "cors";
 import express, { type NextFunction, type Request, type Response } from "express";
 import type RedisConnection from "ioredis";
 import { type LoggerInstance, Service, type ServiceBroker } from "moleculer";
 import type { RedisConnectionManager } from "../redis-connection-manager";
-import { HTTP_CACHE_MAX_AGE } from "../types";
+import { HTTP_CACHE_MAX_AGE, type MetricsRequest, corsOptions } from "../types";
 import { getDurationInMilliseconds } from "../utils";
 
 export class WebService extends Service {
@@ -56,6 +57,7 @@ export class WebService extends Service {
         this.app.get("/api/logs/:id/:timestamp", this.getOrStreamLog.bind(this));
         this.app.get("/api/logs/:id", this.getOrStreamLogFromID.bind(this));
         this.app.get("/metrics", this.getMetrics.bind(this));
+        this.app.get("/prometheus", cors(corsOptions), this.getPrometheusData.bind(this));
 
         // Error handling
         this.app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
@@ -166,7 +168,7 @@ export class WebService extends Service {
         return await this.getOrStreamLog(req, res);
     }
 
-    async getMetrics(req: Request, res: Response) {
+    async getPrometheusData(req: Request, res: Response) {
         const options: RequestOptions = {
             host: "127.0.0.1",
             port: 3030,
@@ -203,6 +205,19 @@ export class WebService extends Service {
         forwardRequest.end();
     }
 
+    async getMetrics(req: Request, res: Response) {
+        const [err, out] = await to(this.broker.call("chaotic-metrics.getMetrics"));
+        if (err || !out) {
+            this.chaoticLogger.error(err);
+            this.serverError(res, 500, "Encountered an error while fetching metrics");
+            return;
+        }
+        const metrics = out as MetricsRequest;
+        res.setHeader("Cache-Control", "no-cache");
+        res.setHeader("Content-Type", "text/plain");
+        res.json(metrics);
+    }
+
     async start() {
         this.server = this.app.listen(this.port);
     }
@@ -215,4 +230,4 @@ export class WebService extends Service {
     stopped() {
         this.schema.stop.bind(this.schema)();
     }
-};
+}

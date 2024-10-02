@@ -1,4 +1,5 @@
 import type { CorsOptions } from "cors";
+import type { GenericObject } from "moleculer";
 
 export interface PacmanRepo {
     name: string;
@@ -241,3 +242,32 @@ export interface MetricsCounterLabels {
     build_class: BuildClass;
     arch: string;
 }
+
+export interface MetricsGaugeLabels {
+    pkgname: string;
+    target_repo: string;
+    build_class: BuildClass;
+}
+
+export interface MetricsGaugeContext {
+    count: number;
+    labels: MetricsGaugeLabels;
+}
+
+export type MetricsRequest = {
+    [p in ValidMetrics]?: GenericObject | null;
+};
+
+export type ValidMetrics =
+    | "builds.total"
+    | "builds.success"
+    | "builds.failed.build"
+    | "builds.failed.software"
+    | "builds.failed.timeout"
+    | "builds.alreadyBuilt"
+    | "builds.cancelled"
+    | "builds.skipped"
+    | "builds.time.elapsed"
+    | "builders.active"
+    | "builders.idle"
+    | "queue.current";

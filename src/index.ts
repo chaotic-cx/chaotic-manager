@@ -8,7 +8,7 @@ import { BuilderService } from "./services/builder.service";
 import CoordinatorService from "./services/coordinator.service";
 import { DatabaseService } from "./services/database.service";
 import { MetricsService } from "./services/metrics.service";
-import { MoleculerConfigCommon, MoleculerConfigLog, enableMetrics } from "./services/moleculer.config";
+import { enableMetrics, MoleculerConfigCommon, MoleculerConfigLog } from "./services/moleculer.config";
 import { NotifierService } from "./services/notifier.service";
 import { WebService } from "./services/web.service";
 import { BuildClass } from "./types";
@@ -42,7 +42,7 @@ async function main(): Promise<void> {
     const redis_connection_manager = new RedisConnectionManager(connection);
 
     // Assign random nodeIDs to prevent a nodeID conflict, which is a fatal error for Moleculer
-    const nodeID = process.env.BUILDER_HOSTNAME || generateNodeId(mainOptions.command);
+    const nodeID = generateNodeId(mainOptions.command);
 
     const broker = new ServiceBroker({
         logger: MoleculerConfigLog(process.env.NODE_ENV!),

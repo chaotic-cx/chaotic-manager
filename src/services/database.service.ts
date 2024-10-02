@@ -23,7 +23,7 @@ export class DatabaseService extends Service {
     gpg: string = process.env.GPG_PATH || "";
     container_manager: ContainerManager;
     chaoticLogger: LoggerInstance = this.broker.getLogger("CHAOTIC");
-    active: boolean = true;
+    active = true;
 
     constructor(broker: ServiceBroker, redis_connection_manager: RedisConnectionManager) {
         super(broker);

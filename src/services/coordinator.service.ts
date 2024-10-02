@@ -1,4 +1,5 @@
 import { Mutex } from "async-mutex";
+import to from "await-to-js";
 import { DepGraph } from "dependency-graph";
 import { type Context, type LoggerInstance, Service, type ServiceBroker } from "moleculer";
 import { BuildsRedisLogger } from "../logging";
@@ -6,21 +7,21 @@ import type { RedisConnectionManager } from "../redis-connection-manager";
 import { type Repo, RepoManager, type TargetRepo } from "../repo-manager";
 import {
     BuildClass,
+    type Builder_Action_BuildPackage_Params,
     BuildStatus,
     type BuildStatusReturn,
-    type Builder_Action_BuildPackage_Params,
-    CoordinatorJob,
-    CoordinatorJobSavable,
     type Coordinator_Action_AddJobsToQueue_Params,
     type Coordinator_Action_AutoRepoRemove_Params,
-    type DatabaseRemoveStatusReturn,
+    CoordinatorJob,
+    CoordinatorJobSavable,
+    current_version,
     type Database_Action_AutoRepoRemove_Params,
     type Database_Action_fetchUploadInfo_Response,
+    type DatabaseRemoveStatusReturn,
     type FailureNotificationParams,
-    type MetricsCounterLabels,
     MAX_SHUTDOWN_TIME,
+    type MetricsCounterLabels,
     type SuccessNotificationParams,
-    current_version,
 } from "../types";
 import { currentTime } from "../utils";
 import { MoleculerConfigCommonService } from "./moleculer.config";
@@ -99,10 +100,13 @@ export class CoordinatorService extends Service {
     mutex: Mutex = new Mutex();
     chaoticLogger: LoggerInstance = this.broker.getLogger("CHAOTIC");
 
-    active: boolean = false;
+    active = false;
     drainedNotifier: (() => void) | null = null;
 
-    constructor(broker: ServiceBroker, private redis_connection_manager: RedisConnectionManager) {
+    constructor(
+        broker: ServiceBroker,
+        private redis_connection_manager: RedisConnectionManager,
+    ) {
         super(broker);
 
         this.repo_manager = new RepoManager(
@@ -167,13 +171,20 @@ export class CoordinatorService extends Service {
             .then(async (ret: BuildStatusReturn) => {
                 try {
                     // Special logic, don't be needlessly noisy and prevent other logic
-                    if (!this.active && (ret.success === BuildStatus.CANCELED || ret.success === BuildStatus.CANCELED_REQUEUE)) {
+                    if (
+                        !this.active &&
+                        (ret.success === BuildStatus.CANCELED || ret.success === BuildStatus.CANCELED_REQUEUE)
+                    ) {
                         await source_repo.notify(job, "canceled", "Build canceled due to coordinator shutdown.");
                         return;
                     }
                     switch (ret.success) {
                         case BuildStatus.ALREADY_BUILT: {
-                            void source_repo.notify(job, "canceled", "Build skipped because package was already built.");
+                            void source_repo.notify(
+                                job,
+                                "canceled",
+                                "Build skipped because package was already built.",
+                            );
                             job.redisLogger.log(`Job ${job.toId()} skipped because all packages were already built.`);
                             void this.broker.call("chaotic-metrics.incCounterAlreadyBuilt");
                             break;
@@ -228,7 +239,7 @@ export class CoordinatorService extends Service {
                         case BuildStatus.CANCELED_REQUEUE: {
                             source_repo.notify(job, "canceled", "Builder shutdown requested.");
                             job.redisLogger.log(`Job ${job.toId()} was canceled and requeued due to builder shutdown.`);
-                            let new_job = job.toSavable();
+                            const new_job = job.toSavable();
                             job.replacement = toTracked(new_job, job.timestamp, job.redisLogger);
                             break;
                         }
@@ -273,6 +284,12 @@ export class CoordinatorService extends Service {
                     void this.broker.call("chaotic-metrics.incCounterBuildTotal", metricsParams);
                     if (job.timer) job.timer();
                 }
+                void this.broker.call("chaotic-metrics.incCounterBuildTotal", metricsParams);
+
+                let timer: number | undefined;
+                if (job.timer) timer = job.timer();
+                const timer_str = timer ? ` after ${(timer / 60).toFixed(1)} minutes.` : ".";
+                this.chaoticLogger.info(`Job for ${job.pkgbase} finished on node ${node_id}${timer_str}`);
 
                 void job.redisLogger.end_log();
                 const job_id = job.toId();
@@ -294,84 +311,88 @@ export class CoordinatorService extends Service {
      */
     private async assignJobs(): Promise<void> {
         if (!this.active) return;
-        await this.mutex.runExclusive(async () => {
-            // Fetch the list of available builder nodes
-            const services: any[] = await this.broker.call("$node.services");
-            let nodes: string[] | undefined;
-            for (const entry of services) {
-                if (entry.name === "builder") {
-                    nodes = entry.nodes;
-                    break;
-                }
-            }
-
-            // If no builder nodes are available, we log a warning and return
-            if (!nodes || nodes.length == 0) {
-                this.chaoticLogger.warn("No builder nodes available.");
-                return;
-            }
-
-            // Fetch the full list of nodes
-            const full_node_list: any[] = await this.broker.call("$node.list");
-            if (!full_node_list || full_node_list.length == 0) {
-                return;
-            }
-
-            // nodes.includes(node.id) -> check if the node is in the list of builder nodes
-            // node.available -> check if the node is available (not offline)
-            // !this.busy_nodes[node.id] -> check if the node is not in the list of busy nodes
-            const available_nodes: any[] = full_node_list.filter(
-                (node: any) => nodes.includes(node.id) && node.available && !this.busy_nodes[node.id],
-            );
-
-            if (available_nodes.length == 0) {
-                return;
-            }
-
-            const graph: DepGraph<CoordinatorTrackedJob> = this.constructDependencyGraph(this.queue);
-            const upload_info: Database_Action_fetchUploadInfo_Response = await this.getUploadInfo();
-
-            for (const node of available_nodes) {
-                const jobs: CoordinatorTrackedJob[] = this.getPossibleJobs(graph, node.metadata.build_class);
-                if (jobs.length == 0) {
-                    continue;
-                }
-                const job: CoordinatorTrackedJob | undefined = jobs.shift();
-                if (!job) {
-                    continue;
+        await this.mutex
+            .runExclusive(async () => {
+                // Fetch the list of available builder nodes
+                const services: any[] = await this.broker.call("$node.services");
+                let nodes: string[] | undefined;
+                for (const entry of services) {
+                    if (entry.name === "builder") {
+                        nodes = entry.nodes;
+                        break;
+                    }
                 }
 
-                const source_repo: Repo = this.repo_manager.getRepo(job.source_repo);
-                const target_repo: TargetRepo = this.repo_manager.getTargetRepo(job.target_repo);
-                const params: Builder_Action_BuildPackage_Params = {
-                    pkgbase: job.pkgbase,
-                    target_repo: job.target_repo,
-                    source_repo: job.source_repo,
-                    source_repo_url: source_repo.getUrl(),
-                    extra_repos: target_repo.repoToString(),
-                    extra_keyrings: target_repo.keyringsToBashArray(),
-                    arch: job.arch,
-                    builder_image: this.builder_image,
-                    upload_info,
-                    timestamp: job.timestamp,
-                    commit: job.commit,
-                };
+                // If no builder nodes are available, we log a warning and return
+                if (!nodes || nodes.length == 0) {
+                    this.chaoticLogger.warn("No builder nodes available.");
+                    return;
+                }
 
-                job.node = node.id;
-                this.busy_nodes[node.id] = job;
+                // Fetch the full list of nodes
+                const full_node_list: any[] = await this.broker.call("$node.list");
+                if (!full_node_list || full_node_list.length == 0) {
+                    return;
+                }
 
-                const promise = this.broker.call<BuildStatusReturn, Builder_Action_BuildPackage_Params>(
-                    "builder.buildPackage",
-                    params,
-                    {
-                        nodeID: node.id,
-                    },
+                // nodes.includes(node.id) -> check if the node is in the list of builder nodes
+                // node.available → check if the node is available (not offline)
+                // !this.busy_nodes[node.id] -> check if the node is not in the list of busy nodes
+                const available_nodes: any[] = full_node_list.filter(
+                    (node: any) => nodes.includes(node.id) && node.available && !this.busy_nodes[node.id],
                 );
-                this.onJobComplete(promise, job, source_repo, node.id);
-            }
-        }).finally(async () => {
-            await this.saveQueue();
-        });
+
+                if (available_nodes.length == 0) {
+                    return;
+                }
+
+                this.updateMetrics(available_nodes);
+
+                const graph: DepGraph<CoordinatorTrackedJob> = this.constructDependencyGraph(this.queue);
+                const upload_info: Database_Action_fetchUploadInfo_Response = await this.getUploadInfo();
+
+                for (const node of available_nodes) {
+                    const jobs: CoordinatorTrackedJob[] = this.getPossibleJobs(graph, node.metadata.build_class);
+                    if (jobs.length == 0) {
+                        continue;
+                    }
+                    const job: CoordinatorTrackedJob | undefined = jobs.shift();
+                    if (!job) {
+                        continue;
+                    }
+
+                    const source_repo: Repo = this.repo_manager.getRepo(job.source_repo);
+                    const target_repo: TargetRepo = this.repo_manager.getTargetRepo(job.target_repo);
+                    const params: Builder_Action_BuildPackage_Params = {
+                        pkgbase: job.pkgbase,
+                        target_repo: job.target_repo,
+                        source_repo: job.source_repo,
+                        source_repo_url: source_repo.getUrl(),
+                        extra_repos: target_repo.repoToString(),
+                        extra_keyrings: target_repo.keyringsToBashArray(),
+                        arch: job.arch,
+                        builder_image: this.builder_image,
+                        upload_info,
+                        timestamp: job.timestamp,
+                        commit: job.commit,
+                    };
+
+                    job.node = node.id;
+                    this.busy_nodes[node.id] = job;
+
+                    const promise = this.broker.call<BuildStatusReturn, Builder_Action_BuildPackage_Params>(
+                        "builder.buildPackage",
+                        params,
+                        {
+                            nodeID: node.id,
+                        },
+                    );
+                    this.onJobComplete(promise, job, source_repo, node.id);
+                }
+            })
+            .finally(async () => {
+                await this.saveQueue();
+            });
     }
 
     /**
@@ -635,7 +656,7 @@ export class CoordinatorService extends Service {
                         const job = toTracked(savedJob, timestamp, logger);
                         const id = job.toId();
                         job.redisLogger.log(`Restored job ${id} at ${currentTime()}`);
-                        this.chaoticLogger.info(`Restored job ${id} for ${job.pkgbase}`);
+                        this.chaoticLogger.info(`Restored job ${job.pkgbase} for ${job.target_repo}`);
                         this.queue[id] = job;
                     }
                 }
@@ -658,9 +679,8 @@ export class CoordinatorService extends Service {
         this.active = false;
 
         let timeout: NodeJS.Timeout | null = null;
-        let drained = new Promise((resolve: any) => {
-            if (Object.keys(this.busy_nodes).length === 0)
-                resolve();
+        const drained = new Promise((resolve: any) => {
+            if (Object.keys(this.busy_nodes).length === 0) resolve();
             else {
                 this.drainedNotifier = resolve;
                 timeout = setTimeout(() => {
@@ -677,7 +697,9 @@ export class CoordinatorService extends Service {
                 job.redisLogger.log(`Job cancellation requested at ${currentTime()}. Coordinator is shutting down.`);
                 // Make sure not to requeue the job
                 job.replacement = undefined;
-                this.broker.call("builder.cancelBuild", undefined, { nodeID: job.node }).catch((err) => { this.chaoticLogger.error(`Failed to cancel build ${job.toId()}:`, err); });
+                this.broker.call("builder.cancelBuild", undefined, { nodeID: job.node }).catch((err) => {
+                    this.chaoticLogger.error(`Failed to cancel build ${job.toId()}:`, err);
+                });
             } else job.redisLogger.log(`Job was canceled before execution. Coordinator is shutting down.`);
         }
 
@@ -687,6 +709,28 @@ export class CoordinatorService extends Service {
 
     async stopped(): Promise<void> {
         await this.schema.stop.bind(this.schema)();
+    }
+
+    /**
+     * Updates all relevant metrics counters for the coordinator service.
+     * @param available_nodes The list of available builder nodes to derive the count from
+     * @private
+     */
+    private updateMetrics(available_nodes: any[]): void {
+        void this.wrappedBrokerCall("chaoticMetrics.setGaugeActiveBuilders", { value: available_nodes.length });
+        void this.wrappedBrokerCall("chaoticMetrics.setGaugeIdleBuilders", {
+            value: Object.keys(this.busy_nodes).length,
+        });
+        void this.wrappedBrokerCall("chaoticMetrics.setGaugeCurrentQueue", { value: Object.keys(this.queue).length });
+    }
+
+    /**
+     * Wraps a broker call with error handling.
+     * @param call The call to wrap.
+     * @param args The arguments to pass to the call.
+     */
+    async wrappedBrokerCall(call: string, args: any) {
+        return to(this.broker.call(call, args));
     }
 }
 

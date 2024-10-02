@@ -48,7 +48,7 @@ export class BuilderService extends Service {
     scpClient: ScpClient | null = null;
 
     cancelledCode: BuildStatus.CANCELED | BuildStatus.CANCELED_REQUEUE = BuildStatus.CANCELED;
-    active: boolean = true;
+    active = true;
 
     constructor(broker: ServiceBroker, redis_connection_manager: RedisConnectionManager) {
         super(broker);
