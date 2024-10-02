@@ -1,6 +1,6 @@
 import to from "await-to-js";
 import type RedisConnection from "ioredis";
-import type { LoggerInstance } from "moleculer";
+import type { LoggerInstance, ServiceBroker } from "moleculer";
 
 // Console.log imitation that saves to a variable instead of stdout
 export class SshLogger {
@@ -23,17 +23,12 @@ export class BuildsRedisLogger {
     private default_key = "";
     private timestamp = 0;
     private chaoticLogger: LoggerInstance;
-    private readonly printStdout;
+    private buildLogger: LoggerInstance;
 
-    constructor(connection: RedisConnection, chaoticLogger: LoggerInstance, printStdout?: boolean) {
+    constructor(connection: RedisConnection, broker: ServiceBroker) {
         this.connection = connection;
-        this.chaoticLogger = chaoticLogger;
-
-        if (printStdout) {
-            this.printStdout = printStdout;
-        } else {
-            this.printStdout = false;
-        }
+        this.chaoticLogger = broker.getLogger("CHAOTIC");
+        this.buildLogger = broker.getLogger("BUILD");
     }
 
     public async fromDefault(pkgbase: string) {
@@ -53,7 +48,7 @@ export class BuildsRedisLogger {
     }
 
     private internal_log(arg: string, err = false): void {
-        if (!this.init) return this.chaoticLogger.warn("Logger not initialized");
+        if (!this.init) return this.chaoticLogger.warn("Logger not initialized.");
         // Pipelining results in a single roundtrip to the server, and this prevents requests from getting out of order
         const pipeline = this.connection.pipeline();
         pipeline.publish(this.channel, "LOG" + arg);
@@ -61,10 +56,24 @@ export class BuildsRedisLogger {
         pipeline.expire(this.key, 60 * 60 * 24 * 7); // 7 days
         void pipeline.exec();
 
-        if (this.printStdout) {
-            if (err) process.stderr.write(arg);
-            else process.stdout.write(arg);
-        }
+        arg.split("\n").forEach((line: string) => {
+            if (line === "") return;
+
+            if (
+                // These are also logged to Redis in a different format, no need for double information.
+                !(
+                    line.startsWith("Processing build job at") ||
+                    line.startsWith("Processing add to database job at") ||
+                    line.startsWith("Processing automatic package removal job for") ||
+                    line.startsWith("Job cancellation requested at ") ||
+                    line.startsWith("Job was canceled and replaced with") ||
+                    line.startsWith("Restored job ") ||
+                    line.startsWith("Job was canceled before execution.")
+                )
+            ) {
+                this.buildLogger.info(line);
+            }
+        });
     }
 
     async end_log(): Promise<void> {
@@ -84,7 +93,7 @@ export class BuildsRedisLogger {
     }
 
     public async setDefault() {
-        if (!this.init) return this.chaoticLogger.warn("Logger not initialized");
+        if (!this.init) return this.chaoticLogger.warn("Logger not initialized.");
         await this.connection.set(this.default_key, this.timestamp, "EX", 60 * 60 * 24 * 7); // 7 days
     }
 }

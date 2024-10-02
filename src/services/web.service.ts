@@ -202,20 +202,38 @@ export class WebService extends Service {
                 }
                 res.end();
             });
+
+        res.setHeader("Cache-Control", "no-cache");
+        res.setHeader("Content-Type", "text/plain");
         forwardRequest.end();
     }
 
     async getMetrics(req: Request, res: Response) {
-        const [err, out] = await to(this.broker.call("chaotic-metrics.getMetrics"));
+        const request = [
+            "builders.active",
+            "builders.idle",
+            "builds.alreadyBuilt",
+            "builds.cancelled",
+            "builds.failed.build",
+            "builds.failed.software",
+            "builds.failed.timeout",
+            "builds.skipped",
+            "builds.success",
+            "builds.time.elapsed",
+            "builds.total",
+            "queue.current",
+        ];
+        const [err, out] = await to(this.broker.call("chaoticMetrics.getMetrics", request));
         if (err || !out) {
             this.chaoticLogger.error(err);
             this.serverError(res, 500, "Encountered an error while fetching metrics");
             return;
         }
+
         const metrics = out as MetricsRequest;
         res.setHeader("Cache-Control", "no-cache");
         res.setHeader("Content-Type", "text/plain");
-        res.json(metrics);
+        res.send(JSON.stringify(metrics));
     }
 
     async start() {

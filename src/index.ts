@@ -8,7 +8,7 @@ import { BuilderService } from "./services/builder.service";
 import CoordinatorService from "./services/coordinator.service";
 import { DatabaseService } from "./services/database.service";
 import { MetricsService } from "./services/metrics.service";
-import { enableMetrics, MoleculerConfigCommon, MoleculerConfigLog } from "./services/moleculer.config";
+import { MoleculerConfigCommon, MoleculerConfigLog, enableMetrics } from "./services/moleculer.config";
 import { NotifierService } from "./services/notifier.service";
 import { WebService } from "./services/web.service";
 import { BuildClass } from "./types";

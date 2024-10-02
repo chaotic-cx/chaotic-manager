@@ -229,9 +229,10 @@ export interface GenericNotificationParams {
 
 export interface MetricsTimerLabels {
     pkgname: string;
-    replaced: boolean;
-    status: BuildStatus;
     target_repo: string;
+    build_class: BuildClass;
+    arch: string;
+    node: string;
 }
 
 export interface MetricsCounterLabels {
@@ -251,7 +252,7 @@ export interface MetricsGaugeLabels {
 
 export interface MetricsGaugeContext {
     count: number;
-    labels: MetricsGaugeLabels;
+    labels?: MetricsGaugeLabels;
 }
 
 export type MetricsRequest = {

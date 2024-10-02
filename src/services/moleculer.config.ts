@@ -41,6 +41,7 @@ export function MoleculerConfigLog(NODE_ENV: string) {
             level: {
                 "*": isProd ? "warn" : "debug",
                 BROKER: isProd ? "warn" : "debug",
+                BUILD: isProd ? "info" : "debug",
                 CHAOTIC: isProd ? "info" : "debug",
                 "CHAOTIC-METRICS": isProd ? "info" : "debug",
                 METRICS: isProd ? "warn" : "info",

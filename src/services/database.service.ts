@@ -79,10 +79,10 @@ export class DatabaseService extends Service {
             }
             // const repo = this.repo_manager.getRepo(data.repo);
 
-            const logger = new BuildsRedisLogger(this.redis_connection_manager.getClient(), this.chaoticLogger);
+            const logger = new BuildsRedisLogger(this.redis_connection_manager.getClient(), this.broker);
             void logger.from(data.pkgbase, data.timestamp);
 
-            logger.log(`Processing add to db job ${ctx.id} at ${currentTime()}`);
+            logger.log(`Processing add to database job ${ctx.id} at ${currentTime()}`);
             this.chaoticLogger.info(`Processing add to db job for ${data.pkgbase}`);
 
             if (data.pkgfiles.length < 1) {

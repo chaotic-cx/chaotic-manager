@@ -86,10 +86,10 @@ export class BuilderService extends Service {
             .runExclusive(async (): Promise<BuildStatusReturn> => {
                 if (!this.active) {
                     return {
-                        success: BuildStatus.CANCELED_REQUEUE
+                        success: BuildStatus.CANCELED_REQUEUE,
                     };
                 }
-                const logger = new BuildsRedisLogger(this.redis_connection_manager.getClient(), this.chaoticLogger);
+                const logger = new BuildsRedisLogger(this.redis_connection_manager.getClient(), this.broker);
                 logger.from(data.pkgbase, data.timestamp);
 
                 logger.log(`Processing build job at ${currentTime()}`);
@@ -198,8 +198,7 @@ export class BuilderService extends Service {
 
                     return { success: BuildStatus.FAILED };
                 } finally {
-                    if (this.scpClient)
-                        this.scpClient = null;
+                    if (this.scpClient) this.scpClient = null;
                 }
 
                 logger.log(`Finished upload.`);
@@ -321,8 +320,7 @@ export class BuilderService extends Service {
 
     async stop(): Promise<void> {
         this.active = false;
-        if (!this.cancelled)
-            this.cancelledCode = BuildStatus.CANCELED_REQUEUE;
+        if (!this.cancelled) this.cancelledCode = BuildStatus.CANCELED_REQUEUE;
         await this.cancelBuild();
     }
 

@@ -154,7 +154,7 @@ export class MetricsService extends Service {
     incCounterSuccess(ctx: Context): void {
         const labels = ctx.params as MetricsCounterLabels;
         this.metricsLogger.debug("Counter incremented: build success");
-        this.broker.metrics.increment("build.success", labels, 1);
+        this.broker.metrics.increment("builds.success", labels, 1);
     }
 
     /**
@@ -164,7 +164,7 @@ export class MetricsService extends Service {
     incCounterBuildFailure(ctx: Context): void {
         const labels = ctx.params as MetricsCounterLabels;
         this.metricsLogger.debug("Counter incremented: build failure");
-        this.broker.metrics.increment("build.failed.build", labels, 1);
+        this.broker.metrics.increment("builds.failed.build", labels, 1);
     }
 
     /**
@@ -174,7 +174,7 @@ export class MetricsService extends Service {
     incCounterSoftwareFailure(ctx: Context): void {
         const labels = ctx.params as MetricsCounterLabels;
         this.metricsLogger.debug("Counter incremented: software failure");
-        this.broker.metrics.increment("build.failed.software", labels, 1);
+        this.broker.metrics.increment("builds.failed.software", labels, 1);
     }
 
     /**
@@ -184,7 +184,7 @@ export class MetricsService extends Service {
     incCounterBuildTimeout(ctx: Context): void {
         const labels = ctx.params as MetricsCounterLabels;
         this.metricsLogger.debug("Counter incremented: build timeout");
-        this.broker.metrics.increment("build.failed.timeout", labels, 1);
+        this.broker.metrics.increment("builds.failed.timeout", labels, 1);
     }
 
     /**
@@ -194,7 +194,7 @@ export class MetricsService extends Service {
     incCounterBuildTotal(ctx: Context): void {
         const labels = ctx.params as MetricsCounterLabels;
         this.metricsLogger.debug("Counter incremented: build total");
-        this.broker.metrics.increment("build.total", labels, 1);
+        this.broker.metrics.increment("builds.total", labels, 1);
     }
 
     /**
@@ -204,7 +204,7 @@ export class MetricsService extends Service {
     incCounterAlreadyBuilt(ctx: Context): void {
         const labels = ctx.params as MetricsCounterLabels;
         this.metricsLogger.debug("Counter incremented: already built");
-        this.broker.metrics.increment("build.already_built", labels, 1);
+        this.broker.metrics.increment("builds.alreadyBuilt", labels, 1);
     }
 
     /**
@@ -214,7 +214,7 @@ export class MetricsService extends Service {
     incCounterBuildCancelled(ctx: Context): void {
         const labels = ctx.params as MetricsCounterLabels;
         this.metricsLogger.debug("Counter incremented: build cancelled");
-        this.broker.metrics.increment("build.cancelled", labels, 1);
+        this.broker.metrics.increment("builds.cancelled", labels, 1);
     }
 
     /**
@@ -224,7 +224,7 @@ export class MetricsService extends Service {
     incCounterBuildSkipped(ctx: Context): void {
         const labels = ctx.params as MetricsCounterLabels;
         this.metricsLogger.debug("Counter incremented: build skipped");
-        this.broker.metrics.increment("build.skipped", labels, 1);
+        this.broker.metrics.increment("builds.skipped", labels, 1);
     }
 
     /**
@@ -235,7 +235,7 @@ export class MetricsService extends Service {
     startHistogramTimer(ctx: Context): () => number {
         const labels = ctx.params as MetricsTimerLabels;
         this.metricsLogger.debug(`Histogram timer for ${labels.pkgname} started`);
-        return this.broker.metrics.timer("build.time.elapsed", labels);
+        return this.broker.metrics.timer("builds.time.elapsed", labels);
     }
 
     /**
@@ -275,16 +275,13 @@ export class MetricsService extends Service {
      * @returns An object containing the requested metrics.
      */
     getMetrics(ctx: Context): MetricsRequest {
-        const data = ctx.params as { metrics: ValidMetrics[] };
+        const data = ctx.params as ValidMetrics[];
         const ret: MetricsRequest = {};
         this.metricsLogger.debug("Metrics requested");
 
-        data.metrics.forEach((metric: string) => {
+        data.forEach((metric: string) => {
             ret[metric as ValidMetrics] = this.broker.metrics.getMetric(metric).get();
         });
-
-        this.metricsLogger.debug("Sending metrics...");
-        this.metricsLogger.debug(ret);
 
         return ret;
     }
