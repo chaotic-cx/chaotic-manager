@@ -7,10 +7,12 @@ import { scheduleAutoRepoRemove, schedulePackages } from "./scheduler";
 import { BuilderService } from "./services/builder.service";
 import CoordinatorService from "./services/coordinator.service";
 import { DatabaseService } from "./services/database.service";
-import { MoleculerConfigCommon, MoleculerConfigLog, enableMetrics } from "./services/moleculer.config";
+import { enableMetrics, MoleculerConfigCommon, MoleculerConfigLog } from "./services/moleculer.config";
 import { NotifierService } from "./services/notifier.service";
 import { BuildClass } from "./types";
 import { WebService } from "./services/web.service";
+import { MetricsService } from "./services/metrics.service";
+import { generateNodeId } from "./utils";
 
 if (!process.env.NODE_ENV) process.env.NODE_ENV = "production";
 
@@ -38,7 +40,9 @@ async function main(): Promise<void> {
         password: redisPassword,
     });
 
-    const nodeID = process.env.BUILDER_HOSTNAME || "chaotic-builder";
+    // Assign random nodeIDs to prevent a nodeID conflict, which is a fatal error for Moleculer
+    const nodeID = process.env.BUILDER_HOSTNAME || generateNodeId(mainOptions.command);
+
     const broker = new ServiceBroker({
         logger: MoleculerConfigLog(process.env.NODE_ENV!),
         metadata: {
@@ -120,7 +124,7 @@ async function main(): Promise<void> {
             }
             await connection.connect();
             const redis_connection_manager = new RedisConnectionManager(connection);
-            broker.createService(new BuilderService(broker, redis_connection_manager, chaoticLogger));
+            broker.createService(new BuilderService(broker, redis_connection_manager));
             void broker.start();
             break;
         }
@@ -139,10 +143,11 @@ async function main(): Promise<void> {
             await connection.connect();
             const redis_connection_manager = new RedisConnectionManager(connection);
 
-            broker.createService(new DatabaseService(broker, redis_connection_manager, chaoticLogger));
-            broker.createService(new CoordinatorService(broker, redis_connection_manager, chaoticLogger));
-            broker.createService(new NotifierService(broker, chaoticLogger));
+            broker.createService(new DatabaseService(broker, redis_connection_manager));
+            broker.createService(new CoordinatorService(broker, redis_connection_manager));
+            broker.createService(new NotifierService(broker));
             broker.createService(new WebService(broker, Number(mainOptions["web-port"]), redis_connection_manager));
+            broker.createService(new MetricsService(broker));
 
             await broker.start();
 

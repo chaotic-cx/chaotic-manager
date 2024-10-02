@@ -5,11 +5,11 @@ import { type ContainerManager, DockerManager, PodmanManager } from "../containe
 import { BuildsRedisLogger } from "../logging";
 import type { RedisConnectionManager } from "../redis-connection-manager";
 import type {
-    DatabaseRemoveStatusReturn,
     Database_Action_AddToDb_Params,
     Database_Action_AutoRepoRemove_Params,
-    Database_Action_GenerateDestFillerFiles_Params,
     Database_Action_fetchUploadInfo_Response,
+    Database_Action_GenerateDestFillerFiles_Params,
+    DatabaseRemoveStatusReturn,
 } from "../types";
 import { currentTime } from "../utils";
 import { MoleculerConfigCommonService } from "./moleculer.config";
@@ -22,16 +22,11 @@ export class DatabaseService extends Service {
     redis_connection_manager: RedisConnectionManager;
     gpg: string = process.env.GPG_PATH || "";
     container_manager: ContainerManager;
-    chaoticLogger: LoggerInstance;
+    chaoticLogger: LoggerInstance = this.broker.getLogger("CHAOTIC");
 
-    constructor(
-        broker: ServiceBroker,
-        redis_connection_manager: RedisConnectionManager,
-        chaoticLogger: LoggerInstance,
-    ) {
+    constructor(broker: ServiceBroker, redis_connection_manager: RedisConnectionManager) {
         super(broker);
         this.redis_connection_manager = redis_connection_manager;
-        this.chaoticLogger = chaoticLogger;
 
         this.parseServiceSchema({
             name: "database",
@@ -83,6 +78,7 @@ export class DatabaseService extends Service {
             void logger.from(data.pkgbase, data.timestamp);
 
             logger.log(`Processing add to db job ${ctx.id} at ${currentTime()}`);
+            this.chaoticLogger.info(`Processing add to db job for ${data.pkgbase}`);
 
             if (data.pkgfiles.length < 1) {
                 return {
@@ -104,7 +100,10 @@ export class DatabaseService extends Service {
                     success: false,
                 };
             }
+
             logger.log(`Successfully added packages to the database.`);
+            this.chaoticLogger.info(`Successfully added packages to the database.`);
+
             return {
                 success: true,
             };
@@ -117,12 +116,10 @@ export class DatabaseService extends Service {
         const ret: DatabaseRemoveStatusReturn = { success: false };
 
         await this.mutex.runExclusive(async () => {
-            this.chaoticLogger.info(
-                `\r\nProcessing automatic package removal job for ${data.repo} at ${currentTime()}`,
-            );
+            this.chaoticLogger.info(`Processing automatic package removal job for ${data.repo}`);
 
             if (data.pkgbases.length === 0) {
-                this.chaoticLogger.info("Intended package list is empty. Assuming this is in error.");
+                this.chaoticLogger.error("Intended package list is empty. Assuming this is in error.");
                 throw new Error("Intended package list is empty. Assuming this is in error.");
             }
 
@@ -136,7 +133,7 @@ export class DatabaseService extends Service {
 
             if (err) {
                 this.chaoticLogger.error(err);
-                this.chaoticLogger.info("Failed to remove packages from the database.");
+                this.chaoticLogger.error("Failed to remove packages from the database.");
                 ret.success = false;
             }
         });

@@ -5,19 +5,19 @@ import { BuildsRedisLogger } from "../logging";
 import type { RedisConnectionManager } from "../redis-connection-manager";
 import { type Repo, RepoManager, type TargetRepo } from "../repo-manager";
 import {
+    type Builder_Action_BuildPackage_Params,
     BuildStatus,
     type BuildStatusReturn,
-    type Builder_Action_BuildPackage_Params,
-    CoordinatorJob,
-    type CoordinatorJobSavable,
     type Coordinator_Action_AddJobsToQueue_Params,
     type Coordinator_Action_AutoRepoRemove_Params,
-    type DatabaseRemoveStatusReturn,
+    CoordinatorJob,
+    type CoordinatorJobSavable,
+    current_version,
     type Database_Action_AutoRepoRemove_Params,
     type Database_Action_fetchUploadInfo_Response,
+    type DatabaseRemoveStatusReturn,
     type FailureNotificationParams,
     type SuccessNotificationParams,
-    current_version,
 } from "../types";
 import { currentTime } from "../utils";
 import { MoleculerConfigCommonService } from "./moleculer.config";
@@ -78,18 +78,13 @@ export class CoordinatorService extends Service {
     repo_manager: RepoManager;
     busy_nodes: { [key: string]: CoordinatorTrackedJob } = {};
     mutex: Mutex = new Mutex();
-    chaoticLogger: LoggerInstance;
+    chaoticLogger: LoggerInstance = this.broker.getLogger("CHAOTIC");
 
     active = false;
 
-    constructor(
-        broker: ServiceBroker,
-        redis_connection_manager: RedisConnectionManager,
-        chaoticLogger: LoggerInstance,
-    ) {
+    constructor(broker: ServiceBroker, redis_connection_manager: RedisConnectionManager) {
         super(broker);
 
-        this.chaoticLogger = chaoticLogger;
         this.repo_manager = new RepoManager(
             this.base_logs_url ? new URL(this.base_logs_url) : undefined,
             this.chaoticLogger,
@@ -97,7 +92,7 @@ export class CoordinatorService extends Service {
         this.initRepoManager(this.repo_manager);
         this.redis_connection_manager = redis_connection_manager;
 
-        chaoticLogger.debug(this.redis_connection_manager);
+        this.chaoticLogger.debug(this.redis_connection_manager);
 
         this.parseServiceSchema({
             name: "coordinator",
@@ -143,6 +138,7 @@ export class CoordinatorService extends Service {
                     case BuildStatus.ALREADY_BUILT: {
                         void source_repo.notify(job, "canceled", "Build skipped because package was already built.");
                         job.redisLogger.log(`Job ${job.toId()} skipped because all packages were already built.`);
+                        void this.broker.call("chaotic-metrics.incCounterAlreadyBuilt");
                         break;
                     }
                     case BuildStatus.SUCCESS: {
@@ -154,11 +150,13 @@ export class CoordinatorService extends Service {
                             event: `📣 New deployment to ${job.target_repo}`,
                         };
                         void this.broker.call("notifier.notifyPackages", notify_params);
+                        void this.broker.call("chaotic-metrics.incCounterBuildSuccess");
                         break;
                     }
                     case BuildStatus.SKIPPED: {
                         void source_repo.notify(job, "canceled", "Build skipped intentionally via build tools.");
                         job.redisLogger.log(`Job ${job.toId()} skipped intentionally via build tools.`);
+                        void this.broker.call("chaotic-metrics.incCounterBuildSkipped");
                         break;
                     }
                     case BuildStatus.FAILED: {
@@ -173,6 +171,7 @@ export class CoordinatorService extends Service {
                             commit: job.commit,
                         };
                         void this.broker.call("notifier.notifyFailure", notify_params);
+                        void this.broker.call("chaotic-metrics.incCounterBuildFailure");
                         break;
                     }
                     case BuildStatus.CANCELED: {
@@ -181,9 +180,11 @@ export class CoordinatorService extends Service {
                             job.redisLogger.log(
                                 `Job ${job.toId()} was canceled and replaced by a newer build request.`,
                             );
+                            void this.broker.call("chaotic-metrics.incCounterBuildCancelled", { replaced: true });
                         } else {
                             void source_repo.notify(job, "canceled", "Build canceled.");
                             job.redisLogger.log(`Job ${job.toId()} was canceled.`);
+                            void this.broker.call("chaotic-metrics.incCounterBuildCancelled", { replaced: false });
                         }
                         break;
                     }
@@ -199,6 +200,7 @@ export class CoordinatorService extends Service {
                             commit: job.commit,
                         };
                         void this.broker.call("notifier.notifyFailure", notify_params);
+                        void this.broker.call("chaotic-metrics.incCounterBuildTimeout");
                         break;
                     }
                 }
@@ -216,8 +218,10 @@ export class CoordinatorService extends Service {
                     commit: job.commit,
                 };
                 void this.broker.call("notifier.notifyFailure", notify_params);
+                void this.broker.call("chaotic-metrics.incCounterSoftwareFailure");
             })
             .finally(() => {
+                void this.broker.call("chaotic-metrics.incCounterBuildTotal");
                 void job.redisLogger.end_log();
                 const job_id = job.toId();
                 if (job.replacement) this.queue[job_id] = job.replacement;
@@ -340,9 +344,10 @@ export class CoordinatorService extends Service {
         for (const job of jobs) {
             const log = new BuildsRedisLogger(this.redis_connection_manager.getClient(), this.chaoticLogger);
             log.from(job.pkgbase, job.timestamp);
-            (async () => {
+            void (async () => {
                 await log.setDefault();
-                await log.log(`Added to build queue at ${currentTime()}. Waiting for builder...`);
+                log.log(`Added to build queue at ${currentTime()}. Waiting for builder...`);
+                this.chaoticLogger.info(`Added job for ${job.pkgbase} to the build queue.`);
             })();
 
             const id = job.toId();
@@ -351,16 +356,22 @@ export class CoordinatorService extends Service {
             if (entry) {
                 // Is running
                 if (entry.node) {
-                    ctx.call("builder.cancelBuild", undefined, { nodeID: entry.node });
+                    void ctx.call("builder.cancelBuild", undefined, { nodeID: entry.node });
                     entry.redisLogger.log(
                         `Job cancellation requested at ${currentTime()}. Job is being replaced by newer build request.`,
+                    );
+                    this.chaoticLogger.info(
+                        `Job for ${job.pkgbase} was canceled and replaced with a new job before execution.`,
                     );
                     entry.replacement = job;
                     continue;
                     // Not running
                 } else {
-                    (async () => {
-                        await entry.redisLogger.log(`Job was canceled and replaced with a new job before execution.`);
+                    await (async () => {
+                        entry.redisLogger.log(`Job was canceled and replaced with a new job before execution.`);
+                        this.chaoticLogger.info(
+                            `Job for ${job.pkgbase} canceled and replaced with a new job before execution.`,
+                        );
                         await entry.redisLogger.end_log();
                     })();
                 }
@@ -549,12 +560,13 @@ export class CoordinatorService extends Service {
                         const job = toTracked(savedJob, timestamp, logger);
                         const id = job.toId();
                         job.redisLogger.log(`Restored job ${id} at ${currentTime()}`);
+                        this.chaoticLogger.info(`Restored job ${id} for ${job.pkgbase}`);
                         this.queue[id] = job;
                     }
                 }
             }
         } catch (error) {
-            console.error("Error restoring build queue:", error);
+            this.chaoticLogger.error("Error restoring build queue:", error);
         }
 
         this.broker.waitForServices(["$node"]).then(() => {
@@ -573,8 +585,16 @@ export class CoordinatorService extends Service {
         for (const job of Object.values(this.queue)) {
             if (job.node) {
                 job.redisLogger.log(`Job cancellation requested at ${currentTime()}. Coordinator is shutting down.`);
+                this.chaoticLogger.info(
+                    `Job for ${job.pkgbase} was canceled before execution. Coordinator is shutting down.`,
+                );
                 promises.push(this.broker.call("builder.cancelBuild", undefined, { nodeID: job.node }));
-            } else job.redisLogger.log(`Job was canceled before execution. Coordinator is shutting down.`);
+            } else {
+                job.redisLogger.log(`Job was canceled before execution. Coordinator is shutting down.`);
+                this.chaoticLogger.info(
+                    `Job for ${job.pkgbase} canceled before execution. Coordinator is shutting down.`,
+                );
+            }
         }
 
         await Promise.all(promises);

@@ -1,11 +1,7 @@
 import { to } from "await-to-js";
 import { type LoggerInstance, Service, type ServiceBroker } from "moleculer";
 import ChaoticTelegramBot from "../telegram-bot";
-import type {
-    FailureNotificationParams,
-    GenericNotificationParams,
-    SuccessNotificationParams,
-} from "../types";
+import type { FailureNotificationParams, GenericNotificationParams, SuccessNotificationParams } from "../types";
 import { MoleculerConfigCommonService } from "./moleculer.config";
 
 /**
@@ -15,12 +11,11 @@ import { MoleculerConfigCommonService } from "./moleculer.config";
 export class NotifierService extends Service {
     private readonly telegramBot: ChaoticTelegramBot | undefined;
     private readonly base_logs_url: string | undefined;
-    chaoticLogger: LoggerInstance;
+    chaoticLogger: LoggerInstance = this.broker.getLogger("CHAOTIC");
 
-    constructor(broker: ServiceBroker, chaoticLogger: LoggerInstance) {
+    constructor(broker: ServiceBroker) {
         super(broker);
 
-        this.chaoticLogger = chaoticLogger;
         if (process.env.TELEGRAM_BOT_TOKEN !== undefined && process.env.TELEGRAM_CHAT_ID !== undefined) {
             this.telegramBot = new ChaoticTelegramBot(
                 {

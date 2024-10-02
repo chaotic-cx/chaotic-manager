@@ -23,6 +23,8 @@ export async function schedulePackages(
         }
     > = {};
 
+    const chaoticLogger = broker.getLogger("CHAOTIC");
+
     if (deptree) {
         // Deptree format:
         // pkgbase:pkgname1[,pkgname2,...]:dep1[,dep2,...];...
@@ -65,6 +67,10 @@ export async function schedulePackages(
 
     await broker.waitForServices(["coordinator"], 10000);
     await broker.call("coordinator.addJobsToQueue", params);
+
+    chaoticLogger.info(`Added packages to the queue.`);
+    chaoticLogger.info(packageList);
+
     return;
 }
 

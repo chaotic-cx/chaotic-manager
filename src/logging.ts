@@ -1,6 +1,6 @@
 import to from "await-to-js";
 import type RedisConnection from "ioredis";
-import type { LoggerInstance } from "moleculer";
+import type { LoggerInstance } from "moleculer"; // Console.log imitation that saves to a variable instead of stdout
 
 // Console.log imitation that saves to a variable instead of stdout
 export class SshLogger {
@@ -23,10 +23,17 @@ export class BuildsRedisLogger {
     private default_key = "";
     private timestamp = 0;
     private chaoticLogger: LoggerInstance;
+    private readonly printStdout;
 
-    constructor(connection: RedisConnection, chaoticLogger: LoggerInstance) {
+    constructor(connection: RedisConnection, chaoticLogger: LoggerInstance, printStdout?: boolean) {
         this.connection = connection;
         this.chaoticLogger = chaoticLogger;
+
+        if (printStdout) {
+            this.printStdout = printStdout;
+        } else {
+            this.printStdout = false;
+        }
     }
 
     public async fromDefault(pkgbase: string) {
@@ -54,8 +61,10 @@ export class BuildsRedisLogger {
         pipeline.expire(this.key, 60 * 60 * 24 * 7); // 7 days
         void pipeline.exec();
 
-        if (err) process.stderr.write(arg);
-        else process.stdout.write(arg);
+        if (this.printStdout) {
+            if (err) process.stderr.write(arg);
+            else process.stdout.write(arg);
+        }
     }
 
     async end_log(): Promise<void> {

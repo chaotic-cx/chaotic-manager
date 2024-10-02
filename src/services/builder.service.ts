@@ -10,9 +10,9 @@ import { type ContainerManager, DockerManager, PodmanManager } from "../containe
 import { BuildsRedisLogger, SshLogger } from "../logging";
 import type { RedisConnectionManager } from "../redis-connection-manager";
 import {
+    type Builder_Action_BuildPackage_Params,
     BuildStatus,
     type BuildStatusReturn,
-    type Builder_Action_BuildPackage_Params,
     type Database_Action_AddToDb_Params,
     type Database_Action_GenerateDestFillerFiles_Params,
     SOURCECACHE_MAX_LIFETIME,
@@ -43,16 +43,11 @@ export class BuilderService extends Service {
     containerManager: ContainerManager;
     container: Container | null = null;
     cancelled = false;
-    chaoticLogger: LoggerInstance;
+    chaoticLogger: LoggerInstance = this.broker.getLogger("CHAOTIC");
 
-    constructor(
-        broker: ServiceBroker,
-        redis_connection_manager: RedisConnectionManager,
-        chaoticLogger: LoggerInstance,
-    ) {
+    constructor(broker: ServiceBroker, redis_connection_manager: RedisConnectionManager) {
         super(broker);
         this.redis_connection_manager = redis_connection_manager;
-        this.chaoticLogger = chaoticLogger;
 
         this.parseServiceSchema({
             name: "builder",
@@ -85,9 +80,10 @@ export class BuilderService extends Service {
         return await tryAcquire(this.mutex)
             .runExclusive(async (): Promise<BuildStatusReturn> => {
                 const logger = new BuildsRedisLogger(this.redis_connection_manager.getClient(), this.chaoticLogger);
-                await logger.from(data.pkgbase, data.timestamp);
+                logger.from(data.pkgbase, data.timestamp);
 
                 logger.log(`Processing build job at ${currentTime()}`);
+                this.chaoticLogger.info(`Processing build job for ${data.pkgbase}`);
 
                 // Make sure the pkgout directory is clean for the current build
                 this.ensurePathClean(this.mountPkgout);
@@ -124,7 +120,7 @@ export class BuilderService extends Service {
 
                 if (this.cancelled) {
                     await this.containerManager.kill(this.container).catch((e) => {
-                        console.error(e);
+                        this.chaoticLogger.error(e);
                     });
                     return {
                         success: BuildStatus.CANCELED,
@@ -134,7 +130,7 @@ export class BuilderService extends Service {
                 const [err, out] = await to(this.containerManager.start(this.container, logger.raw_log.bind(logger)));
 
                 if (this.cancelled) {
-                    // At this point, the container has already stopped, there is no need to kill it
+                    // At this point, the container has already stopped; there is no need to kill it
                     return {
                         success: BuildStatus.CANCELED,
                     };
@@ -156,7 +152,10 @@ export class BuilderService extends Service {
                     } else {
                         return { success: BuildStatus.FAILED };
                     }
-                } else logger.log(`Finished build. Uploading...`);
+                } else {
+                    logger.log(`Finished build. Uploading...`);
+                    this.chaoticLogger.info(`Finished build for ${data.pkgbase}`);
+                }
 
                 const sshlogger = new SshLogger();
                 try {
@@ -180,6 +179,7 @@ export class BuilderService extends Service {
                 }
 
                 logger.log(`Finished upload.`);
+                this.chaoticLogger.info(`Finished upload of ${data.pkgbase}`);
 
                 const addToDbParams: Database_Action_AddToDb_Params = {
                     source_repo: data.source_repo,

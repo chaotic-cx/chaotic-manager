@@ -17,7 +17,11 @@ export class WebService extends Service {
     subscriber: RedisConnection;
     server: http.Server | null = null;
 
-    constructor(broker: ServiceBroker, private port: number, manager: RedisConnectionManager) {
+    constructor(
+        broker: ServiceBroker,
+        private port: number,
+        manager: RedisConnectionManager,
+    ) {
         super(broker);
 
         this.connection = manager.getClient();
@@ -41,7 +45,7 @@ export class WebService extends Service {
                     this.httpLogger.info(
                         `${req.method} ${req.ip} ${req.path} ${res.statusCode} ${untilAnswer.toLocaleString()}ms`,
                     );
-                }
+                };
 
                 res.on("finish", afterResponse);
                 res.on("close", afterResponse);
@@ -70,13 +74,13 @@ export class WebService extends Service {
         this.parseServiceSchema({
             name: "web",
             events: {
-                "stopped": {
+                stopped: {
                     handler: this.stop,
                 },
-                "started": {
+                started: {
                     handler: this.start,
                 },
-            }
+            },
         });
     }
 
@@ -118,7 +122,10 @@ export class WebService extends Service {
         res.once("finish", closer);
 
         const [err, out] = await to(
-            Promise.all([this.connection.get("build-logs:" + id + ":" + timestamp), this.subscriber.subscribe(subscribable)]),
+            Promise.all([
+                this.connection.get("build-logs:" + id + ":" + timestamp),
+                this.subscriber.subscribe(subscribable),
+            ]),
         );
         if (err || !out || !out[0]) {
             this.serverError(res, 404, "Not found");
@@ -161,7 +168,7 @@ export class WebService extends Service {
         req.params.timestamp = out;
         return await this.getOrStreamLog(req, res);
     }
-    
+
     async getMetrics(req: Request, res: Response) {
         const options: RequestOptions = {
             host: "127.0.0.1",
@@ -207,4 +214,4 @@ export class WebService extends Service {
         this.server!.close();
         this.server = null;
     }
-};
+}

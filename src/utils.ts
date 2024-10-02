@@ -33,3 +33,30 @@ export function getDurationInMilliseconds(start: [number, number]): number {
 
     return (diff[0] * NS_PER_SEC + diff[1]) / NS_TO_MS;
 }
+
+/**
+ * Generate a Moleculer nodeId for all nodes depending on the main command provided.
+ * @param command The command derived form the main options.
+ * @returns The final nodeId to use.
+ */
+export function generateNodeId(command: string) {
+    let id = "chaotic-";
+    switch (command) {
+        case "database":
+            id += "database";
+            break;
+        case "builder":
+            id += "builder";
+            break;
+        case "schedule":
+            id += "scheduler";
+            break;
+        case "auto-repo-remove":
+            id += "auto-remover";
+            break;
+        case "web":
+            id += "web-server";
+            break;
+    }
+    return id;
+}
