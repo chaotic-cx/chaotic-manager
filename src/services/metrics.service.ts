@@ -1,4 +1,5 @@
-import { Context, LoggerInstance, Service, ServiceBroker } from "moleculer";
+import { type Context, type LoggerInstance, Service, type ServiceBroker } from "moleculer";
+import type { MetricsCounterLabels, MetricsTimerLabels } from "../types";
 import { MoleculerConfigCommonService } from "./moleculer.config";
 
 export class MetricsService extends Service {
@@ -21,6 +22,7 @@ export class MetricsService extends Service {
                 incCounterAlreadyBuilt: this.incCounterAlreadyBuilt,
                 incCounterBuildCancelled: this.incCounterBuildCancelled,
                 incCounterBuildSkipped: this.incCounterBuildSkipped,
+                startHistogramTimer: this.startHistogramTimer,
             },
 
             created() {
@@ -87,48 +89,81 @@ export class MetricsService extends Service {
             unit: "builds",
             rate: true,
         });
+        this.broker.metrics.register({
+            type: "histogram",
+            name: "builds.time.elapsed",
+            description: "Time until build finished",
+            labelNames: ["target_repo", "status", "pkgname", "replaced"],
+            unit: "seconds",
+            linearBuckets: {
+                start: 0,
+                width: 100,
+                count: 10,
+            },
+            quantiles: [60, 120, 360, 720, 1440, 2880],
+            maxAgeSeconds: 60,
+            ageBuckets: 10,
+        });
 
-        this.metricsLogger.info("Metrics service started");
+        this.metricsLogger.info("Metrics registered and service started");
     }
 
     incCounterSuccess(ctx: Context): void {
+        const labels = ctx.params as MetricsCounterLabels;
         this.metricsLogger.info("Counter incremented: build success");
-        this.broker.metrics.increment("build.success", { id: ctx.id }, 1);
+        this.broker.metrics.increment("build.success", labels, 1);
     }
 
     incCounterBuildFailure(ctx: Context): void {
+        const labels = ctx.params as MetricsCounterLabels;
         this.metricsLogger.info("Counter incremented: build failure");
-        this.broker.metrics.increment("build.failed.build", { id: ctx.id }, 1);
+        this.broker.metrics.increment("build.failed.build", labels, 1);
     }
 
     incCounterSoftwareFailure(ctx: Context): void {
+        const labels = ctx.params as MetricsCounterLabels;
         this.metricsLogger.info("Counter incremented: software failure");
-        this.broker.metrics.increment("build.failed.software", { id: ctx.id }, 1);
+        this.broker.metrics.increment("build.failed.software", labels, 1);
     }
 
     incCounterBuildTimeout(ctx: Context): void {
+        const labels = ctx.params as MetricsCounterLabels;
         this.metricsLogger.info("Counter incremented: build timeout");
-        this.broker.metrics.increment("build.failed.timeout", { id: ctx.id }, 1);
+        this.broker.metrics.increment("build.failed.timeout", labels, 1);
     }
 
     incCounterBuildTotal(ctx: Context): void {
+        const labels = ctx.params as MetricsCounterLabels;
         this.metricsLogger.info("Counter incremented: build total");
-        this.broker.metrics.increment("build.total", { id: ctx.id }, 1);
+        this.broker.metrics.increment("build.total", labels, 1);
     }
 
     incCounterAlreadyBuilt(ctx: Context): void {
+        const labels = ctx.params as MetricsCounterLabels;
         this.metricsLogger.info("Counter incremented: already built");
-        this.broker.metrics.increment("build.already_built", { id: ctx.id }, 1);
+        this.broker.metrics.increment("build.already_built", labels, 1);
     }
 
     incCounterBuildCancelled(ctx: Context): void {
-        const context = ctx.params as { replaced: boolean };
+        const labels = ctx.params as MetricsCounterLabels;
         this.metricsLogger.info("Counter incremented: build cancelled");
-        this.broker.metrics.increment("build.cancelled", { id: ctx.id, replaced: context.replaced }, 1);
+        this.broker.metrics.increment("build.cancelled", labels, 1);
     }
 
     incCounterBuildSkipped(ctx: Context): void {
+        const labels = ctx.params as MetricsCounterLabels;
         this.metricsLogger.info("Counter incremented: build skipped");
-        this.broker.metrics.increment("build.skipped", { id: ctx.id }, 1);
+        this.broker.metrics.increment("build.skipped", labels, 1);
+    }
+
+    /**
+     * Starts a histogram timer for build time.
+     * @param ctx The context object containing the parameters for the timer.
+     * @returns A function that stops the timer and returns the elapsed time.
+     */
+    startHistogramTimer(ctx: Context): () => number {
+        const labels = ctx.params as MetricsTimerLabels;
+        this.metricsLogger.info(`Histogram timer for ${labels.pkgname} started`);
+        return this.broker.metrics.timer("build.time.elapsed", labels);
     }
 }

@@ -1,13 +1,13 @@
-import { LoggerInstance, Service, ServiceBroker } from "moleculer";
-import express, { type NextFunction, type Request, type Response } from "express";
-import { getDurationInMilliseconds } from "../utils";
-import { HTTP_CACHE_MAX_AGE } from "../types";
-import type RedisConnection from "ioredis";
-import { RedisConnectionManager } from "../redis-connection-manager";
+import type { RequestOptions } from "https";
+import * as http from "node:http";
 import Timeout from "await-timeout";
 import to from "await-to-js";
-import { RequestOptions } from "https";
-import * as http from "node:http";
+import express, { type NextFunction, type Request, type Response } from "express";
+import type RedisConnection from "ioredis";
+import { type LoggerInstance, Service, type ServiceBroker } from "moleculer";
+import type { RedisConnectionManager } from "../redis-connection-manager";
+import { HTTP_CACHE_MAX_AGE } from "../types";
+import { getDurationInMilliseconds } from "../utils";
 
 export class WebService extends Service {
     private app = express();

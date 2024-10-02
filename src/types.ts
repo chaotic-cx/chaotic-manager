@@ -44,6 +44,7 @@ export enum BuildStatus {
     FAILED = 3,
     TIMED_OUT = 4,
     CANCELED = 5,
+    SOFTWARE_FAILURE = 6,
 }
 
 // The object the API should return on /api/packages calls
@@ -182,8 +183,7 @@ export class CoordinatorJobSavable {
         public pkgnames: string[] | undefined,
         public dependencies: string[] | undefined,
         public commit: string | undefined,
-    ) {
-    }
+    ) {}
 
     toId(): string {
         return `${this.target_repo}/${this.arch}/${this.pkgbase}`;
@@ -221,4 +221,20 @@ export interface FailureNotificationParams {
 
 export interface GenericNotificationParams {
     message: string;
+}
+
+export interface MetricsTimerLabels {
+    pkgname: string;
+    replaced: boolean;
+    status: BuildStatus;
+    target_repo: string;
+}
+
+export interface MetricsCounterLabels {
+    pkgname: string;
+    replaced: boolean;
+    status?: BuildStatus;
+    target_repo: string;
+    build_class: BuildClass;
+    arch: string;
 }

@@ -36,7 +36,7 @@ export function getDurationInMilliseconds(start: [number, number]): number {
 
 /**
  * Generate a Moleculer nodeId for all nodes depending on the main command provided.
- * @param command The command derived form the main options.
+ * @param command The command derived from the main options.
  * @returns The final nodeId to use.
  */
 export function generateNodeId(command: string) {
