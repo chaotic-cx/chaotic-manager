@@ -27,12 +27,12 @@ export class RedisConnectionManager {
             if (client.connector.stream) client.connector.stream.unref();
             else client.quit();
         });
-        let subscriber: any = this.subscriber;
+        const subscriber: any = this.subscriber;
         if (subscriber) {
             if (subscriber.connector.stream) subscriber.connector.stream.unref();
             else subscriber.quit();
         }
-        let client: any = this.client;
+        const client: any = this.client;
         if (client.connector.stream) client.connector.stream.unref();
         else client.quit();
     }

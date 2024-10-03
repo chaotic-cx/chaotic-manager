@@ -7,10 +7,10 @@ import type { LoggerInstance } from "moleculer";
 import { type ContainerCreateMountOption, type LibPod, LibpodDockerode } from "./libpod-dockerode";
 
 export abstract class ContainerManager {
-    abstract docker: Dockerode;
-    pull_schedule: NodeJS.Timeout | null = null;
-    pull_mutex = new Mutex();
-    chaoticLogger: LoggerInstance;
+    protected abstract docker: Dockerode;
+    private pull_schedule: NodeJS.Timeout | null = null;
+    private pull_mutex = new Mutex();
+    private chaoticLogger: LoggerInstance;
 
     protected constructor(chaoticLogger: LoggerInstance) {
         this.chaoticLogger = chaoticLogger;
@@ -203,7 +203,7 @@ export class DockerManager extends ContainerManager {
 
 export class PodmanManager extends ContainerManager {
     docker: Docker;
-    libPodApi: LibPod;
+    private libPodApi: LibPod;
 
     constructor(logger: LoggerInstance) {
         super(logger);

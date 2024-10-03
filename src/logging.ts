@@ -62,13 +62,15 @@ export class BuildsRedisLogger {
             if (
                 // These are also logged to Redis in a different format, no need for double information.
                 !(
-                    line.startsWith("Processing build job at") ||
-                    line.startsWith("Processing add to database job at") ||
-                    line.startsWith("Processing automatic package removal job for") ||
+                    line.startsWith("Added to build queue at ") ||
+                    line.startsWith("Failed to upload: ") ||
                     line.startsWith("Job cancellation requested at ") ||
                     line.startsWith("Job was canceled and replaced with") ||
-                    line.startsWith("Restored job ") ||
                     line.startsWith("Job was canceled before execution.") ||
+                    line.startsWith("Processing add to database job at") ||
+                    line.startsWith("Processing automatic package removal job for") ||
+                    line.startsWith("Processing build job at") ||
+                    line.startsWith("Restored job ") ||
                     line.startsWith("Successfully added packages ")
                 )
             ) {

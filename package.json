@@ -34,10 +34,9 @@
         "format:write": "prettier --write .",
         "lint:check": "eslint .",
         "lint:write": "eslint --fix .",
-        "pre-commit": "lint-staged",
         "start": "tsc && node dist/index.js",
         "start:dev": "tsc-watch --onSuccess 'node --env-file=.env dist/index.js database --web-port 8080'",
-        "start:dev-builder": "tsc-watch --onSuccess 'node --env-file=.env dist/index.js builder'",
+        "start:dev-builder": "tsc-watch --onSuccess 'sudo node --env-file=.env dist/index.js builder'",
         "test": "jest"
     },
     "devDependencies": {

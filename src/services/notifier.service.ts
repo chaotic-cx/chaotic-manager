@@ -11,7 +11,7 @@ import { MoleculerConfigCommonService } from "./moleculer.config";
 export class NotifierService extends Service {
     private readonly telegramBot: ChaoticTelegramBot | undefined;
     private readonly base_logs_url: string | undefined;
-    chaoticLogger: LoggerInstance = this.broker.getLogger("CHAOTIC");
+    private chaoticLogger: LoggerInstance = this.broker.getLogger("CHAOTIC");
 
     constructor(broker: ServiceBroker) {
         super(broker);

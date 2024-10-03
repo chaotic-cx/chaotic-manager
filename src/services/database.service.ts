@@ -10,20 +10,21 @@ import type {
     Database_Action_AutoRepoRemove_Params,
     Database_Action_GenerateDestFillerFiles_Params,
     Database_Action_fetchUploadInfo_Response,
+    MetricsDatabaseLabels,
 } from "../types";
 import { currentTime } from "../utils";
 import { MoleculerConfigCommonService } from "./moleculer.config";
 
 export class DatabaseService extends Service {
-    landing_zone: string = process.env.LANDING_ZONE_PATH || "";
-    repo_root: string = process.env.REPO_PATH || "";
-    repo_root_mount = "/repo_root";
-    mutex: Mutex = new Mutex();
-    redis_connection_manager: RedisConnectionManager;
-    gpg: string = process.env.GPG_PATH || "";
-    container_manager: ContainerManager;
-    chaoticLogger: LoggerInstance = this.broker.getLogger("CHAOTIC");
-    active = true;
+    private landing_zone: string = process.env.LANDING_ZONE_PATH || "";
+    private repo_root: string = process.env.REPO_PATH || "";
+    private repo_root_mount = "/repo_root";
+    private mutex: Mutex = new Mutex();
+    private redis_connection_manager: RedisConnectionManager;
+    private gpg: string = process.env.GPG_PATH || "";
+    private container_manager: ContainerManager;
+    private chaoticLogger: LoggerInstance = this.broker.getLogger("CHAOTIC");
+    private active = true;
 
     constructor(broker: ServiceBroker, redis_connection_manager: RedisConnectionManager) {
         super(broker);
@@ -101,6 +102,11 @@ export class DatabaseService extends Service {
 
             if (err) {
                 this.chaoticLogger.warn(err);
+                void this.broker.call<void, MetricsDatabaseLabels>("metrics.incCounterDatabaseFailure", {
+                    arch: data.arch,
+                    target_repo: data.target_repo,
+                    pkgname: data.pkgbase,
+                });
                 return {
                     success: false,
                 };
@@ -108,6 +114,12 @@ export class DatabaseService extends Service {
 
             logger.log(`Successfully added packages to the database.`);
             this.chaoticLogger.info(`Successfully added new packages to the database.`);
+
+            void this.broker.call<void, MetricsDatabaseLabels>("metrics.incCounterDatabaseSuccess", {
+                arch: data.arch,
+                target_repo: data.target_repo,
+                pkgname: data.pkgbase,
+            });
 
             return {
                 success: true,

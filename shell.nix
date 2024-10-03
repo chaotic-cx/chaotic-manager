@@ -2,8 +2,8 @@
 {pkgs ? import <nixpkgs> {}}:
 pkgs.mkShell {
   buildInputs = [
-    pkgs.corepack
-    pkgs.nodejs
+    pkgs.corepack_22
+    pkgs.nodejs_22
     pkgs.redis
     pkgs.psmisc
     pkgs.docker-compose

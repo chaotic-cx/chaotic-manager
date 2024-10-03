@@ -59,6 +59,7 @@ export function generateNodeId(command: string) {
             break;
     }
 
+    // This prevents broker shutdowns due to double ids
     id += "-" + Math.random().toString(36).substring(2, 7);
     return id;
 }

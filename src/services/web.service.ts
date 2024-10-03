@@ -7,8 +7,17 @@ import express, { type NextFunction, type Request, type Response } from "express
 import type RedisConnection from "ioredis";
 import { type LoggerInstance, Service, type ServiceBroker } from "moleculer";
 import type { RedisConnectionManager } from "../redis-connection-manager";
-import { HTTP_CACHE_MAX_AGE, type MetricsRequest, corsOptions } from "../types";
+import {
+    HTTP_CACHE_MAX_AGE,
+    type MetricsRequest,
+    type MetricsReturnObject,
+    type PackagesReturnObject,
+    type StatsReturnObject,
+    type ValidMetrics,
+    corsOptions,
+} from "../types";
 import { getDurationInMilliseconds } from "../utils";
+import type { QueueStatus, TrackedJobs } from "./coordinator.service";
 
 export class WebService extends Service {
     private app = express();
@@ -54,10 +63,12 @@ export class WebService extends Service {
             });
         }
 
-        this.app.get("/api/logs/:id/:timestamp", this.getOrStreamLog.bind(this));
         this.app.get("/api/logs/:id", this.getOrStreamLogFromID.bind(this));
-        this.app.get("/metrics", this.getMetrics.bind(this));
-        this.app.get("/prometheus", cors(corsOptions), this.getPrometheusData.bind(this));
+        this.app.get("/api/logs/:id/:timestamp", this.getOrStreamLog.bind(this));
+        this.app.get("/api/queue/metrics", cors(corsOptions), this.getCountMetrics.bind(this));
+        this.app.get("/api/queue/packages", cors(corsOptions), this.getPackageStats.bind(this));
+        this.app.get("/api/queue/stats", cors(corsOptions), this.getQueueStats.bind(this));
+        this.app.get("/metrics", cors(corsOptions), this.getPrometheusData.bind(this));
 
         // Error handling
         this.app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
@@ -208,8 +219,8 @@ export class WebService extends Service {
         forwardRequest.end();
     }
 
-    async getMetrics(req: Request, res: Response) {
-        const request = [
+    async getCountMetrics(req: Request, res: Response) {
+        const request: ValidMetrics[] = [
             "builders.active",
             "builders.idle",
             "builds.alreadyBuilt",
@@ -223,17 +234,94 @@ export class WebService extends Service {
             "builds.total",
             "queue.current",
         ];
-        const [err, out] = await to(this.broker.call("chaoticMetrics.getMetrics", request));
-        if (err || !out) {
-            this.chaoticLogger.error(err);
+
+        const [errMetrics, outMetrics] = await to(
+            this.broker.call<MetricsRequest, ValidMetrics[]>("chaoticMetrics.getMetrics", request),
+        );
+
+        if (errMetrics || !outMetrics) {
+            errMetrics && this.chaoticLogger.error(errMetrics);
             this.serverError(res, 500, "Encountered an error while fetching metrics");
+            this.chaoticLogger.error(errMetrics);
             return;
         }
 
-        const metrics = out as MetricsRequest;
+        const returnValue: MetricsReturnObject = {
+            builder_queue: {
+                completed: outMetrics["builds.success"]!.value ? outMetrics["builds.success"]!.value : 0,
+                failed:
+                    outMetrics["builds.failed.build"]!.value +
+                    outMetrics["builds.failed.software"]!.value +
+                    outMetrics["builds.failed.timeout"]!.value,
+            },
+            database_queue: {
+                completed: outMetrics["builds.success"]!.value ? outMetrics["builds.success"]!.value : 0,
+                failed:
+                    outMetrics["builds.failed.build"]!.value +
+                    outMetrics["builds.failed.software"]!.value +
+                    outMetrics["builds.failed.timeout"]!.value,
+            },
+        };
+
         res.setHeader("Cache-Control", "no-cache");
         res.setHeader("Content-Type", "text/plain");
-        res.send(JSON.stringify(metrics));
+        res.json(returnValue);
+    }
+
+    async getPackageStats(req: Request, res: Response) {
+        const [errQueue, outQueue] = await to(this.broker.call<TrackedJobs>("coordinator.getQueue"));
+        if (errQueue || !outQueue) {
+            this.serverError(res, 500, "Failed to fetch package stats");
+            this.chaoticLogger.error(errQueue);
+            return;
+        }
+
+        const packageReturn: PackagesReturnObject = [];
+        for (const queueItem of Object.values(outQueue)) {
+            this.chaoticLogger.debug(queueItem);
+            packageReturn.push({
+                [queueItem.pkgbase]: {
+                    arch: queueItem.arch,
+                    build_class: queueItem.build_class,
+                    srcrepo: queueItem.target_repo,
+                    timestamp: queueItem.timestamp,
+                },
+            });
+        }
+
+        res.setHeader("Cache-Control", "no-cache");
+        res.setHeader("Content-Type", "text/plain");
+        res.json(packageReturn);
+    }
+
+    async getQueueStats(req: Request, res: Response) {
+        const [errStats, outStats] = await to(this.broker.call<QueueStatus>("coordinator.getQueue"));
+        if (errStats || !outStats) {
+            this.serverError(res, 500, "Failed to fetch queue stats");
+            this.chaoticLogger.error(errStats);
+            return;
+        }
+
+        const statsReturn: StatsReturnObject = [
+            { active: { count: 0, packages: [], nodes: [] } },
+            { waiting: { count: 0, packages: [] } },
+        ];
+        this.chaoticLogger.debug(outStats);
+
+        outStats.forEach((value) => {
+            if (value.status === "active") {
+                statsReturn[0].active.count += 1;
+                statsReturn[0].active.packages.push(value.jobData.toId());
+                statsReturn[0].active.nodes!.push(value.node!);
+            } else {
+                statsReturn[1].waiting.count += 1;
+                statsReturn[1].waiting.packages.push(value.jobData.toId());
+            }
+        });
+
+        res.setHeader("Cache-Control", "no-cache");
+        res.setHeader("Content-Type", "text/plain");
+        res.json(statsReturn);
     }
 
     async start() {

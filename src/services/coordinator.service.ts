@@ -1,7 +1,7 @@
 import { Mutex } from "async-mutex";
-import to from "await-to-js";
 import { DepGraph } from "dependency-graph";
-import { type Context, type LoggerInstance, Service, type ServiceBroker } from "moleculer";
+import type Redis from "ioredis";
+import { type BrokerNode, type Context, type LoggerInstance, Service, type ServiceBroker } from "moleculer";
 import { BuildsRedisLogger } from "../logging";
 import type { RedisConnectionManager } from "../redis-connection-manager";
 import { type Repo, RepoManager, type TargetRepo } from "../repo-manager";
@@ -18,16 +18,17 @@ import {
     type Database_Action_AutoRepoRemove_Params,
     type Database_Action_fetchUploadInfo_Response,
     type FailureNotificationParams,
+    type GenericNotificationParams,
     MAX_SHUTDOWN_TIME,
     type MetricsCounterLabels,
-    type MetricsTimerLabels,
+    type MetricsGaugeContext,
     type SuccessNotificationParams,
     current_version,
 } from "../types";
 import { currentTime } from "../utils";
 import { MoleculerConfigCommonService } from "./moleculer.config";
 
-class CoordinatorTrackedJob extends CoordinatorJob {
+export class CoordinatorTrackedJob extends CoordinatorJob {
     replacement?: CoordinatorTrackedJob;
     node?: string;
 
@@ -49,7 +50,7 @@ class CoordinatorTrackedJob extends CoordinatorJob {
 
     toSavable(): CoordinatorJobSavable {
         if (this.replacement) return this.replacement.toSavable();
-        const base = new CoordinatorJobSavable(
+        return new CoordinatorJobSavable(
             this.pkgbase,
             this.target_repo,
             this.source_repo,
@@ -59,7 +60,6 @@ class CoordinatorTrackedJob extends CoordinatorJob {
             this.dependencies,
             this.commit,
         );
-        return base;
     }
 }
 
@@ -78,25 +78,39 @@ function toTracked(job: CoordinatorJobSavable, timestamp: number, logger: Builds
     );
 }
 
+export interface TrackedJobs {
+    [key: string]: CoordinatorTrackedJob;
+}
+
+export type JobStatus = "active" | "queued";
+
+export interface QueuedJob {
+    status: JobStatus;
+    jobData: CoordinatorJobSavable;
+    node?: string;
+}
+
+export type QueueStatus = QueuedJob[];
+
 /**
  * The coordinator service is responsible for managing the build queue and assigning jobs to the builder nodes.
  */
 export class CoordinatorService extends Service {
-    base_logs_url = process.env.LOGS_URL;
-    package_repos = process.env.PACKAGE_REPOS;
-    package_target_repos = process.env.PACKAGE_TARGET_REPOS;
-    package_repos_notifiers = process.env.PACKAGE_REPOS_NOTIFIERS;
-    builder_image =
+    private base_logs_url = process.env.LOGS_URL;
+    private package_repos = process.env.PACKAGE_REPOS;
+    private package_target_repos = process.env.PACKAGE_TARGET_REPOS;
+    private package_repos_notifiers = process.env.PACKAGE_REPOS_NOTIFIERS;
+    private builder_image =
         process.env.BUILDER_IMAGE || "registry.gitlab.com/garuda-linux/tools/chaotic-manager/builder:latest";
 
-    queue: { [key: string]: CoordinatorTrackedJob } = {};
-    repo_manager: RepoManager;
-    busy_nodes: { [key: string]: CoordinatorTrackedJob } = {};
-    mutex: Mutex = new Mutex();
-    chaoticLogger: LoggerInstance = this.broker.getLogger("CHAOTIC");
+    private queue: TrackedJobs = {};
+    private readonly repo_manager: RepoManager;
+    private busy_nodes: TrackedJobs = {};
+    private mutex: Mutex = new Mutex();
+    private chaoticLogger: LoggerInstance = this.broker.getLogger("CHAOTIC");
 
-    active = false;
-    drainedNotifier: (() => void) | null = null;
+    private active = false;
+    private drainedNotifier: (() => void) | null = null;
 
     constructor(
         broker: ServiceBroker,
@@ -116,6 +130,8 @@ export class CoordinatorService extends Service {
             actions: {
                 addJobsToQueue: this.addJobsToQueue,
                 autoRepoRemove: this.autoRepoRemove,
+                getCurrentQueue: this.getQueue,
+                getQueue: this.getQueue,
                 jobExists: this.jobExists,
             },
             events: {
@@ -162,7 +178,7 @@ export class CoordinatorService extends Service {
             arch: job.arch,
         };
 
-        let notificationPromises: Promise<any>[] = [];
+        const notificationPromises: Promise<any>[] = [];
 
         promise
             .then(
@@ -183,7 +199,14 @@ export class CoordinatorService extends Service {
                                 "Build skipped because package was already built.",
                             );
                             job.logger.log(`Job ${job.toId()} skipped because all packages were already built.`);
-                            notificationPromises.push(this.broker.call("chaoticMetrics.incCounterAlreadyBuilt"));
+
+                            metricsParams.status = BuildStatus.ALREADY_BUILT;
+                            notificationPromises.push(
+                                this.broker.call<void, MetricsCounterLabels>(
+                                    "chaoticMetrics.incCounterAlreadyBuilt",
+                                    metricsParams,
+                                ),
+                            );
                             break;
                         }
                         case BuildStatus.SUCCESS: {
@@ -196,8 +219,19 @@ export class CoordinatorService extends Service {
                                 packages: ret.packages!,
                                 event: `📣 New deployment to ${job.target_repo}`,
                             };
-                            notificationPromises.push(this.broker.call("notifier.notifyPackages", notify_params));
-                            notificationPromises.push(this.broker.call("chaoticMetrics.incCounterBuildSuccess"));
+                            metricsParams.status = BuildStatus.SUCCESS;
+                            notificationPromises.push(
+                                this.broker.call<void, SuccessNotificationParams>(
+                                    "notifier.notifyPackages",
+                                    notify_params,
+                                ),
+                            );
+                            notificationPromises.push(
+                                this.broker.call<void, MetricsCounterLabels>(
+                                    "chaoticMetrics.incCounterBuildSuccess",
+                                    metricsParams,
+                                ),
+                            );
                             break;
                         }
                         case BuildStatus.SKIPPED: {
@@ -205,12 +239,19 @@ export class CoordinatorService extends Service {
                                 source_repo.notify(job, "canceled", "Build skipped intentionally via build tools."),
                             );
                             job.logger.log(`Job ${job.toId()} skipped intentionally via build tools.`);
-                            notificationPromises.push(this.broker.call("chaoticMetrics.incCounterBuildSkipped"));
+
+                            metricsParams.status = BuildStatus.SKIPPED;
+                            notificationPromises.push(
+                                this.broker.call<void, MetricsCounterLabels>(
+                                    "chaoticMetrics.incCounterBuildSkipped",
+                                    metricsParams,
+                                ),
+                            );
                             break;
                         }
                         case BuildStatus.FAILED: {
-                            notificationPromises.push(source_repo.notify(job, "failed", "Build failed."));
                             job.logger.log(`Job ${job.toId()} failed`);
+                            notificationPromises.push(source_repo.notify(job, "failed", "Build failed."));
 
                             const notify_params: FailureNotificationParams = {
                                 pkgbase: job.pkgbase,
@@ -219,24 +260,46 @@ export class CoordinatorService extends Service {
                                 timestamp: job.timestamp,
                                 commit: job.commit,
                             };
-                            notificationPromises.push(this.broker.call("notifier.notifyFailure", notify_params));
-                            notificationPromises.push(this.broker.call("chaoticMetrics.incCounterBuildFailure"));
+                            metricsParams.status = BuildStatus.FAILED;
+                            notificationPromises.push(
+                                this.broker.call<void, FailureNotificationParams>(
+                                    "notifier.notifyFailure",
+                                    notify_params,
+                                ),
+                            );
+                            notificationPromises.push(
+                                this.broker.call<void, MetricsCounterLabels>(
+                                    "chaoticMetrics.incCounterBuildFailure",
+                                    metricsParams,
+                                ),
+                            );
                             break;
                         }
                         case BuildStatus.CANCELED: {
+                            metricsParams.status = BuildStatus.CANCELED;
                             if (job.replacement) {
+                                job.logger.log(`Job ${job.toId()} was canceled and replaced by a newer build request.`);
+
                                 notificationPromises.push(
                                     source_repo.notify(job, "canceled", "Build canceled and replaced."),
                                 );
-                                job.logger.log(`Job ${job.toId()} was canceled and replaced by a newer build request.`);
+                                metricsParams.replaced = true;
                                 notificationPromises.push(
-                                    this.broker.call("chaoticMetrics.incCounterBuildCancelled", { replaced: true }),
+                                    this.broker.call<void, MetricsCounterLabels>(
+                                        "chaoticMetrics.incCounterBuildCancelled",
+                                        metricsParams,
+                                    ),
                                 );
                             } else {
-                                notificationPromises.push(source_repo.notify(job, "canceled", "Build canceled."));
                                 job.logger.log(`Job ${job.toId()} was canceled.`);
+
+                                metricsParams.replaced = false;
+                                notificationPromises.push(source_repo.notify(job, "canceled", "Build canceled."));
                                 notificationPromises.push(
-                                    this.broker.call("chaoticMetrics.incCounterBuildCancelled", { replaced: false }),
+                                    this.broker.call<void, MetricsCounterLabels>(
+                                        "chaoticMetrics.incCounterBuildCancelled",
+                                        metricsParams,
+                                    ),
                                 );
                             }
                             break;
@@ -245,8 +308,12 @@ export class CoordinatorService extends Service {
                             notificationPromises.push(
                                 source_repo.notify(job, "canceled", "Builder shutdown requested."),
                             );
+                            metricsParams.replaced = true;
                             notificationPromises.push(
-                                this.broker.call("chaoticMetrics.incCounterBuildCancelled", { replaced: true }),
+                                this.broker.call<void, MetricsCounterLabels>(
+                                    "chaoticMetrics.incCounterBuildCancelled",
+                                    metricsParams,
+                                ),
                             );
                             job.logger.log(`Job ${job.toId()} was canceled and re-queued due to builder shutdown.`);
                             const new_job = job.toSavable();
@@ -264,8 +331,19 @@ export class CoordinatorService extends Service {
                                 timestamp: job.timestamp,
                                 commit: job.commit,
                             };
-                            notificationPromises.push(this.broker.call("notifier.notifyFailure", notify_params));
-                            notificationPromises.push(this.broker.call("chaoticMetrics.incCounterBuildTimeout"));
+                            notificationPromises.push(
+                                this.broker.call<void, FailureNotificationParams>(
+                                    "notifier.notifyFailure",
+                                    notify_params,
+                                ),
+                            );
+                            metricsParams.status = BuildStatus.TIMED_OUT;
+                            notificationPromises.push(
+                                this.broker.call<void, MetricsCounterLabels>(
+                                    "chaoticMetrics.incCounterBuildTimeout",
+                                    metricsParams,
+                                ),
+                            );
                             break;
                         }
                     }
@@ -282,10 +360,15 @@ export class CoordinatorService extends Service {
                         timestamp: job.timestamp,
                         commit: job.commit,
                     };
-                    notificationPromises.push(this.broker.call("notifier.notifyFailure", notify_params));
+                    notificationPromises.push(
+                        this.broker.call<void, FailureNotificationParams>("notifier.notifyFailure", notify_params),
+                    );
                     metricsParams.status = BuildStatus.SOFTWARE_FAILURE;
                     notificationPromises.push(
-                        this.broker.call("chaoticMetrics.incCounterSoftwareFailure", metricsParams),
+                        this.broker.call<void, MetricsCounterLabels>(
+                            "chaoticMetrics.incCounterSoftwareFailure",
+                            metricsParams,
+                        ),
                     );
                 },
             )
@@ -293,11 +376,7 @@ export class CoordinatorService extends Service {
                 this.chaoticLogger.error("Coordinator error during job completion:", err);
             })
             .finally(async () => {
-                if (this.active) {
-                    notificationPromises.push(this.broker.call("chaoticMetrics.incCounterBuildTotal", metricsParams));
-                }
-
-                let promises = await Promise.allSettled(notificationPromises);
+                const promises = await Promise.allSettled(notificationPromises);
                 for (const promise of promises) {
                     if (promise.status === "rejected") {
                         this.chaoticLogger.error("Failure during post-job notification:", promise.reason);
@@ -329,7 +408,7 @@ export class CoordinatorService extends Service {
         await this.mutex
             .runExclusive(async () => {
                 // Fetch the list of available builder nodes
-                const available_nodes: any[] = await this.getAvailableNodes();
+                const available_nodes: BrokerNode[] = await this.getAvailableNodes();
 
                 if (available_nodes.length == 0) {
                     return;
@@ -395,7 +474,7 @@ export class CoordinatorService extends Service {
         const data = ctx.params as Coordinator_Action_AddJobsToQueue_Params;
         const jobs: CoordinatorTrackedJob[] = [];
 
-        const redis = this.redis_connection_manager.getClient();
+        const redis: Redis = this.redis_connection_manager.getClient();
 
         for (const pkg of data.packages) {
             const logger = new BuildsRedisLogger(redis, this.broker);
@@ -478,11 +557,11 @@ export class CoordinatorService extends Service {
         );
 
         if (result.success) {
-            await this.broker.call("notifier.notifyGeneric", {
+            await this.broker.call<void, GenericNotificationParams>("notifier.notifyGeneric", {
                 message: `✅ Cleanup job for ${data.repo} finished successfully`,
             });
         } else {
-            await this.broker.call("notifier.notifyGeneric", {
+            await this.broker.call<void, GenericNotificationParams>("notifier.notifyGeneric", {
                 message: `🚫 Cleanup job ${data.repo} failed to remove packages`,
             });
         }
@@ -618,9 +697,12 @@ export class CoordinatorService extends Service {
         return false;
     }
 
-    // Fetch list of nodes IDs that are currently not busy
-    private async getAvailableNodes(): Promise<Object[]> {
-        const services: any[] = await this.broker.call("$node.services");
+    /**
+     * Fetches the list of available builder nodes (not busy).
+     * @private
+     */
+    private async getAvailableNodes(): Promise<BrokerNode[]> {
+        const services: Service[] = await this.broker.call<Service[]>("$node.services");
         let nodes: string[] | undefined;
         for (const entry of services) {
             if (entry.name === "builder") {
@@ -634,32 +716,40 @@ export class CoordinatorService extends Service {
         }
 
         // Fetch the full list of nodes
-        const full_node_list: Object[] = await this.broker.call("$node.list");
+        const full_node_list: BrokerNode[] = await this.broker.call("$node.list");
         if (!full_node_list || full_node_list.length == 0) {
             return [];
         }
 
-        // nodes.includes(node.id) -> check if the node is in the list of builder nodes
+        // nodes.includes(node.id) → check if the node is in the list of builder nodes
         // node.available → check if the node is available (not offline)
-        // !this.busy_nodes[node.id] -> check if the node is not in the list of busy nodes
+        // !this.busy_nodes[node.id] → check if the node is not in the list of busy nodes
         return full_node_list.filter(
-            (node: any) => nodes.includes(node.id) && node.available && !this.busy_nodes[node.id],
+            (node: BrokerNode) => nodes.includes(node.id) && node.available && !this.busy_nodes[node.id],
         );
     }
 
     /**
      * Updates all relevant metrics counters for the coordinator service.
-     * @param available_nodes The list of available builder nodes to derive the count from
      * @private
      */
     private async updateMetrics(): Promise<void> {
-        let available_nodes = await this.getAvailableNodes();
+        const available_nodes: BrokerNode[] = await this.getAvailableNodes();
         try {
-            await this.broker.call("chaoticMetrics.setGaugeActiveBuilders", { count: available_nodes.length });
-            await this.broker.call("chaoticMetrics.setGaugeIdleBuilders", {
+            await this.broker.call<void, MetricsGaugeContext>("chaoticMetrics.setGaugeActiveBuilders", {
                 count: Object.keys(this.busy_nodes).length,
             });
-            await this.broker.call("chaoticMetrics.setGaugeCurrentQueue", { count: Object.keys(this.queue).length });
+            await this.broker.call<void, MetricsGaugeContext>("chaoticMetrics.setGaugeIdleBuilders", {
+                count: available_nodes.length,
+            });
+            await this.broker.call<void, MetricsGaugeContext>("chaoticMetrics.setGaugeCurrentQueue", {
+                count: Object.keys(this.queue).length,
+                labels: {
+                    build_class: Object.keys(this.queue).map((key) => this.queue[key].build_class) as BuildClass[],
+                    pkgname: Object.keys(this.queue).map((key) => this.queue[key].pkgbase),
+                    target_repo: Object.keys(this.queue).map((key) => this.queue[key].target_repo),
+                },
+            });
         } catch (error) {
             this.chaoticLogger.error("Error updating metrics:", error);
         }
@@ -756,6 +846,23 @@ export class CoordinatorService extends Service {
 
     async stopped(): Promise<void> {
         await this.schema.stop.bind(this.schema)();
+    }
+
+    /**
+     * Fetches the current build queue.
+     * @returns The current build queue.
+     */
+    async getQueue(): Promise<QueueStatus> {
+        const queue: QueueStatus = [];
+        Object.values(this.queue).forEach((job) => {
+            queue.push({
+                status: job.node ? "active" : "queued",
+                node: job.node,
+                jobData: job.toSavable(),
+            });
+        });
+
+        return queue;
     }
 }
 

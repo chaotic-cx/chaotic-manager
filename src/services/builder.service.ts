@@ -10,45 +10,47 @@ import { type ContainerManager, DockerManager, PodmanManager } from "../containe
 import { BuildsRedisLogger, SshLogger } from "../logging";
 import type { RedisConnectionManager } from "../redis-connection-manager";
 import {
+    type Builder_Action_BuildPackage_Params,
     BuildStatus,
     type BuildStatusReturn,
-    type Builder_Action_BuildPackage_Params,
     type Database_Action_AddToDb_Params,
     type Database_Action_GenerateDestFillerFiles_Params,
+    type MetricsHistogramContext,
     SOURCECACHE_MAX_LIFETIME,
 } from "../types";
-import { currentTime } from "../utils";
+import { currentTime, getDurationInMilliseconds } from "../utils";
 import { MoleculerConfigCommonService } from "./moleculer.config";
 
 /**
  * The BuilderService class is a moleculer service that provides the buildPackage and cancelBuild actions.
  */
 export class BuilderService extends Service {
-    mutex: Mutex = new Mutex();
-    redis_connection_manager: RedisConnectionManager;
+    private mutex: Mutex = new Mutex();
+    private redis_connection_manager: RedisConnectionManager;
 
-    builder = {
+    private builder = {
         ci_code_skip: Number(process.env.CI_CODE_SKIP) || 123,
         name: process.env.BUILDER_HOSTNAME || "chaotic-builder",
         timeout: Number(process.env.BUILDER_TIMEOUT) || 3600,
         container_engine: process.env.CONTAINER_ENGINE ? "podman" : "docker",
     };
 
-    shared_srcdest_cache: string = path.join(process.env.SHARED_PATH || "", "srcdest_cache");
-    shared_pkgout: string = path.join(process.env.SHARED_PATH || "", "pkgout");
-    shared_sources: string = path.join(process.env.SHARED_PATH || "", "sources");
-    mountPkgout = "/shared/pkgout";
-    mountSrcdest = "/shared/srcdest_cache";
+    private isDocker = fs.existsSync("/.dockerenv");
+    private shared_srcdest_cache: string = path.join(process.env.SHARED_PATH || "", "srcdest_cache");
+    private shared_pkgout: string = path.join(process.env.SHARED_PATH || "", "pkgout");
+    private shared_sources: string = path.join(process.env.SHARED_PATH || "", "sources");
+    private mountPkgout = this.isDocker ? this.shared_pkgout : "/shared/pkgout";
+    private mountSrcdest = this.isDocker ? this.shared_srcdest_cache : "/shared/srcdest_cache";
 
-    containerManager: ContainerManager;
-    container: Container | null = null;
-    cancelled = false;
-    chaoticLogger: LoggerInstance = this.broker.getLogger("CHAOTIC");
+    private containerManager: ContainerManager;
+    private container: Container | null = null;
+    private cancelled = false;
+    private chaoticLogger: LoggerInstance = this.broker.getLogger("CHAOTIC");
 
-    scpClient: ScpClient | null = null;
+    private scpClient: ScpClient | null = null;
 
-    cancelledCode: BuildStatus.CANCELED | BuildStatus.CANCELED_REQUEUE = BuildStatus.CANCELED;
-    active = true;
+    private cancelledCode: BuildStatus.CANCELED | BuildStatus.CANCELED_REQUEUE = BuildStatus.CANCELED;
+    private active = true;
 
     constructor(broker: ServiceBroker, redis_connection_manager: RedisConnectionManager) {
         super(broker);
@@ -89,6 +91,8 @@ export class BuilderService extends Service {
                         success: BuildStatus.CANCELED_REQUEUE,
                     };
                 }
+
+                const timeStart: [number, number] = process.hrtime();
                 const logger = new BuildsRedisLogger(this.redis_connection_manager.getClient(), this.broker);
                 logger.from(data.pkgbase, data.timestamp);
 
@@ -224,6 +228,16 @@ export class BuilderService extends Service {
                 if (!addToDbReturn.success) {
                     return { success: BuildStatus.FAILED };
                 } else {
+                    await to(
+                        ctx.call<void, MetricsHistogramContext>("chaoticMetrics.addToBuildTimerHistogram", {
+                            labels: {
+                                arch: data.arch,
+                                pkgbase: data.pkgbase,
+                                target_repo: data.target_repo,
+                            },
+                            duration: this.stopTimer(timeStart),
+                        }),
+                    );
                     return {
                         success: BuildStatus.SUCCESS,
                         packages: file_list,
@@ -339,5 +353,14 @@ export class BuilderService extends Service {
 
     async stopped(): Promise<void> {
         await this.schema.stop.bind(this.schema)();
+    }
+
+    /**
+     * Returns the duration it took to build a package in minutes.
+     * @param startTimer The timer object created by process.hrtime when starting the timer
+     * @returns The build duration in minutes
+     */
+    private stopTimer(startTimer: [number, number]): number {
+        return getDurationInMilliseconds(startTimer) / 1000 / 60;
     }
 }

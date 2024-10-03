@@ -54,9 +54,10 @@ export type PackagesReturnObject = Record<
     string,
     {
         arch: string;
+        build_class: number;
+        repo_files?: string;
         srcrepo: string;
-        timestamp: string;
-        repo_files: string;
+        timestamp: number;
     }
 >[];
 
@@ -64,6 +65,7 @@ export type StatsReturnObject = Record<
     string,
     {
         count: number;
+        nodes?: string[];
         packages: (string | undefined)[];
     }
 >[];
@@ -108,20 +110,20 @@ export type Database_Action_fetchUploadInfo_Response = {
 };
 
 export type Database_Action_AddToDb_Params = {
-    pkgbase: string;
     arch: string;
-    pkgfiles: string[];
-    target_repo: string;
-    source_repo: string;
     builder_image: string;
+    pkgbase: string;
+    pkgfiles: string[];
+    source_repo: string;
+    target_repo: string;
     timestamp: number;
 };
 
 export type Database_Action_AutoRepoRemove_Params = {
-    pkgbases: string[];
     arch: string;
-    repo: string;
     builder_image: string;
+    pkgbases: string[];
+    repo: string;
 };
 
 export type Database_Action_GenerateDestFillerFiles_Params = {
@@ -130,22 +132,23 @@ export type Database_Action_GenerateDestFillerFiles_Params = {
 };
 
 export type Builder_Action_BuildPackage_Params = {
-    target_repo: string;
+    arch: string;
+    builder_image: string;
+    commit?: string;
+    extra_keyrings: string;
+    extra_repos: string;
+    pkgbase: string;
     source_repo: string;
     source_repo_url: string;
-    arch: string;
-    pkgbase: string;
-    builder_image: string;
-    extra_repos: string;
-    extra_keyrings: string;
-    upload_info: Database_Action_fetchUploadInfo_Response;
+    target_repo: string;
     timestamp: number;
-    commit?: string;
+    upload_info: Database_Action_fetchUploadInfo_Response;
 };
 
 export type BuildStatusReturn = {
-    success: BuildStatus;
     packages?: string[];
+    success: BuildStatus;
+    timer?: number;
 };
 
 export interface DatabaseRemoveStatusReturn {
@@ -153,20 +156,20 @@ export interface DatabaseRemoveStatusReturn {
 }
 
 export interface Coordinator_Action_PackageMetaData_Single {
+    build_class?: number;
+    dependencies?: string[];
     pkgbase: string;
     pkgnames?: string[];
-    dependencies?: string[];
-    build_class?: number;
 }
 
 export type Coordinator_Action_PackageMetaData_List = Coordinator_Action_PackageMetaData_Single[];
 
 export type Coordinator_Action_AddJobsToQueue_Params = {
-    target_repo: string;
-    source_repo: string;
-    commit: string | undefined;
     arch: string;
+    commit: string | undefined;
     packages: Coordinator_Action_PackageMetaData_List;
+    source_repo: string;
+    target_repo: string;
 };
 
 export type Coordinator_Action_AutoRepoRemove_Params = Omit<Database_Action_AutoRepoRemove_Params, "builder_image">;
@@ -211,16 +214,16 @@ export class CoordinatorJob extends CoordinatorJobSavable {
 }
 
 export interface SuccessNotificationParams {
-    packages: string[];
     event: string;
+    packages: string[];
 }
 
 export interface FailureNotificationParams {
-    pkgbase: string;
-    timestamp: number;
-    event: string;
     commit?: string;
+    event: string;
+    pkgbase: string;
     source_repo_url: string;
+    timestamp: number;
 }
 
 export interface GenericNotificationParams {
@@ -236,18 +239,29 @@ export interface MetricsTimerLabels {
 }
 
 export interface MetricsCounterLabels {
+    arch: string;
+    build_class: BuildClass;
     pkgname: string;
     replaced: boolean;
     status?: BuildStatus;
     target_repo: string;
-    build_class: BuildClass;
-    arch: string;
 }
 
 export interface MetricsGaugeLabels {
-    pkgname: string;
+    build_class: BuildClass[];
+    pkgname: string[];
+    target_repo: string[];
+}
+
+export interface MetricsHistogramLabels {
+    arch: string;
+    pkgbase: string;
     target_repo: string;
-    build_class: BuildClass;
+}
+
+export interface MetricsHistogramContext {
+    duration: number;
+    labels: MetricsHistogramLabels;
 }
 
 export interface MetricsGaugeContext {
@@ -256,19 +270,31 @@ export interface MetricsGaugeContext {
 }
 
 export type MetricsRequest = {
-    [p in ValidMetrics]?: GenericObject | null;
+    [p in ValidMetrics]?: MetricsEntry;
 };
 
+export interface MetricsEntry {
+    value: number;
+    labels: GenericObject;
+    timestamp: number;
+}
+
 export type ValidMetrics =
-    | "builds.total"
-    | "builds.success"
+    | "builders.active"
+    | "builders.idle"
+    | "builds.alreadyBuilt"
+    | "builds.cancelled"
     | "builds.failed.build"
     | "builds.failed.software"
     | "builds.failed.timeout"
-    | "builds.alreadyBuilt"
-    | "builds.cancelled"
     | "builds.skipped"
+    | "builds.success"
     | "builds.time.elapsed"
-    | "builders.active"
-    | "builders.idle"
+    | "builds.total"
     | "queue.current";
+
+export interface MetricsDatabaseLabels {
+    arch: string;
+    pkgname: string;
+    target_repo: string;
+}
