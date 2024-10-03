@@ -1,7 +1,7 @@
 import fs from "fs";
 import type { Dirent } from "node:fs";
 import path from "path";
-import { Mutex, tryAcquire } from "async-mutex";
+import { E_ALREADY_LOCKED, Mutex, tryAcquire } from "async-mutex";
 import { to } from "await-to-js";
 import type { Container } from "dockerode";
 import { type Context, type LoggerInstance, Service, type ServiceBroker } from "moleculer";
@@ -230,6 +230,15 @@ export class BuilderService extends Service {
                     };
                 }
             })
+            .catch(async (e) => {
+                if (e === E_ALREADY_LOCKED) {
+                    // Something has gone wrong on the coordinator side. Cancel the currently running build and requeue the new job the coordinator gave us.
+                    // Delay the requeue by as long as it takes us to cancel the current build to guarantee the next job is processed without trouble.
+                    await this.cancelBuild();
+                    return { success: BuildStatus.CANCELED_REQUEUE };
+                }
+                throw e;
+            })
             .finally(() => {
                 this.container = null;
                 this.ensurePathClean(this.mountPkgout, false);
@@ -248,7 +257,11 @@ export class BuilderService extends Service {
                     this.chaoticLogger.error(e);
                 });
             } else if (this.scpClient) {
-                this.scpClient.close();
+                try {
+                    this.scpClient.close();
+                } catch (error) {
+                    this.chaoticLogger.error(error);
+                }
             }
         }
         await this.mutex.waitForUnlock();
