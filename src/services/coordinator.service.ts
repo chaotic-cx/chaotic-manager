@@ -367,15 +367,8 @@ export class CoordinatorService extends Service {
                     job.node = node.id;
                     this.busy_nodes[node.id] = job;
 
-                    const metricsParams: MetricsTimerLabels = {
-                        pkgname: job.pkgbase,
-                        target_repo: job.target_repo,
-                        build_class: job.build_class,
-                        arch: job.arch,
-                        node: job.node ? job.node : "unknown",
-                    };
-
                     this.chaoticLogger.info(`Assigning job for ${job.pkgbase} to node ${node.id}`);
+                    source_repo.notify(job, "running", "Build in progress...");
 
                     const promise = this.broker.call<BuildStatusReturn, Builder_Action_BuildPackage_Params>(
                         "builder.buildPackage",
@@ -427,35 +420,40 @@ export class CoordinatorService extends Service {
             const log = new BuildsRedisLogger(this.redis_connection_manager.getClient(), this.broker);
             log.from(job.pkgbase, job.timestamp);
             void (async () => {
+                this.chaoticLogger.info(`Added job for ${job.pkgbase} to the build queue.`);
                 await log.setDefault();
                 log.log(`Added to build queue at ${currentTime()}. Waiting for builder...`);
-                this.chaoticLogger.info(`Added job for ${job.pkgbase} to the build queue.`);
+                // Notify the source repository that the job is pending
+                const source_repo: Repo = this.repo_manager.getRepo(data.source_repo);
+                source_repo.notify(job, "pending", "Waiting for builder...");
             })();
 
             const id = job.toId();
-            const entry = this.queue[id];
+            const previous = this.queue[id];
             // Is queued
-            if (entry) {
+            if (previous) {
                 // Is running
-                if (entry.node) {
-                    void ctx.call("builder.cancelBuild", undefined, { nodeID: entry.node });
-                    entry.logger.log(
+                if (previous.node) {
+                    void ctx.call("builder.cancelBuild", undefined, { nodeID: previous.node }).catch((err) => {});
+                    previous.logger.log(
                         `Job cancellation requested at ${currentTime()}. Job is being replaced by newer build request.`,
                     );
                     this.chaoticLogger.info(
-                        `Job for ${job.pkgbase} was canceled and replaced with a new job before execution.`,
+                        `Cancellation requested for currently running job ${job.pkgbase} at ${currentTime()}. Job is being replaced by newer build request.`,
                     );
-                    entry.replacement = job;
+                    previous.replacement = job;
                     continue;
                     // Not running
                 } else {
-                    await (async () => {
-                        entry.logger.log(`Job was canceled and replaced with a new job before execution.`);
+                    void (async () => {
                         this.chaoticLogger.info(
                             `Job for ${job.pkgbase} canceled and replaced with a new job before execution.`,
                         );
-                        await entry.logger.end_log();
-                    })();
+                        const previous_source_repo: Repo = this.repo_manager.getRepo(previous.source_repo);
+                        previous_source_repo.notify(job, "canceled", "Build canceled and replaced.");
+                        await previous.logger.log(`Job was canceled and replaced with a new job before execution.`);
+                        await previous.logger.end_log();
+                    })().catch((err) => {});
                 }
             }
             this.queue[id] = job;
