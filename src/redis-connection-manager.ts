@@ -23,8 +23,17 @@ export class RedisConnectionManager {
     }
 
     public shutdown(): void {
-        this.clients.forEach((client) => client.disconnect());
-        if (this.subscriber) this.subscriber.disconnect();
-        this.client.disconnect();
+        this.clients.forEach((client: any) => {
+            if (client.connector.stream) client.connector.stream.unref();
+            else client.quit();
+        });
+        let subscriber: any = this.subscriber;
+        if (subscriber) {
+            if (subscriber.connector.stream) subscriber.connector.stream.unref();
+            else subscriber.quit();
+        }
+        let client: any = this.client;
+        if (client.connector.stream) client.connector.stream.unref();
+        else client.quit();
     }
 }
