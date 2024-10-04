@@ -90,6 +90,9 @@ export class WebService extends Service {
                 "$broker.started": {
                     handler: this.start,
                 },
+                "$broker.stopped": {
+                    handler: this.stop,
+                },
             },
         });
     }
@@ -329,11 +332,9 @@ export class WebService extends Service {
     }
 
     stop() {
-        this.server!.close();
+        if (this.server) {
+            this.server.close();
+        }
         this.server = null;
-    }
-
-    stopped() {
-        this.schema.stop.bind(this.schema)();
     }
 }
