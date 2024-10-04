@@ -25,10 +25,10 @@ export class BuildsRedisLogger {
     private chaoticLogger: LoggerInstance;
     private buildLogger: LoggerInstance;
 
-    constructor(connection: RedisConnection, broker: ServiceBroker) {
+    constructor(connection: RedisConnection, broker: ServiceBroker, logType: string) {
         this.connection = connection;
         this.chaoticLogger = broker.getLogger("CHAOTIC");
-        this.buildLogger = broker.getLogger("BUILD");
+        this.buildLogger = broker.getLogger(logType);
     }
 
     public async fromDefault(pkgbase: string) {

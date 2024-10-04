@@ -5,11 +5,11 @@ import { type ContainerManager, DockerManager, PodmanManager } from "../containe
 import { BuildsRedisLogger } from "../logging";
 import type { RedisConnectionManager } from "../redis-connection-manager";
 import type {
-    DatabaseRemoveStatusReturn,
     Database_Action_AddToDb_Params,
     Database_Action_AutoRepoRemove_Params,
-    Database_Action_GenerateDestFillerFiles_Params,
     Database_Action_fetchUploadInfo_Response,
+    Database_Action_GenerateDestFillerFiles_Params,
+    DatabaseRemoveStatusReturn,
     MetricsDatabaseLabels,
 } from "../types";
 import { currentTime } from "../utils";
@@ -23,7 +23,7 @@ export class DatabaseService extends Service {
     private redis_connection_manager: RedisConnectionManager;
     private gpg: string = process.env.GPG_PATH || "";
     private container_manager: ContainerManager;
-    private chaoticLogger: LoggerInstance = this.broker.getLogger("CHAOTIC");
+    private chaoticLogger: LoggerInstance = this.broker.getLogger("DATABASE");
     private active = true;
 
     constructor(broker: ServiceBroker, redis_connection_manager: RedisConnectionManager) {
@@ -81,7 +81,11 @@ export class DatabaseService extends Service {
                         success: false,
                     };
                 }
-                const logger = new BuildsRedisLogger(this.redis_connection_manager.getClient(), this.broker);
+                const logger = new BuildsRedisLogger(
+                    this.redis_connection_manager.getClient(),
+                    this.broker,
+                    "DATABASE",
+                );
                 void logger.from(data.pkgbase, data.timestamp);
 
                 logger.log(`Processing add to database job ${ctx.id} at ${currentTime()}`);

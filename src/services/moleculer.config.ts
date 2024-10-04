@@ -44,6 +44,7 @@ export function MoleculerConfigLog(NODE_ENV: string) {
                 BUILD: isProd ? "info" : "debug",
                 CHAOTIC: isProd ? "info" : "debug",
                 "CHAOTIC-METRICS": isProd ? "info" : "debug",
+                DATABASE: isProd ? "info" : "debug",
                 METRICS: isProd ? "warn" : "info",
                 NOTIFIER: isProd ? "warn" : "debug",
                 REGISTRY: isProd ? "warn" : "debug",

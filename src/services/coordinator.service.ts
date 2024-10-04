@@ -481,7 +481,7 @@ export class CoordinatorService extends Service {
         const redis: Redis = this.redis_connection_manager.getClient();
 
         for (const pkg of data.packages) {
-            const logger = new BuildsRedisLogger(redis, this.broker);
+            const logger = new BuildsRedisLogger(redis, this.broker, "BUILD");
             logger.from(pkg.pkgbase, timestamp);
             jobs.push(
                 new CoordinatorTrackedJob(
@@ -500,7 +500,7 @@ export class CoordinatorService extends Service {
         }
 
         for (const job of jobs) {
-            const log = new BuildsRedisLogger(this.redis_connection_manager.getClient(), this.broker);
+            const log = new BuildsRedisLogger(this.redis_connection_manager.getClient(), this.broker, "BUILD");
             log.from(job.pkgbase, job.timestamp);
             void (async () => {
                 this.chaoticLogger.info(`Added job for ${job.pkgbase} to the build queue.`);
@@ -789,7 +789,7 @@ export class CoordinatorService extends Service {
                 const data = JSON.parse(queue);
                 if (data.version === current_version) {
                     for (const savedJob of data.save_queue) {
-                        const logger = new BuildsRedisLogger(client, this.broker);
+                        const logger = new BuildsRedisLogger(client, this.broker, "BUILD");
                         const job = toTracked(savedJob, timestamp, logger);
                         const id = job.toId();
                         job.logger.log(`Restored job ${id} at ${currentTime()}`);

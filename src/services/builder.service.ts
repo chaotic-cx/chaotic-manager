@@ -92,7 +92,7 @@ export class BuilderService extends Service {
                 }
 
                 const timeStart: [number, number] = process.hrtime();
-                const logger = new BuildsRedisLogger(this.redis_connection_manager.getClient(), this.broker);
+                const logger = new BuildsRedisLogger(this.redis_connection_manager.getClient(), this.broker, "BUILD");
                 logger.from(data.pkgbase, data.timestamp);
 
                 logger.log(`Processing build job at ${currentTime()}`);
