@@ -215,12 +215,14 @@ export class CoordinatorJob extends CoordinatorJobSavable {
 
 export interface SuccessNotificationParams {
     event: string;
+    node: string | undefined;
     packages: string[];
 }
 
 export interface FailureNotificationParams {
     commit?: string;
     event: string;
+    node: string | undefined;
     pkgbase: string;
     source_repo_url: string;
     timestamp: number;

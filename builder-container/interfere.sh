@@ -151,5 +151,10 @@ interference-apply
 
 # Print applied interferes at the end of the log again, to make
 # it easier to find them for our maintainers.
-printf ":: Maintainer info: applied these interferes:\n" >/tmp/interfere.log
-printf ':: * %s\n' "${APPLIED_INTERFERES[@]}" >>/tmp/interfere.log
+if [ ${#APPLIED_INTERFERES[@]} -eq 0 ]; then
+    printf ":: Maintainer info: no interferes applied.\n\n" >/tmp/interfere.log
+else
+    printf ":: Maintainer info: applied the interferes below.\n" >/tmp/interfere.log
+    printf ':: * %s\n' "${APPLIED_INTERFERES[@]}" >>/tmp/interfere.log
+    printf '\n' >>/tmp/interfere.log
+fi

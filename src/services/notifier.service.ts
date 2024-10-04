@@ -1,5 +1,5 @@
 import { to } from "await-to-js";
-import { type LoggerInstance, Service, type ServiceBroker } from "moleculer";
+import { Context, type LoggerInstance, Service, type ServiceBroker } from "moleculer";
 import ChaoticTelegramBot from "../telegram-bot";
 import type { FailureNotificationParams, GenericNotificationParams, SuccessNotificationParams } from "../types";
 import { MoleculerConfigCommonService } from "./moleculer.config";
@@ -58,15 +58,18 @@ export class NotifierService extends Service {
 
     /**
      * Creates a notification text for a deployment event.
-     * @param params An object containing all necessary event metadata
+     * @param ctx The Moleculer context object
      * @returns A promise that resolves when the notification is sent.
      */
-    async createDeploymentNotification(params: SuccessNotificationParams): Promise<void> {
+    async createDeploymentNotification(ctx: Context): Promise<void> {
+        const params = ctx.params as SuccessNotificationParams;
         try {
-            let text = `*${params.event}:*\n`;
+            let text = `*${params.event} from ${params.node}:*\n`;
             for (const pkg of params.packages) {
                 text += ` > ${pkg.replace(/\.pkg.tar.zst$/, "")}\n`;
             }
+            this.chaoticLogger.debug(`Sending deployment notification.`);
+            this.chaoticLogger.debug(params);
             void this.createTrivialNotification({ message: text });
         } catch (err) {
             this.chaoticLogger.error(`Failed sending deployment notification: ${err}`);
@@ -75,12 +78,13 @@ export class NotifierService extends Service {
 
     /**
      * Creates a notification text for a failed event.
-     * @param params An object containing all necessary properties
+     * @param ctx The Moleculer context object
      * @returns A promise that resolves when the notification is sent.
      */
-    async createFailedBuildNotification(params: FailureNotificationParams): Promise<void> {
+    async createFailedBuildNotification(ctx: Context): Promise<void> {
+        const params = ctx.params as FailureNotificationParams;
         try {
-            let text = `*${params.event}:*\n > ${params.pkgbase}`;
+            let text = `${params.event} on ${params.node}:\n > ${params.pkgbase}`;
 
             if (this.base_logs_url !== undefined) {
                 // We use the non-live logs URL here to preserve functionality on mobile devices.
@@ -102,6 +106,8 @@ export class NotifierService extends Service {
             } else {
                 text += "\n";
             }
+            this.chaoticLogger.debug(`Sending failure notification.`);
+            this.chaoticLogger.debug(params);
             void this.createTrivialNotification({ message: text });
         } catch (err) {
             this.chaoticLogger.error(`Failed sending build failure notification: ${err}`);
@@ -111,9 +117,15 @@ export class NotifierService extends Service {
     /**
      * Helper function for sending a notification containing one string for the given event and logging
      * eventual errors gracefully.
-     * @param params An object containing the necessary metadata to create the notification with.
+     * @param ctx The Moleculer context object
      */
-    async createTrivialNotification(params: GenericNotificationParams): Promise<void> {
+    async createTrivialNotification(ctx: Context | { message: string }): Promise<void> {
+        let params: GenericNotificationParams;
+        if (ctx instanceof Context) params = ctx.params as GenericNotificationParams;
+        else params = ctx;
+
+        this.chaoticLogger.debug(`Instructed to send this notification: '${params.message}'.`);
+        this.chaoticLogger.debug(params);
         const [err]: [Error, undefined] | [null, void] = await to(this.notify({ message: params.message }));
         if (err) this.chaoticLogger.error(err);
     }

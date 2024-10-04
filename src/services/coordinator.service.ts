@@ -7,23 +7,23 @@ import type { RedisConnectionManager } from "../redis-connection-manager";
 import { type Repo, RepoManager, type TargetRepo } from "../repo-manager";
 import {
     BuildClass,
+    type Builder_Action_BuildPackage_Params,
     BuildStatus,
     type BuildStatusReturn,
-    type Builder_Action_BuildPackage_Params,
-    CoordinatorJob,
-    CoordinatorJobSavable,
     type Coordinator_Action_AddJobsToQueue_Params,
     type Coordinator_Action_AutoRepoRemove_Params,
-    type DatabaseRemoveStatusReturn,
+    CoordinatorJob,
+    CoordinatorJobSavable,
+    current_version,
     type Database_Action_AutoRepoRemove_Params,
     type Database_Action_fetchUploadInfo_Response,
+    type DatabaseRemoveStatusReturn,
     type FailureNotificationParams,
     type GenericNotificationParams,
     MAX_SHUTDOWN_TIME,
     type MetricsCounterLabels,
     type MetricsGaugeContext,
     type SuccessNotificationParams,
-    current_version,
 } from "../types";
 import { currentTime } from "../utils";
 import { MoleculerConfigCommonService } from "./moleculer.config";
@@ -216,8 +216,9 @@ export class CoordinatorService extends Service {
                             job.logger.log(`Build job ${job.toId()} finished at ${currentTime()}...`);
 
                             const notify_params: SuccessNotificationParams = {
-                                packages: ret.packages!,
                                 event: `📣 New deployment to ${job.target_repo}`,
+                                node: job.node,
+                                packages: ret.packages!,
                             };
                             metricsParams.status = BuildStatus.SUCCESS;
                             notificationPromises.push(
@@ -254,11 +255,12 @@ export class CoordinatorService extends Service {
                             notificationPromises.push(source_repo.notify(job, "failed", "Build failed."));
 
                             const notify_params: FailureNotificationParams = {
-                                pkgbase: job.pkgbase,
+                                commit: job.commit,
                                 event: `🚨 Failed deploying to ${job.target_repo}`,
+                                node: job.node,
+                                pkgbase: job.pkgbase,
                                 source_repo_url: source_repo.getUrl(),
                                 timestamp: job.timestamp,
-                                commit: job.commit,
                             };
                             metricsParams.status = BuildStatus.FAILED;
                             notificationPromises.push(
@@ -325,11 +327,12 @@ export class CoordinatorService extends Service {
                             job.logger.log(`Job ${job.toId()} reached a timeout during the build phase.`);
 
                             const notify_params: FailureNotificationParams = {
-                                pkgbase: job.pkgbase,
+                                commit: job.commit,
                                 event: `⏳ Build for ${job.target_repo} failed due to a timeout`,
+                                node: job.node,
+                                pkgbase: job.pkgbase,
                                 source_repo_url: source_repo.getUrl(),
                                 timestamp: job.timestamp,
-                                commit: job.commit,
                             };
                             notificationPromises.push(
                                 this.broker.call<void, FailureNotificationParams>(
@@ -354,11 +357,12 @@ export class CoordinatorService extends Service {
                     job.logger.log(`Job ${job?.toId()} failed`);
 
                     const notify_params: FailureNotificationParams = {
-                        pkgbase: job.pkgbase,
+                        commit: job.commit,
                         event: `💥 The code blew up while deploying to ${job.target_repo}`,
+                        node: job.node,
+                        pkgbase: job.pkgbase,
                         source_repo_url: source_repo.getUrl(),
                         timestamp: job.timestamp,
-                        commit: job.commit,
                     };
                     notificationPromises.push(
                         this.broker.call<void, FailureNotificationParams>("notifier.notifyFailure", notify_params),
