@@ -35,12 +35,11 @@ export class BuilderService extends Service {
         container_engine: process.env.CONTAINER_ENGINE ? "podman" : "docker",
     };
 
-    private isDocker = fs.existsSync("/.dockerenv");
     private shared_srcdest_cache: string = path.join(process.env.SHARED_PATH || "", "srcdest_cache");
     private shared_pkgout: string = path.join(process.env.SHARED_PATH || "", "pkgout");
     private shared_sources: string = path.join(process.env.SHARED_PATH || "", "sources");
-    private mountPkgout = this.isDocker ? this.shared_pkgout : "/shared/pkgout";
-    private mountSrcdest = this.isDocker ? this.shared_srcdest_cache : "/shared/srcdest_cache";
+    private mountPkgout = "/shared/pkgout";
+    private mountSrcdest = "/shared/srcdest_cache";
 
     private containerManager: ContainerManager;
     private container: Container | null = null;
