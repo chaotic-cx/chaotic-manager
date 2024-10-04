@@ -3,6 +3,7 @@
 .idea
 .pre-commit-config.yaml
 /dist
+/docs
 /dump.rdb
 /gpg
 /node_modules
@@ -12,3 +13,5 @@ biome.json
 docker-compose-podman.yml
 docker-compose.yml
 result*
+/.yarn
+/.pnp.*

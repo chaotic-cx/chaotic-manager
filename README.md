@@ -612,3 +612,18 @@ as well as needed utilities, automatically via [direnv](https://direnv.net/). Th
 via `shellcheck` and `shfmt`.
 Needed are `nix` (the package manager) and [direnv](https://direnv.net/), after that, the environment may be entered by
 running `direnv allow`.
+
+### Testing setup
+
+The testing setup can easily be started from the root of the repository
+by running `nix-shell` and then `sudo bash start-test.sh`.
+This accepts two parameters, `docker` and `native`.
+- The first one starts the test setup in Docker containers.
+- The second one runs both the manager and builder instances via `ts-watch`,
+  meaning that any changes to the source code are immediately reflected by the running instances.
+
+### Adding new builds
+
+New builds can be added by running `yarn start schedule xcursor-breeze` (or any other existing package).
+The default repo is Chaotic-AUR, which will be used to source packages from.
+

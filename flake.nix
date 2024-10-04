@@ -69,13 +69,13 @@
             }
             {package = "biome";}
             {package = "commitizen";}
+            {package = "corepack";}
             {package = "docker-compose";}
             {package = "jq";}
             {package = "nodejs_22";}
             {package = "pre-commit";}
             {package = "psmisc";}
             {package = "redis";}
-            {package = "yarn";}
           ];
           devshell.startup.preCommitHooks.text = ''
             ${self.checks.${system}.pre-commit-check.shellHook}

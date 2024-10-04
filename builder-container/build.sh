@@ -102,7 +102,7 @@ function setup-build-configs {
         fi
 
 		# In case we want to override the global timeout for a specific package. Useful for e.g. Ungoogled Chromium or kernels.
-		if [[ -v "CONFIG[BUILDER_EXTRA_TIMEOUT]" ]]; then 
+		if [[ -v "CONFIG[BUILDER_EXTRA_TIMEOUT]" ]]; then
 			BUILDER_TIMEOUT=$(($"${CONFIG[BUILDER_EXTRA_TIMEOUT]}" * "$BUILDER_TIMEOUT"))
 		fi
     fi
@@ -134,7 +134,7 @@ function build-pkg {
 	printf "Building package...\n"
 
 	# Timeout ensures that the build process doesn't hang indefinitely, sending the kill signal if it still hangs 10 seconds after sending the term signal
-	sudo -D "${BUILDDIR}" -u builder PKGDEST="${PKGOUT}" SRCDEST="${SRCDEST}" timeout -k 10 "${BUILDER_TIMEOUT}" makepkg --skippgpcheck -s --noconfirm || { local ret=$? && echo "Failed to build package!" >&2 && return $ret; }
+	time sudo -D "${BUILDDIR}" -u builder PKGDEST="${PKGOUT}" SRCDEST="${SRCDEST}" timeout -k 10 "${BUILDER_TIMEOUT}" makepkg --skippgpcheck -s --noconfirm || { local ret=$? && echo "Didn't finish building the package!" >&2 && return $ret; }
 	find "${PKGOUT}" -type f -empty -delete || return 1
 }
 
@@ -154,3 +154,7 @@ print-if-failed setup-buildenv
 setup-build-configs
 build-pkg
 check-pkg
+
+if test -f /tmp/interfere.log; then
+    cat /tmp/interfere.log
+fi

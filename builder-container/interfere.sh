@@ -4,37 +4,46 @@ set -euo pipefail
 # shellcheck source=util.shlib
 source ./util.shlib
 
+# Return interferes
+APPLIED_INTERFERES=()
+
 function interference-generic() {
 	set -euo pipefail -o functrace
 
 	# * Treats VCs
 	if (echo "$PACKAGE" | grep -qP '\-git$'); then
 		extra_pkgs+=("git")
-		echo "Interfere applied: Added git."
+		echo ":: Interfere applied: Added git."
+		APPLIED_INTERFERES+=("Added git build environment")
 	fi
 	if (echo "$PACKAGE" | grep -qP '\-svn$'); then
 		extra_pkgs+=("subversion")
-		echo "Interfere applied: Added subversion."
+		echo ":: Interfere applied: Added subversion."
+		APPLIED_INTERFERES+=("Added subversion build environment")
 	fi
 	if (echo "$PACKAGE" | grep -qP '\-bzr$'); then
 		extra_pkgs+=("breezy")
 		echo "Interfere applied: Added breezy."
+		APPLIED_INTERFERES+=("Added breezy build environment")
 	fi
 	if (echo "$PACKAGE" | grep -qP '\-hg$'); then
 		extra_pkgs+=("mercurial")
-		echo "Interfere applied: Added mercurial."
+		echo ":: Interfere applied: Added mercurial."
+		APPLIED_INTERFERES+=("Added mercurial build environment")
 	fi
 
 	# * Multilib
 	if (echo "$PACKAGE" | grep -qP '^lib32-'); then
 		extra_pkgs+=("multilib-devel")
-		echo "Interfere applied: Added multilib-devel."
+		echo ":: Interfere applied: Added multilib-devel."
+		APPLIED_INTERFERES+=("Added multilib-devel build environment")
 	fi
 
 	# * Read options
 	if (grep -qPo "^options=\([a-z! \"']*(?<!!)ccache[ '\"\)]" "${BUILDDIR}/PKGBUILD"); then
 		extra_pkgs+=("ccache")
-		echo "Interfere applied: Added ccache."
+		echo ":: Interfere applied: Added ccache."
+		APPLIED_INTERFERES+=("Added ccache build environment")
 	fi
 
 	# * CHROOT Update
@@ -52,7 +61,8 @@ function interference-generic() {
 	# * Get rid of 'native optimizations'
 	if (grep -qP '\-march=native' "${BUILDDIR}/PKGBUILD"); then
 		sed -i'' 's/-march=native//g' "${BUILDDIR}/PKGBUILD"
-		echo "Interfere applied: Removed -march=native."
+		echo ":: Interfere applied: Removed -march=native."
+		APPLIED_INTERFERES+=("Removed -march=native from PKGBUILD")
 	fi
 
 	return 0
@@ -77,7 +87,8 @@ function interference-pkgrel() {
   echo "if [ \"\$(vercmp \"${_PKGVER}\" \"\${epoch:-0}:\$pkgver-\$pkgrel\")\" = \"0\" ]; then
   pkgrel=\"\$pkgrel.${_BUMPCOUNT}\"
 fi" >>PKGBUILD
-  echo "Interfere applied: pkgrel increased by .${_BUMPCOUNT}."
+  echo ":: Interfere applied: pkgrel increased by .${_BUMPCOUNT}."
+  APPLIED_INTERFERES+=("Increased pkgrel by .${_BUMPCOUNT}.")
 }
 
 function interference-apply() {
@@ -95,14 +106,17 @@ function interference-apply() {
 	    pushd "${BUILDDIR}" >/dev/null
 		source "${BUILDDIR}/prepare"
 		popd >/dev/null
-		echo 'Interfere applied: prepare script executed.'
+		echo ':: Interfere applied: prepare script executed.'
+		APPLIED_INTERFERES+=("Executed prepare script")
 	fi
 
 	if [[ -f "${BUILDDIR}/.CI/interfere.patch" ]]; then
 		if patch -Np1 <"${BUILDDIR}/.CI/interfere.patch"; then
-			echo 'interfere: Patch applied.'
+			echo ':: Interfere applied: custom patch.'
+			APPLIED_INTERFERES+=("Custom patch applied")
 		else
-			echo 'Ignoring patch failure...'
+			echo ':: Ignoring patch failure...'
+			APPLIED_INTERFERES+=("Patch failed to apply")
 		fi
 	fi
 
@@ -112,12 +126,14 @@ function interference-apply() {
 		_PKGBUILD="$(cat "${BUILDDIR}/PKGBUILD")"
 		echo "$_PREPEND" >"${BUILDDIR}/PKGBUILD"
 		echo "$_PKGBUILD" >>"${BUILDDIR}/PKGBUILD"
-		echo "Interfere applied: PKGBUILD prepended."
+		echo ":: Interfere applied: PKGBUILD prepended."
+		APPLIED_INTERFERES+=("PKGBUILD prepended")
 	fi
 
 	if [[ -f "${BUILDDIR}/.CI/PKGBUILD.append" ]]; then
 		cat "${BUILDDIR}/.CI/PKGBUILD.append" >>"${BUILDDIR}/PKGBUILD"
-		echo "Interfere applied: PKGBUILD appended."
+		echo ":: Interfere applied: PKGBUILD appended."
+		APPLIED_INTERFERES+=("PKGBUILD appended")
 	fi
 
 	interference-pkgrel
@@ -132,3 +148,8 @@ if [ -f "${BUILDDIR}/.CI/config" ]; then
 	UTIL_READ_VARIABLES_FROM_FILE "${BUILDDIR}/.CI/config" CONFIG
 fi
 interference-apply
+
+# Print applied interferes at the end of the log again, to make
+# it easier to find them for our maintainers.
+printf ":: Maintainer info: applied these interferes:\n" >/tmp/interfere.log
+printf ':: * %s\n' "${APPLIED_INTERFERES[@]}" >>/tmp/interfere.log

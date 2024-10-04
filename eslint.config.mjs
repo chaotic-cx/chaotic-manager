@@ -2,6 +2,7 @@ import eslint from "@eslint/js";
 import eslintPluginDeprecation from "@eslint/js";
 import eslintConfigPrettier from "eslint-config-prettier";
 import tseslint from "typescript-eslint";
+import eslintPluginTsdoc from "eslint-plugin-tsdoc";
 
 export default tseslint.config(
     {
@@ -24,6 +25,7 @@ export default tseslint.config(
             reportUnusedDisableDirectives: true,
         },
         plugins: {
+            "eslint-plugin-tsdoc": eslintPluginTsdoc,
             deprecation: eslintPluginDeprecation,
         },
         rules: {
