@@ -390,7 +390,7 @@ export class CoordinatorService extends Service {
                 if (job.replacement) this.queue[job_id] = job.replacement;
                 else delete this.queue[job_id];
                 delete this.busy_nodes[node_id];
-                if (this.drainedNotifier && Object.keys(this.queue).length === 0) {
+                if (this.drainedNotifier && Object.keys(this.busy_nodes).length === 0) {
                     this.drainedNotifier();
                 }
                 void this.assignJobs();
