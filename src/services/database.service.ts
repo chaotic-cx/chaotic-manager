@@ -72,59 +72,77 @@ export class DatabaseService extends Service {
     // Add multiple package files that belong to a pkgbase to the database
     async addToDb(ctx: Context): Promise<{ success: boolean }> {
         const data = ctx.params as Database_Action_AddToDb_Params;
-        return await this.mutex.runExclusive(async () => {
-            if (!this.active) {
+        const metrics_promises: Promise<void>[] = [];
+
+        return await this.mutex
+            .runExclusive(async () => {
+                if (!this.active) {
+                    return {
+                        success: false,
+                    };
+                }
+                const logger = new BuildsRedisLogger(this.redis_connection_manager.getClient(), this.broker);
+                void logger.from(data.pkgbase, data.timestamp);
+
+                logger.log(`Processing add to database job ${ctx.id} at ${currentTime()}`);
+                this.chaoticLogger.info(`Processing add to db job for ${data.pkgbase}`);
+
+                if (data.pkgfiles.length < 1) {
+                    return {
+                        success: false,
+                    };
+                }
+
+                const [err, out] = await this.container_manager.run(
+                    data.builder_image,
+                    ["repo-add", data.arch, "/landing_zone", "/repo_root", data.target_repo].concat(data.pkgfiles),
+                    [`${this.landing_zone}:/landing_zone`, `${this.repo_root}:/repo_root`, `${this.gpg}:/root/.gnupg`],
+                    [],
+                    logger.raw_log.bind(logger),
+                );
+
+                if (err) {
+                    this.chaoticLogger.warn(err);
+                    metrics_promises.push(
+                        this.broker.call<void, MetricsDatabaseLabels>("chaoticMetrics.incCounterDatabaseFailure", {
+                            arch: data.arch,
+                            target_repo: data.target_repo,
+                            pkgname: data.pkgbase,
+                        }),
+                    );
+                    return {
+                        success: false,
+                    };
+                }
+
+                logger.log(`Successfully added packages to the database.`);
+                this.chaoticLogger.info(`Successfully added new packages to the database.`);
+
+                metrics_promises.push(
+                    this.broker.call<void, MetricsDatabaseLabels>("chaoticMetrics.incCounterDatabaseSuccess", {
+                        arch: data.arch,
+                        target_repo: data.target_repo,
+                        pkgname: data.pkgbase,
+                    }),
+                );
+
+                return {
+                    success: true,
+                };
+            })
+            .catch((err) => {
+                this.chaoticLogger.error("Error in addToDb:", err);
                 return {
                     success: false,
                 };
-            }
-            // const repo = this.repo_manager.getRepo(data.repo);
-
-            const logger = new BuildsRedisLogger(this.redis_connection_manager.getClient(), this.broker);
-            void logger.from(data.pkgbase, data.timestamp);
-
-            logger.log(`Processing add to database job ${ctx.id} at ${currentTime()}`);
-            this.chaoticLogger.info(`Processing add to db job for ${data.pkgbase}`);
-
-            if (data.pkgfiles.length < 1) {
-                return {
-                    success: false,
-                };
-            }
-
-            const [err, out] = await this.container_manager.run(
-                data.builder_image,
-                ["repo-add", data.arch, "/landing_zone", "/repo_root", data.target_repo].concat(data.pkgfiles),
-                [`${this.landing_zone}:/landing_zone`, `${this.repo_root}:/repo_root`, `${this.gpg}:/root/.gnupg`],
-                [],
-                logger.raw_log.bind(logger),
-            );
-
-            if (err) {
-                this.chaoticLogger.warn(err);
-                void this.broker.call<void, MetricsDatabaseLabels>("metrics.incCounterDatabaseFailure", {
-                    arch: data.arch,
-                    target_repo: data.target_repo,
-                    pkgname: data.pkgbase,
-                });
-                return {
-                    success: false,
-                };
-            }
-
-            logger.log(`Successfully added packages to the database.`);
-            this.chaoticLogger.info(`Successfully added new packages to the database.`);
-
-            void this.broker.call<void, MetricsDatabaseLabels>("metrics.incCounterDatabaseSuccess", {
-                arch: data.arch,
-                target_repo: data.target_repo,
-                pkgname: data.pkgbase,
+            })
+            .finally(async () => {
+                for (const promise of await Promise.allSettled(metrics_promises)) {
+                    if (promise.status === "rejected") {
+                        this.chaoticLogger.error("Failure during metrics: ", promise.reason);
+                    }
+                }
             });
-
-            return {
-                success: true,
-            };
-        });
     }
 
     // Remove all packages from the database that do not belong to the list of pkgbases

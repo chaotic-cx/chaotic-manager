@@ -228,16 +228,16 @@ export class BuilderService extends Service {
                 if (!addToDbReturn.success) {
                     return { success: BuildStatus.FAILED };
                 } else {
-                    await to(
-                        ctx.call<void, MetricsHistogramContext>("chaoticMetrics.addToBuildTimerHistogram", {
-                            labels: {
-                                arch: data.arch,
-                                pkgbase: data.pkgbase,
-                                target_repo: data.target_repo,
-                            },
-                            duration: this.stopTimer(timeStart),
-                        }),
-                    );
+                    ctx.call<void, MetricsHistogramContext>("chaoticMetrics.addToBuildTimerHistogram", {
+                        labels: {
+                            arch: data.arch,
+                            pkgbase: data.pkgbase,
+                            target_repo: data.target_repo,
+                        },
+                        duration: this.stopTimer(timeStart),
+                    }).catch((e) => {
+                        this.chaoticLogger.error("Error while adding to histogram: ", e);
+                    });
                     return {
                         success: BuildStatus.SUCCESS,
                         packages: file_list,
@@ -251,11 +251,11 @@ export class BuilderService extends Service {
                     await this.cancelBuild();
                     return { success: BuildStatus.CANCELED_REQUEUE };
                 }
+                this.chaoticLogger.error("Error in buildPackage: ", e);
                 throw e;
             })
             .finally(() => {
                 this.container = null;
-                this.ensurePathClean(this.mountPkgout, false);
             });
     }
 

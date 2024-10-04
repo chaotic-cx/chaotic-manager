@@ -618,6 +618,7 @@ running `direnv allow`.
 The testing setup can easily be started from the root of the repository
 by running `nix-shell` and then `sudo bash start-test.sh`.
 This accepts two parameters, `docker` and `native`.
+
 - The first one starts the test setup in Docker containers.
 - The second one runs both the manager and builder instances via `ts-watch`,
   meaning that any changes to the source code are immediately reflected by the running instances.
@@ -626,4 +627,3 @@ This accepts two parameters, `docker` and `native`.
 
 New builds can be added by running `yarn start schedule xcursor-breeze` (or any other existing package).
 The default repo is Chaotic-AUR, which will be used to source packages from.
-
