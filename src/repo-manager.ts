@@ -1,8 +1,7 @@
 import { URL } from "url";
 import to from "await-to-js";
-import type { Job } from "bullmq";
-import type { PacmanRepo } from "./types";
-import { splitJobId } from "./utils";
+import type { LoggerInstance } from "moleculer";
+import type { CoordinatorJob, PacmanRepo } from "./types";
 
 export type GitlabState = "pending" | "running" | "success" | "failed" | "canceled";
 
@@ -12,24 +11,24 @@ class GitlabNotifier {
         public token: string,
         public check_name: string,
         public base_log_url: URL,
+        public chaoticLogger: LoggerInstance,
     ) {}
 
-    getLogUrl(job: Job) {
-        const { target_repo, pkgbase } = splitJobId(job.id as string);
+    getLogUrl(job: CoordinatorJob) {
         const url = new URL(this.base_log_url.toString());
-        url.searchParams.set("timestamp", job.data.timestamp);
-        url.searchParams.set("id", pkgbase);
+        url.searchParams.set("timestamp", job.timestamp.toString());
+        url.searchParams.set("id", job.pkgbase);
         return {
             url: url.toString(),
-            target_repo: target_repo,
-            pkgbase: pkgbase,
+            target_repo: job.target_repo,
+            pkgbase: job.pkgbase,
         };
     }
 
-    async notify(job: Job, status?: GitlabState, description?: string) {
-        if (job.data.commit === undefined) return;
+    async notify(job: CoordinatorJob, status?: GitlabState, description?: string) {
+        if (job.commit === undefined) return;
         // format of job.data.commit is: commit:pipeline_id, but pipeline_id is optional
-        const commit_split = job.data.commit.split(":");
+        const commit_split = job.commit.split(":");
         const commit = commit_split[0];
         const pipeline_id = commit_split.length > 1 ? commit_split[1] : undefined;
 
@@ -52,12 +51,12 @@ class GitlabNotifier {
             }),
         );
         if (err || !out) {
-            console.error(err);
+            this.chaoticLogger.error(err);
             return;
         }
 
         if (out.status < 200 || out.status >= 300) {
-            console.error(await out.text());
+            this.chaoticLogger.error(await out.text());
             return;
         }
     }
@@ -70,7 +69,7 @@ export class Repo {
         private notifier: GitlabNotifier | undefined,
     ) {}
 
-    async notify(job: Job, status?: GitlabState, description?: string) {
+    async notify(job: CoordinatorJob, status?: GitlabState, description?: string) {
         if (this.notifier !== undefined) await this.notifier.notify(job, status, description);
     }
 
@@ -140,7 +139,12 @@ export class RepoManager {
     repos: Record<string, Repo> = {};
     target_repos: Record<string, TargetRepo> = {};
 
-    constructor(public base_log_url: URL | undefined) {}
+    constructor(
+        public base_log_url: URL | undefined,
+        public chaoticLogger: LoggerInstance,
+    ) {
+        this.chaoticLogger = chaoticLogger;
+    }
 
     repoFromObject(obj: object) {
         for (const [key, value] of Object.entries(obj)) {
@@ -184,7 +188,7 @@ export class RepoManager {
 
     notifiersFromObject(obj: object) {
         if (!this.base_log_url) {
-            console.warn("No base log url set, gitlab notifiers disabled");
+            this.chaoticLogger.warn("No base log url set, GitLab notifiers disabled");
             return;
         }
         for (const [key, value] of Object.entries(obj)) {
@@ -196,22 +200,28 @@ export class RepoManager {
                 throw new Error("Invalid notifier object");
             }
             if (typeof this.repos[key] === "undefined") {
-                console.warn(`Notifier for non-existent repo ${key}`);
+                this.chaoticLogger.warn(`Notifier for non-existent repo ${key}`);
                 continue;
             }
             this.repos[key].setNotifier(
-                new GitlabNotifier(value["id"], value["token"], value["check_name"], this.base_log_url),
+                new GitlabNotifier(
+                    value["id"],
+                    value["token"],
+                    value["check_name"],
+                    this.base_log_url,
+                    this.chaoticLogger,
+                ),
             );
         }
     }
 
-    async notify(job: Job, status?: GitlabState, description?: string) {
-        if (typeof this.repos[job.data.repo] !== "undefined")
-            await this.repos[job.data.repo].notify(job, status, description);
+    async notify(job: CoordinatorJob, status?: GitlabState, description?: string) {
+        if (typeof this.repos[job.source_repo] !== "undefined")
+            await this.repos[job.source_repo].notify(job, status, description);
     }
 
-    getRepo(repo: string | undefined) {
-        let out;
+    getRepo(repo: string | undefined): Repo {
+        let out: Repo | undefined;
         // Default: pick the first repo
         if (repo === undefined) {
             out = Object.values(this.repos)[0];
@@ -219,7 +229,7 @@ export class RepoManager {
             out = this.repos[repo];
             if (out === undefined) throw new Error(`Repo ${repo} not found`);
         }
-        return out;
+        return out as Repo;
     }
 
     getTargetRepo(repo: string) {

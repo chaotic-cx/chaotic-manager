@@ -1,17 +1,3 @@
-import to from "await-to-js";
-import type Notifier from "./notifier";
-
-export function splitJobId(jobId: string): {
-    target_repo: string;
-    pkgbase: string;
-} {
-    const split = jobId.split("/");
-    return {
-        target_repo: split[0],
-        pkgbase: split[1],
-    };
-}
-
 /**
  * Returns the current time in UTC following en-GB formatting.
  * @returns The current time in UTC.
@@ -36,13 +22,44 @@ export function createLiveLogUrl(baseLogUrl: string, pkgbase: string, timestamp:
 }
 
 /**
- * Helper function for sending a notification containing one string for the given event and logging
- * eventual errors gracefully.
- *
- * @param event The event to notify.
- * @param notifier The notifier instance to use
+ * Converts high-precision timer to milliseconds.
+ * @param start The object created by process.hrtime when starting the timer
+ * @returns Elapsed time in milliseconds
  */
-export async function createTrivialNotification(event: string, notifier: Notifier): Promise<void> {
-    const [err]: [Error, undefined] | [null, void] = await to(notifier.notify(event));
-    if (err) console.error(err);
+export function getDurationInMilliseconds(start: [number, number]): number {
+    const NS_PER_SEC = 1e9;
+    const NS_TO_MS = 1e6;
+    const diff = process.hrtime(start);
+
+    return (diff[0] * NS_PER_SEC + diff[1]) / NS_TO_MS;
+}
+
+/**
+ * Generate a Moleculer nodeId for all nodes depending on the main command provided.
+ * @param command The command derived from the main options.
+ * @returns The final nodeId to use.
+ */
+export function generateNodeId(command: string) {
+    let id = "chaotic-";
+    switch (command) {
+        case "database":
+            id += "database";
+            break;
+        case "builder":
+            id += "builder";
+            break;
+        case "schedule":
+            id += "scheduler";
+            break;
+        case "auto-repo-remove":
+            id += "auto-remover";
+            break;
+        case "web":
+            id += "web-server";
+            break;
+    }
+
+    // This prevents broker shutdowns due to double ids
+    id += "-" + Math.random().toString(36).substring(2, 7);
+    return id;
 }

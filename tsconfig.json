@@ -10,5 +10,14 @@
         "strict": true,
         "skipLibCheck": true
     },
-    "exclude": ["eslint.config.mjs", "dist", "jest.config.ts", "src/public", "temp", "tests", "webpack.config.js"]
+    "exclude": [
+        "eslint.config.mjs",
+        "dist",
+        "jest.config.ts",
+        "src/public",
+        "temp",
+        "tests",
+        "webpack.config.js",
+        "docs"
+    ]
 }

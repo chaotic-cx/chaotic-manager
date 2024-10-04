@@ -32,4 +32,4 @@ if [ -n "$REDIS_SSH_HOST" ]; then
     echo "Tunnel established"
 fi
 
-node /app/index.js "$@"
+exec node /app/index.js "$@"

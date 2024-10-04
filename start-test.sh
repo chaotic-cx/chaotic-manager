@@ -1,25 +1,19 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -e
 
-set -ex
-
-pushd builder-container
-./build-test-container.sh
-popd
-
-SHARED_PATH="$(pwd)/temp/shared"
-REPO_PATH="$(pwd)/temp/repo_root"
-LANDING_ZONE_PATH="$(pwd)/temp/landing_zone"
-GPG_PATH="$(pwd)/gpg"
-DATABASE_HOST="127.0.0.1"
-DATABASE_PORT=2891
-DATABASE_USER="package-deployer"
-BUILDER_HOSTNAME="chaotic-dev"
+if [ -z "$1" ]; then
+    echo "Usage 1: bash start-dev.sh docker"
+    echo " -> Uses docker-compose to start the development environment using Docker containers in a configuration that matches production."
+    echo "Usage 2: bash start-dev.sh native"
+    echo " -> Uses tsc-watch to start the development environment natively. This responds to code changes instantly."
+    echo " -> However, it still uses Docker to set up the landing_zone."
+    exit 1
+fi
 
 chmod 600 sshkey
 sshkey="$(ssh-keygen -y -t ed25519 -f ./sshkey)"
 
 cat > ./docker-compose.yml << EOM
-version: "3"
 services:
     openssh-server:
         container_name: openssh-server
@@ -39,6 +33,23 @@ services:
             - ./temp/landing_zone:$(pwd)/temp/landing_zone
         image: lscr.io/linuxserver/openssh-server:latest
         entrypoint: bash -c "chown -R 1000:1000 '$(pwd)/temp/landing_zone' && exec /init"
+EOM
+
+if [ "$1" == "docker" ]; then
+    BUILDER_HOSTNAME="chaotic-dev"
+    DATABASE_HOST="127.0.0.1"
+    DATABASE_PORT=2891
+    DATABASE_USER="package-deployer"
+    GPG_PATH="$(pwd)/gpg"
+    LANDING_ZONE_PATH="$(pwd)/temp/landing_zone"
+    REPO_PATH="$(pwd)/temp/repo_root"
+    SHARED_PATH="$(pwd)/temp/shared"
+
+    pushd builder-container
+    ./build-test-container.sh
+    popd
+
+    cat >> ./docker-compose.yml << EOM
     chaotic-runner:
         network_mode: host
         volumes:
@@ -52,6 +63,7 @@ services:
             - REDIS_SSH_USER=${DATABASE_USER}
             - NODE_ENV=development
             - BUILDER_HOSTNAME=${BUILDER_HOSTNAME}
+            - BUILDER_CLASS=1
         image: registry.gitlab.com/garuda-linux/tools/chaotic-manager/manager
         command: builder
     chaotic-database:
@@ -73,10 +85,28 @@ services:
         command: database --web-port 8080
 EOM
 
-#             - PACKAGE_REPOS={"garuda":{"url":"https://gitlab.com/garuda-linux/pkgbuilds"}}
+    docker build -t registry.gitlab.com/garuda-linux/tools/chaotic-manager/manager .
+fi
 
-docker build -t registry.gitlab.com/garuda-linux/tools/chaotic-manager/manager .
+docker compose up &
+sleep 10
 
-docker compose up || true
+if [ "$1" == "native" ]; then
+    echo "BUILDER_HOSTNAME=chaotic-test-builder
+DATABASE_HOST=127.0.0.1
+DATABASE_PORT=2891
+DATABASE_USER=package-deployer
+GPG_PATH='$(pwd)/gpg'
+LANDING_ZONE_PATH='$(pwd)/temp/landing_zone'
+LOGS_URL=https://localhost:8080/logs/logs.html
+NODE_ENV=development
+REPO_PATH='$(pwd)/temp/repo_root'
+SHARED_PATH='$(pwd)/temp/shared'" >.env
+
+    yarn start:dev &
+    yarn start:dev-builder &
+fi
+
+( trap exit SIGINT ; read -r -d '' _ </dev/tty )
 docker compose down
 rm docker-compose.yml
