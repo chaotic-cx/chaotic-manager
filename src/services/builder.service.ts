@@ -172,10 +172,11 @@ export class BuilderService extends Service {
 
                 const sshlogger = new SshLogger();
                 try {
+                    // Prefer override values from the environment
                     this.scpClient = await Client({
-                        host: String(data.upload_info.database.ssh.host),
-                        port: Number(data.upload_info.database.ssh.port),
-                        username: String(data.upload_info.database.ssh.user),
+                        host: String(process.env.DATABASE_HOST || data.upload_info.database.ssh.host),
+                        port: Number(process.env.DATABASE_PORT || data.upload_info.database.ssh.port),
+                        username: String(process.env.DATABASE_USER || data.upload_info.database.ssh.user),
                         privateKey: fs.readFileSync("sshkey"),
                         debug: sshlogger.log.bind(sshlogger),
                     });
