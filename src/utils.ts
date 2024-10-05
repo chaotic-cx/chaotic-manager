@@ -1,3 +1,6 @@
+import type { CoordinatorJob } from "./types";
+import { URL } from "url";
+
 /**
  * Returns the current time in UTC following en-GB formatting.
  * @returns The current time in UTC.
@@ -62,4 +65,17 @@ export function generateNodeId(command: string) {
     // This prevents broker shutdowns due to double ids
     id += "-" + Math.random().toString(36).substring(2, 7);
     return id;
+}
+
+/**
+ * Returns the URL and other information for the log of a job.
+ * @param job The job to get the log for.
+ * @param baseLogUrl The base URL for the logs.
+ * @returns The URL and other information for the log.
+ */
+export function getLogUrl(job: CoordinatorJob, baseLogUrl: string) {
+    const url = new URL(baseLogUrl.toString());
+    url.searchParams.set("timestamp", job.timestamp.toString());
+    url.searchParams.set("id", job.pkgbase);
+    return url.toString();
 }

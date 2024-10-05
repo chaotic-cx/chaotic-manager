@@ -332,6 +332,7 @@ export class WebService extends Service {
                     name: value.jobData.toId(),
                     node: value.node?.match(/\b.*(?=-\w{5})\b/)![0]!,
                     build_class: value.buildClass,
+                    liveLog: value.liveLogUrl,
                 });
             } else {
                 statsReturn.waiting.count += 1;

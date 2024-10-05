@@ -25,7 +25,7 @@ import {
     type MetricsGaugeContext,
     type SuccessNotificationParams,
 } from "../types";
-import { currentTime } from "../utils";
+import { currentTime, getLogUrl } from "../utils";
 import { MoleculerConfigCommonService } from "./moleculer.config";
 
 export class CoordinatorTrackedJob extends CoordinatorJob {
@@ -89,6 +89,7 @@ export interface QueuedJob {
     jobData: CoordinatorJobSavable;
     node?: string;
     status: JobStatus;
+    liveLogUrl?: string;
 }
 
 export type QueueStatus = QueuedJob[];
@@ -866,6 +867,7 @@ export class CoordinatorService extends Service {
                 node: job.node,
                 buildClass: job.build_class,
                 jobData: job.toSavable(),
+                liveLogUrl: this.base_logs_url ? getLogUrl(job, this.base_logs_url) : undefined,
             });
         });
 

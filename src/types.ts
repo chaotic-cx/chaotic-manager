@@ -64,7 +64,7 @@ export type PackagesReturnObject = Record<
 export type StatsReturnObject = {
     active: {
         count: number;
-        packages: { name: string; node: string; build_class: number | string }[];
+        packages: { name: string; node: string; build_class: number | string; liveLog?: string }[];
     };
     waiting: {
         count: number;
