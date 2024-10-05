@@ -85,9 +85,10 @@ export interface TrackedJobs {
 export type JobStatus = "active" | "queued";
 
 export interface QueuedJob {
-    status: JobStatus;
+    buildClass: number;
     jobData: CoordinatorJobSavable;
     node?: string;
+    status: JobStatus;
 }
 
 export type QueueStatus = QueuedJob[];
@@ -863,6 +864,7 @@ export class CoordinatorService extends Service {
             queue.push({
                 status: job.node ? "active" : "queued",
                 node: job.node,
+                buildClass: job.build_class,
                 jobData: job.toSavable(),
             });
         });

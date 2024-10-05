@@ -64,17 +64,17 @@ export type PackagesReturnObject = Record<
 export type StatsReturnObject = {
     active: {
         count: number;
-        packages: { name: string, node: string }[];
+        packages: { name: string; node: string; build_class: number | string }[];
     };
     waiting: {
         count: number;
-        packages: { name: string }[];
+        packages: { name: string; build_class: number }[];
     };
     idle: {
         count: number;
-        nodes: string[];
-    }
-}
+        nodes: { name: string; build_class: number }[];
+    };
+};
 
 export interface MetricsReturnObject {
     builder_queue: {

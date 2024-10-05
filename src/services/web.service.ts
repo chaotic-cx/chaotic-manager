@@ -314,7 +314,10 @@ export class WebService extends Service {
                 count: outNodes ? outNodes.length : 0,
                 nodes: outNodes
                     ? outNodes.map((node) => {
-                          return node.id.match(/\b.*(?=-\w{5})\b/)![0];
+                          return {
+                              name: node.id.match(/\b.*(?=-\w{5})\b/)![0],
+                              build_class: node.metadata?.build_class || "unknown",
+                          };
                       })
                     : [],
             },
@@ -328,10 +331,11 @@ export class WebService extends Service {
                 statsReturn.active.packages?.push({
                     name: value.jobData.toId(),
                     node: value.node?.match(/\b.*(?=-\w{5})\b/)![0]!,
+                    build_class: value.buildClass,
                 });
             } else {
                 statsReturn.waiting.count += 1;
-                statsReturn.waiting.packages?.push({ name: value.jobData.toId() });
+                statsReturn.waiting.packages?.push({ name: value.jobData.toId(), build_class: value.buildClass });
             }
         });
 
