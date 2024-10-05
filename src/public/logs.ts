@@ -39,6 +39,9 @@ async function setup(): Promise<void> {
     term.loadAddon(fitAddon);
     term.open(termdiv);
 
+    const viewPort = document.getElementsByClassName("xterm-viewport")[0];
+    viewPort.setAttribute("style", "scrollbar-color: #f5c2e7 #1e1e2e");
+
     if ("ontouchstart" in window) {
         term.element!.addEventListener("focusin", (): void => {
             term.blur();
