@@ -307,30 +307,31 @@ export class WebService extends Service {
             return;
         }
 
-        const statsReturn: StatsReturnObject = [
-            { active: { count: 0, packages: [] } },
-            { waiting: { count: 0, packages: [] } },
-            {
-                idle: {
-                    count: outNodes ? outNodes.length : 0,
-                    nodes: outNodes
-                        ? outNodes.map((node) => {
-                              return node.id.match(/\b.*(?=-\w{5})\b/)![0];
-                          })
-                        : undefined,
-                },
+        const statsReturn: StatsReturnObject = {
+            active: { count: 0, packages: [] },
+            waiting: { count: 0, packages: [] },
+            idle: {
+                count: outNodes ? outNodes.length : 0,
+                nodes: outNodes
+                    ? outNodes.map((node) => {
+                          return node.id.match(/\b.*(?=-\w{5})\b/)![0];
+                      })
+                    : [],
             },
-        ];
+        };
         this.chaoticLogger.debug(outStats);
         this.chaoticLogger.debug(statsReturn);
 
         outStats.forEach((value) => {
             if (value.status === "active") {
-                statsReturn[0].active.count += 1;
-                statsReturn[0].active.packages?.push({ name: value.jobData.toId(), node: value.node });
+                statsReturn.active.count += 1;
+                statsReturn.active.packages?.push({
+                    name: value.jobData.toId(),
+                    node: value.node?.match(/\b.*(?=-\w{5})\b/)![0]!,
+                });
             } else {
-                statsReturn[1].waiting.count += 1;
-                statsReturn[1].waiting.packages?.push({ name: value.jobData.toId() });
+                statsReturn.waiting.count += 1;
+                statsReturn.waiting.packages?.push({ name: value.jobData.toId() });
             }
         });
 

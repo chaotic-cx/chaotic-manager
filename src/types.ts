@@ -61,14 +61,20 @@ export type PackagesReturnObject = Record<
     }
 >[];
 
-export type StatsReturnObject = Record<
-    string,
-    {
+export type StatsReturnObject = {
+    active: {
         count: number;
-        packages?: { node?: string; name: string }[];
-        nodes?: string[];
+        packages: { name: string, node: string }[];
+    };
+    waiting: {
+        count: number;
+        packages: { name: string }[];
+    };
+    idle: {
+        count: number;
+        nodes: string[];
     }
->[];
+}
 
 export interface MetricsReturnObject {
     builder_queue: {
