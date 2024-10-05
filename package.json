@@ -7,6 +7,7 @@
     "private": true,
     "dependencies": {
         "@xterm/addon-fit": "^0.10.0",
+        "@xterm/addon-webgl": "^0.18.0",
         "@xterm/xterm": "^5.5.0",
         "async-mutex": "^0.5.0",
         "await-timeout": "^1.1.1",

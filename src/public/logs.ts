@@ -1,5 +1,6 @@
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
+import { WebglAddon } from "@xterm/addon-webgl";
 import "@xterm/xterm/css/xterm.css";
 
 async function setup(): Promise<void> {
@@ -37,10 +38,17 @@ async function setup(): Promise<void> {
     });
     const fitAddon: FitAddon = new FitAddon();
     term.loadAddon(fitAddon);
+
+    const webglAddon: WebglAddon = new WebglAddon();
+    webglAddon.onContextLoss(() => {
+        webglAddon.dispose();
+    });
+    term.loadAddon(webglAddon);
+
     term.open(termdiv);
 
-    const viewPort = document.getElementsByClassName("xterm-viewport")[0];
-    viewPort.setAttribute("style", "scrollbar-color: #f5c2e7 #1e1e2e");
+    const viewPort = document.getElementsByClassName("xterm-viewport")[0] as HTMLElement;
+    viewPort.setAttribute("style", "background-color: #1e1e2e; scrollbar-color: #f5e0dc #1e1e2e");
 
     if ("ontouchstart" in window) {
         term.element!.addEventListener("focusin", (): void => {
