@@ -65,8 +65,8 @@ export type StatsReturnObject = Record<
     string,
     {
         count: number;
+        packages?: { node?: string; name: string }[];
         nodes?: string[];
-        packages: (string | undefined)[];
     }
 >[];
 

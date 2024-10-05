@@ -130,6 +130,7 @@ export class CoordinatorService extends Service {
             actions: {
                 addJobsToQueue: this.addJobsToQueue,
                 autoRepoRemove: this.autoRepoRemove,
+                getAvailableNodes: this.getAvailableNodes,
                 getCurrentQueue: this.getQueue,
                 getQueue: this.getQueue,
                 jobExists: this.jobExists,

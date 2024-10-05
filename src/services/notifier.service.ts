@@ -84,7 +84,7 @@ export class NotifierService extends Service {
     async createFailedBuildNotification(ctx: Context): Promise<void> {
         const params = ctx.params as FailureNotificationParams;
         try {
-            let text = `${params.event} on ${params.node?.match(/\b.*(?=-\w{5})\b/)}:\n > ${params.pkgbase}`;
+            let text = `*${params.event} on ${params.node?.match(/\b.*(?=-\w{5})\b/)}:*\n > ${params.pkgbase}`;
 
             if (this.base_logs_url !== undefined) {
                 // We use the non-live logs URL here to preserve functionality on mobile devices.
