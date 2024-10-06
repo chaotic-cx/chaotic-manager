@@ -222,6 +222,8 @@ export class CoordinatorService extends Service {
                                 event: `📣 New deployment to ${job.target_repo}`,
                                 node: job.node,
                                 packages: ret.packages!,
+                                pkgbase: job.pkgbase,
+                                timestamp: job.timestamp,
                             };
                             metricsParams.status = BuildStatus.SUCCESS;
                             notificationPromises.push(

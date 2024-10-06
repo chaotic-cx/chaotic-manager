@@ -223,6 +223,8 @@ export interface SuccessNotificationParams {
     event: string;
     node: string | undefined;
     packages: string[];
+    pkgbase: string;
+    timestamp: number;
 }
 
 export interface FailureNotificationParams {

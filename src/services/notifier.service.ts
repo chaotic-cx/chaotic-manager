@@ -67,7 +67,9 @@ export class NotifierService extends Service {
         try {
             let text = `*${params.event} from ${getPureNodeName(params.node!)}:*\n`;
             for (const pkg of params.packages) {
-                text += ` > ${pkg.replace(/\.pkg.tar.zst$/, "")}\n`;
+                const logUrl = this.getLogUrl(params.pkgbase, params.timestamp);
+                const pkgname = pkg.replace(/\.pkg.tar.zst$/, "");
+                text += ` > [${pkgname}](${logUrl})\n`;
             }
             this.chaoticLogger.debug(`Sending deployment notification.`);
             this.chaoticLogger.debug(params);
@@ -87,11 +89,9 @@ export class NotifierService extends Service {
         try {
             let text = `*${params.event} on ${getPureNodeName(params.node!)}:*\n > ${params.pkgbase}`;
 
-            if (this.base_logs_url !== undefined) {
-                // We use the non-live logs URL here to preserve functionality on mobile devices.
-                const base_logs_url_api = this.base_logs_url.split("logs.html")[0] + `api/logs`;
-                const logsUrl = `${base_logs_url_api}/${params.pkgbase}/${params.timestamp}`;
-                text += ` - [logs](${logsUrl})`;
+            const logUrl = this.getLogUrl(params.pkgbase, params.timestamp);
+            if (logUrl !== undefined) {
+                text += ` - [logs](${logUrl})`;
             }
 
             // If we have a package_repos object, as well as a commit hash, we can add a link to the commit.
@@ -129,5 +129,20 @@ export class NotifierService extends Service {
         this.chaoticLogger.debug(params);
         const [err]: [Error, undefined] | [null, void] = await to(this.notify({ message: params.message }));
         if (err) this.chaoticLogger.error(err);
+    }
+
+    /**
+     * Returns the URL to the logs for a given package and timestamp.
+     * @param pkgbase The package base name.
+     * @param timestamp The timestamp of the build.
+     * @returns The URL to the logs or undefined if the URL is not set.
+     * @private
+     */
+    private getLogUrl(pkgbase: string, timestamp: number): string | undefined {
+        // We use the non-live logs URL here to preserve functionality on mobile devices.
+        if (this.base_logs_url !== undefined) {
+            const base_logs_url_api = this.base_logs_url.split("logs.html")[0] + `api/logs`;
+            return `${base_logs_url_api}/${pkgbase}/${timestamp}`;
+        }
     }
 }
