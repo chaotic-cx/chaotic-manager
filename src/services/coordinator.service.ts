@@ -411,13 +411,18 @@ export class CoordinatorService extends Service {
      * @private
      */
     private async assignJobs(): Promise<void> {
-        if (!this.active) return;
+        this.chaoticLogger.info("Assigning jobs to available builder nodes...");
+        if (!this.active) {
+            this.chaoticLogger.warn("Coordinator is not active, skipping job assignment.");
+            return;
+        }
         await this.mutex
             .runExclusive(async () => {
                 // Fetch the list of available builder nodes
                 const available_nodes: BrokerNode[] = await this.getAvailableNodes();
 
                 if (available_nodes.length == 0) {
+                    this.chaoticLogger.warn("No builder nodes available, skipping job assignment.");
                     return;
                 }
 
@@ -427,10 +432,12 @@ export class CoordinatorService extends Service {
                 for (const node of available_nodes) {
                     const jobs: CoordinatorTrackedJob[] = this.getPossibleJobs(graph, node.metadata.build_class);
                     if (jobs.length == 0) {
+                        this.chaoticLogger.info(`No jobs available for node ${node.id}, skipping.`);
                         continue;
                     }
                     const job: CoordinatorTrackedJob | undefined = jobs.shift();
                     if (!job) {
+                        this.chaoticLogger.error(`No available job for ${node.id}, skipping.`);
                         continue;
                     }
 
