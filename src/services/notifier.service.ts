@@ -1,7 +1,7 @@
 import { to } from "await-to-js";
 import { Context, type LoggerInstance, Service, type ServiceBroker } from "moleculer";
 import ChaoticTelegramBot from "../telegram-bot";
-import type { FailureNotificationParams, GenericNotificationParams, SuccessNotificationParams } from "../types";
+import type { DeploymentNotificationParams, GenericNotificationParams } from "../types";
 import { MoleculerConfigCommonService } from "./moleculer.config";
 import { getPureNodeName } from "../utils";
 
@@ -34,8 +34,7 @@ export class NotifierService extends Service {
             name: "notifier",
 
             actions: {
-                notifyPackages: this.createDeploymentNotification,
-                notifyFailure: this.createFailedBuildNotification,
+                notifyDeployment: this.createDeploymentNotification,
                 notifyGeneric: this.createTrivialNotification,
             },
             ...MoleculerConfigCommonService,
@@ -63,29 +62,7 @@ export class NotifierService extends Service {
      * @returns A promise that resolves when the notification is sent.
      */
     async createDeploymentNotification(ctx: Context): Promise<void> {
-        const params = ctx.params as SuccessNotificationParams;
-        try {
-            let text = `*${params.event} from ${getPureNodeName(params.node!)}:*\n`;
-            for (const pkg of params.packages) {
-                const logUrl = this.getLogUrl(params.pkgbase, params.timestamp);
-                const pkgname = pkg.replace(/\.pkg.tar.zst$/, "");
-                text += ` > [${pkgname}](${logUrl})\n`;
-            }
-            this.chaoticLogger.debug(`Sending deployment notification.`);
-            this.chaoticLogger.debug(params);
-            void this.createTrivialNotification({ message: text });
-        } catch (err) {
-            this.chaoticLogger.error(`Failed sending deployment notification: ${err}`);
-        }
-    }
-
-    /**
-     * Creates a notification text for a failed event.
-     * @param ctx The Moleculer context object
-     * @returns A promise that resolves when the notification is sent.
-     */
-    async createFailedBuildNotification(ctx: Context): Promise<void> {
-        const params = ctx.params as FailureNotificationParams;
+        const params = ctx.params as DeploymentNotificationParams;
         try {
             let text = `*${params.event} on ${getPureNodeName(params.node!)}:*\n > ${params.pkgbase}`;
 
@@ -107,7 +84,7 @@ export class NotifierService extends Service {
             } else {
                 text += "\n";
             }
-            this.chaoticLogger.debug(`Sending failure notification.`);
+            this.chaoticLogger.debug(`Sending deployment notification.`);
             this.chaoticLogger.debug(params);
             void this.createTrivialNotification({ message: text });
         } catch (err) {

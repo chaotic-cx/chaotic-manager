@@ -18,12 +18,11 @@ import {
     type Database_Action_AutoRepoRemove_Params,
     type Database_Action_fetchUploadInfo_Response,
     type DatabaseRemoveStatusReturn,
-    type FailureNotificationParams,
+    type DeploymentNotificationParams,
     type GenericNotificationParams,
     MAX_SHUTDOWN_TIME,
     type MetricsCounterLabels,
     type MetricsGaugeContext,
-    type SuccessNotificationParams,
 } from "../types";
 import { currentTime, getLogUrl } from "../utils";
 import { MoleculerConfigCommonService } from "./moleculer.config";
@@ -218,17 +217,19 @@ export class CoordinatorService extends Service {
                             );
                             job.logger.log(`Build job ${job.toId()} finished at ${currentTime()}...`);
 
-                            const notify_params: SuccessNotificationParams = {
+                            const notify_params: DeploymentNotificationParams = {
+                                commit: job.commit,
                                 event: `📣 New deployment to ${job.target_repo}`,
                                 node: job.node,
                                 packages: ret.packages!,
                                 pkgbase: job.pkgbase,
+                                source_repo_url: source_repo.getUrl(),
                                 timestamp: job.timestamp,
                             };
                             metricsParams.status = BuildStatus.SUCCESS;
                             notificationPromises.push(
-                                this.broker.call<void, SuccessNotificationParams>(
-                                    "notifier.notifyPackages",
+                                this.broker.call<void, DeploymentNotificationParams>(
+                                    "notifier.notifyDeployment",
                                     notify_params,
                                 ),
                             );
@@ -259,7 +260,7 @@ export class CoordinatorService extends Service {
                             job.logger.log(`Job ${job.toId()} failed`);
                             notificationPromises.push(source_repo.notify(job, "failed", "Build failed."));
 
-                            const notify_params: FailureNotificationParams = {
+                            const notify_params: DeploymentNotificationParams = {
                                 commit: job.commit,
                                 event: `🚨 Failed deploying to ${job.target_repo}`,
                                 node: job.node,
@@ -269,8 +270,8 @@ export class CoordinatorService extends Service {
                             };
                             metricsParams.status = BuildStatus.FAILED;
                             notificationPromises.push(
-                                this.broker.call<void, FailureNotificationParams>(
-                                    "notifier.notifyFailure",
+                                this.broker.call<void, DeploymentNotificationParams>(
+                                    "notifier.notifyDeployment",
                                     notify_params,
                                 ),
                             );
@@ -331,7 +332,7 @@ export class CoordinatorService extends Service {
                             notificationPromises.push(source_repo.notify(job, "failed", "Build timed out."));
                             job.logger.log(`Job ${job.toId()} reached a timeout during the build phase.`);
 
-                            const notify_params: FailureNotificationParams = {
+                            const notify_params: DeploymentNotificationParams = {
                                 commit: job.commit,
                                 event: `⏳ Build for ${job.target_repo} failed due to a timeout`,
                                 node: job.node,
@@ -340,8 +341,8 @@ export class CoordinatorService extends Service {
                                 timestamp: job.timestamp,
                             };
                             notificationPromises.push(
-                                this.broker.call<void, FailureNotificationParams>(
-                                    "notifier.notifyFailure",
+                                this.broker.call<void, DeploymentNotificationParams>(
+                                    "notifier.notifyDeployment",
                                     notify_params,
                                 ),
                             );
@@ -361,7 +362,7 @@ export class CoordinatorService extends Service {
                     notificationPromises.push(source_repo.notify(job, "failed", "Build failed."));
                     job.logger.log(`Job ${job?.toId()} failed`);
 
-                    const notify_params: FailureNotificationParams = {
+                    const notify_params: DeploymentNotificationParams = {
                         commit: job.commit,
                         event: `💥 The code blew up while deploying to ${job.target_repo}`,
                         node: job.node,
@@ -370,7 +371,10 @@ export class CoordinatorService extends Service {
                         timestamp: job.timestamp,
                     };
                     notificationPromises.push(
-                        this.broker.call<void, FailureNotificationParams>("notifier.notifyFailure", notify_params),
+                        this.broker.call<void, DeploymentNotificationParams>(
+                            "notifier.notifyDeployment",
+                            notify_params,
+                        ),
                     );
                     metricsParams.status = BuildStatus.SOFTWARE_FAILURE;
                     notificationPromises.push(
