@@ -16,7 +16,7 @@ import {
     type StatsReturnObject,
     type ValidMetrics,
 } from "../types";
-import { getDurationInMilliseconds } from "../utils";
+import { getDurationInMilliseconds, getPureNodeName } from "../utils";
 import type { QueueStatus, TrackedJobs } from "./coordinator.service";
 
 export class WebService extends Service {
@@ -315,8 +315,9 @@ export class WebService extends Service {
                 nodes: outNodes
                     ? outNodes.map((node) => {
                           return {
-                              name: node.id.match(/\b.*(?=-\w{5})\b/)![0],
-                              build_class: node.metadata?.build_class || "unknown",
+                              name: getPureNodeName(node.id),
+                              build_class:
+                                  node.metadata?.build_class !== undefined ? node.metadata?.build_class : "unknown",
                           };
                       })
                     : [],
@@ -330,7 +331,7 @@ export class WebService extends Service {
                 statsReturn.active.count += 1;
                 statsReturn.active.packages?.push({
                     name: value.jobData.toId(),
-                    node: value.node?.match(/\b.*(?=-\w{5})\b/)![0]!,
+                    node: getPureNodeName(value.node!),
                     build_class: value.buildClass,
                     liveLog: value.liveLogUrl,
                 });

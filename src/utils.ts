@@ -82,3 +82,12 @@ export function getLogUrl(job: CoordinatorJob, baseLogUrl: string) {
     url.searchParams.set("id", job.pkgbase);
     return url.toString();
 }
+
+/**
+ * Returns the pure node name from the full node name without the random string.
+ * @param nodeName The full node name.
+ * @returns The pure node name.
+ */
+export function getPureNodeName(nodeName: string): string {
+    return nodeName.match(/\b.*(?=-\w{5})\b/)![0];
+}

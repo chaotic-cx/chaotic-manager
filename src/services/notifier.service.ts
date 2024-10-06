@@ -3,6 +3,7 @@ import { Context, type LoggerInstance, Service, type ServiceBroker } from "molec
 import ChaoticTelegramBot from "../telegram-bot";
 import type { FailureNotificationParams, GenericNotificationParams, SuccessNotificationParams } from "../types";
 import { MoleculerConfigCommonService } from "./moleculer.config";
+import { getPureNodeName } from "../utils";
 
 /**
  * Notifier class to send messages to the implemented destinations.
@@ -64,7 +65,7 @@ export class NotifierService extends Service {
     async createDeploymentNotification(ctx: Context): Promise<void> {
         const params = ctx.params as SuccessNotificationParams;
         try {
-            let text = `*${params.event} from ${params.node?.match(/\b.*(?=-\w{5})\b/)}:*\n`;
+            let text = `*${params.event} from ${getPureNodeName(params.node!)}:*\n`;
             for (const pkg of params.packages) {
                 text += ` > ${pkg.replace(/\.pkg.tar.zst$/, "")}\n`;
             }
@@ -84,7 +85,7 @@ export class NotifierService extends Service {
     async createFailedBuildNotification(ctx: Context): Promise<void> {
         const params = ctx.params as FailureNotificationParams;
         try {
-            let text = `*${params.event} on ${params.node?.match(/\b.*(?=-\w{5})\b/)}:*\n > ${params.pkgbase}`;
+            let text = `*${params.event} on ${getPureNodeName(params.node!)}:*\n > ${params.pkgbase}`;
 
             if (this.base_logs_url !== undefined) {
                 // We use the non-live logs URL here to preserve functionality on mobile devices.
