@@ -78,7 +78,7 @@ export class NotifierService extends Service {
                     const commitUrl = `${params.source_repo_url}/-/commit/${params.commit}`;
                     text += ` - [commit](${commitUrl})\n`;
                 } else if (params.source_repo_url.includes("github.com")) {
-                    const commitUrl = `${params.source_repo_url}/commit/${params.commit}`;
+                    const commitUrl = `${params.source_repo_url}/commit/${params.commit.split(":")[0]}`;
                     text += ` - [commit](${commitUrl})\n`;
                 }
             } else {
