@@ -1,4 +1,3 @@
-import type { RequestOptions } from "https";
 import * as http from "node:http";
 import Timeout from "await-timeout";
 import to from "await-to-js";
@@ -68,7 +67,6 @@ export class WebService extends Service {
         this.app.get("/api/queue/metrics", cors(corsOptions), this.getCountMetrics.bind(this));
         this.app.get("/api/queue/packages", cors(corsOptions), this.getPackageStats.bind(this));
         this.app.get("/api/queue/stats", cors(corsOptions), this.getQueueStats.bind(this));
-        this.app.get("/metrics", cors(corsOptions), this.getPrometheusData.bind(this));
 
         // Error handling
         this.app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
@@ -180,46 +178,6 @@ export class WebService extends Service {
         }
         req.params.timestamp = out;
         return await this.getOrStreamLog(req, res);
-    }
-
-    async getPrometheusData(req: Request, res: Response) {
-        const options: RequestOptions = {
-            host: "127.0.0.1",
-            port: 3030,
-            path: "/metrics",
-            method: "GET",
-            headers: req.headers,
-        };
-        const forwardRequest = http
-            .request(options, (pres) => {
-                pres.setEncoding("utf8");
-                if (pres.statusCode != null) {
-                    res.writeHead(pres.statusCode);
-                }
-                pres.on("data", (chunk) => {
-                    res.write(chunk);
-                });
-                pres.on("close", () => {
-                    res.end();
-                });
-                pres.on("end", () => {
-                    res.end();
-                });
-            })
-            .on("error", (err: Error) => {
-                this.chaoticLogger.error(err.message);
-                try {
-                    res.writeHead(500);
-                    res.write(err.message);
-                } catch (err: any) {
-                    this.chaoticLogger.error(err.message);
-                }
-                res.end();
-            });
-
-        res.setHeader("Cache-Control", "no-cache");
-        res.setHeader("Content-Type", "text/plain");
-        forwardRequest.end();
     }
 
     async getCountMetrics(req: Request, res: Response) {
