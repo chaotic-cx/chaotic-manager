@@ -8,7 +8,7 @@ import { BuilderService } from "./services/builder.service";
 import CoordinatorService from "./services/coordinator.service";
 import { DatabaseService } from "./services/database.service";
 import { MetricsService } from "./services/metrics.service";
-import { MoleculerConfigCommon, MoleculerConfigLog, enableMetrics } from "./services/moleculer.config";
+import { enableMetrics, MoleculerConfigCommon, MoleculerConfigLog } from "./services/moleculer.config";
 import { NotifierService } from "./services/notifier.service";
 import { WebService } from "./services/web.service";
 import { BuildClass } from "./types";
@@ -65,6 +65,8 @@ async function main(): Promise<void> {
     });
 
     const chaoticLogger = broker.getLogger("CHAOTIC");
+    chaoticLogger.info(`Starting node ${nodeID}...`);
+    chaoticLogger.info(broker.metadata);
 
     switch (mainOptions.command) {
         case "schedule": {

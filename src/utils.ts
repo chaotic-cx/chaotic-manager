@@ -43,6 +43,11 @@ export function getDurationInMilliseconds(start: [number, number]): number {
  * @returns The final nodeId to use.
  */
 export function generateNodeId(command: string) {
+    // This prevents broker shutdowns due to double ids in case we have overlapping nodeIds.
+    const randomString = Math.random().toString(36).substring(2, 7);
+
+    if (process.env.BUILDER_HOSTNAME) return process.env.BUILDER_HOSTNAME + "-" + randomString;
+
     let id = "chaotic-";
     switch (command) {
         case "database":
@@ -62,9 +67,7 @@ export function generateNodeId(command: string) {
             break;
     }
 
-    // This prevents broker shutdowns due to double ids
-    id += "-" + Math.random().toString(36).substring(2, 7);
-    return id;
+    return id + "-" + randomString;
 }
 
 /**

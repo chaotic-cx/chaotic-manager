@@ -74,7 +74,8 @@ export class BuildsRedisLogger {
                     line.startsWith("Successfully added packages ")
                 )
             ) {
-                this.buildLogger.info(line);
+                if (err) this.buildLogger.error(line);
+                else this.buildLogger.info(line);
             }
         });
     }
