@@ -72,22 +72,27 @@ async function setup(): Promise<void> {
 
     // Parse querystring
     const query: URLSearchParams = new URLSearchParams(window.location.search);
-    let id: string;
 
     // Print error if there is no ID
-    if (!query.has("id") || !/^[a-zA-Z0-9-_]+$/.test((id = query.get("id") as string))) {
+    if (!query.has("id")) {
         document.title = "Chaotic logs: invalid ID";
-        term.writeln("\x1B[1;3;31mID is invalid or no ID provided. Did you copy the querystring?\x1B[0m ");
+        term.writeln("\x1B[1;3;31mNo ID provided. Did you copy the querystring?\x1B[0m ");
         return;
     }
 
-    let url: string = "api/logs/" + id;
-    let timestamp: string;
-    if (query.has("timestamp") && /^\d+$/.test((timestamp = query.get("timestamp") as string))) url += "/" + timestamp;
+    let id: string = query.get("id") as string;
+    let timestamp: string | null = query.get("timestamp");
+
+    let url: URL = new URL("api/logs", window.location.href);
+    url.pathname += `/${id}`;
+    if (timestamp)
+        url.pathname += `/${timestamp}`;
 
     let is_finished = false;
     await fetch(url).then(async (response: Response): Promise<void> => {
-        document.title = `Chaotic logs: ${id} - ${timestamp}`;
+        document.title = `Chaotic logs: ${id}`;
+        if (timestamp)
+            document.title += `- ${timestamp}`;
         if (!response.body) {
             term.writeln("\x1B[1;3;31mError: No response body\x1B[0m ");
             is_finished = true;

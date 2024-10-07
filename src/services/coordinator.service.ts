@@ -24,7 +24,7 @@ import {
     type MetricsCounterLabels,
     type MetricsGaugeContext,
 } from "../types";
-import { currentTime, getLogUrl } from "../utils";
+import { currentTime, getLogUrl, isValidPkgbase } from "../utils";
 import { MoleculerConfigCommonService } from "./moleculer.config";
 
 export class CoordinatorTrackedJob extends CoordinatorJob {
@@ -490,6 +490,10 @@ export class CoordinatorService extends Service {
         const redis: Redis = this.redis_connection_manager.getClient();
 
         for (const pkg of data.packages) {
+            if (!isValidPkgbase(pkg.pkgbase)) {
+                this.chaoticLogger.error(`Refusing to queue pkgbase: ${pkg.pkgbase}`);
+                continue;
+            }
             const logger = new BuildsRedisLogger(redis, this.broker, "BUILD");
             logger.from(pkg.pkgbase, timestamp);
             jobs.push(

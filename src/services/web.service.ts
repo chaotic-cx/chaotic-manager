@@ -15,7 +15,7 @@ import {
     type StatsReturnObject,
     type ValidMetrics,
 } from "../types";
-import { getDurationInMilliseconds, getPureNodeName } from "../utils";
+import { getDurationInMilliseconds, getPureNodeName, isValidPkgbase } from "../utils";
 import type { QueueStatus, TrackedJobs } from "./coordinator.service";
 
 export class WebService extends Service {
@@ -95,6 +95,13 @@ export class WebService extends Service {
         });
     }
 
+    private invalidLogRequest(res: Response): void {
+        this.serverError(res, 400, "\x1B[1;3;31mParameters are invalid or no parameters provided. Did you copy the querystring?\x1B[0m ");
+    }
+    private notFoundLogRequest(res: Response): void {
+        this.serverError(res, 404, "\x1B[1;3;31mBuild task not found\x1B[0m ");
+    }
+
     private serverError(res: Response, code: number, message: string): void {
         res.setHeader("Cache-Control", "no-cache");
         res.setHeader("Content-Type", "text/plain");
@@ -106,14 +113,12 @@ export class WebService extends Service {
         res.setHeader("Content-Type", "text/plain");
         res.setHeader("Connection", "keep-alive");
 
-        // Get variables, ensuring also packages with "+" in the name are getting parsed validly
-        const id: string = req.params.id.replaceAll(/%2B/g, "+");
+        const id: string = req.params.id;
         const timestamp: string = req.params.timestamp;
 
-        // Verify if the timestamp is a number and if id is alphanumerical or -/_ via regex
-        if (!/^\d+$/.test(timestamp) || !/^[a-zA-Z0-9-_+]+$/.test(id)) {
-            res.status(400).send("Invalid timestamp");
-            return;
+        // Verify if the timestamp is a number and if id is valid
+        if (!/^\d+$/.test(timestamp) || !isValidPkgbase(id)) {
+            return this.invalidLogRequest(res);
         }
 
         const unref: any[] = [];
@@ -139,8 +144,7 @@ export class WebService extends Service {
             ]),
         );
         if (err || !out || !out[0]) {
-            this.serverError(res, 404, "Not found");
-            return;
+            return this.notFoundLogRequest(res);
         }
 
         res.write(out[0]);
@@ -171,10 +175,13 @@ export class WebService extends Service {
     }
 
     async getOrStreamLogFromID(req: Request, res: Response) {
+        // Verify if the id is valid
+        if (!isValidPkgbase(req.params.id)) {
+            return this.invalidLogRequest(res);
+        }
         const [err, out] = await to(this.connection.get("build-logs:" + req.params.id + ":default"));
         if (err || !out) {
-            this.serverError(res, 404, "Not found");
-            return;
+            return this.notFoundLogRequest(res);
         }
         req.params.timestamp = out;
         return await this.getOrStreamLog(req, res);

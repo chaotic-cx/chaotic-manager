@@ -91,3 +91,12 @@ export function getLogUrl(job: CoordinatorJob, baseLogUrl: string) {
 export function getPureNodeName(nodeName: string): string {
     return nodeName.match(/\b.*(?=-\w{5})\b/)![0];
 }
+
+/**
+ * Returns a true/false value indicating if a pkgbase is valid.
+ * @param pkgbase The pkgbase to check.
+ * @returns True if the pkgbase is valid, false otherwise.
+ */
+export function isValidPkgbase(pkgbase: string): boolean {
+    return /^[a-z0-9-_+]+$/.test(pkgbase);
+}

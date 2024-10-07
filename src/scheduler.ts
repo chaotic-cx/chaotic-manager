@@ -5,6 +5,7 @@ import type {
     Coordinator_Action_AutoRepoRemove_Params,
     Coordinator_Action_PackageMetaData_List,
 } from "./types";
+import { isValidPkgbase } from "./utils";
 
 export async function schedulePackages(
     broker: ServiceBroker,
@@ -47,6 +48,11 @@ export async function schedulePackages(
 
     for (const pkg of packages) {
         const [pkgbase, build_class] = pkg.split("/");
+
+        if (!isValidPkgbase(pkgbase)) {
+            chaoticLogger.warn(`Refusing to queue pkgbase: ${pkgbase}`);
+            continue;
+        }
 
         const dependencies = package_dependency_map[pkgbase];
         packageList.push({
