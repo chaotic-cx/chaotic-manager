@@ -50,9 +50,14 @@ export class BuilderService extends Service {
     private cancelledCode: BuildStatus.CANCELED | BuildStatus.CANCELED_REQUEUE = BuildStatus.CANCELED;
     private active = true;
 
-    constructor(broker: ServiceBroker, private redis_connection_manager: RedisConnectionManager, SHARED_PATH: string) {
+    constructor(
+        broker: ServiceBroker,
+        private redis_connection_manager: RedisConnectionManager,
+        SHARED_PATH: string,
+    ) {
         super(broker);
-        this.shared_srcdest_cache = process.env.BUILDER_SRCDEST_CACHE_OVERRIDE || path.join(SHARED_PATH, "srcdest_cache");
+        this.shared_srcdest_cache =
+            process.env.BUILDER_SRCDEST_CACHE_OVERRIDE || path.join(SHARED_PATH, "srcdest_cache");
         this.shared_pkgout = path.join(SHARED_PATH, "pkgout");
         this.shared_sources = path.join(SHARED_PATH, "sources");
 
@@ -150,17 +155,6 @@ export class BuilderService extends Service {
                     };
                 }
 
-                // Remove any filler files from the equation
-                const file_list = fs.readdirSync(this.mountPkgout).filter((file): boolean => {
-                    const stats = fs.statSync(path.join(this.mountPkgout, file));
-                    return stats.isFile() && stats.size > 0;
-                });
-
-                if (file_list.length === 0) {
-                    logger.log(`No files were found in the build output directory.`);
-                    return { success: BuildStatus.FAILED };
-                }
-
                 if (err || out.StatusCode !== 0) {
                     if (!err && out.StatusCode === 13) {
                         return { success: BuildStatus.ALREADY_BUILT };
@@ -174,6 +168,17 @@ export class BuilderService extends Service {
                 } else {
                     logger.log(`Finished build. Uploading...`);
                     this.chaoticLogger.info(`Finished build for ${data.pkgbase}`);
+                }
+
+                // Remove any filler files from the equation
+                const file_list = fs.readdirSync(this.mountPkgout).filter((file): boolean => {
+                    const stats = fs.statSync(path.join(this.mountPkgout, file));
+                    return stats.isFile() && stats.size > 0;
+                });
+
+                if (file_list.length === 0) {
+                    logger.log(`No files were found in the build output directory.`);
+                    return { success: BuildStatus.FAILED };
                 }
 
                 const sshlogger = new SshLogger();
