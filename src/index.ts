@@ -126,7 +126,7 @@ async function main(): Promise<void> {
 
             chaoticLogger.info("Starting builder instance...");
 
-            broker.createService(new BuilderService(broker, redis_connection_manager));
+            broker.createService(new BuilderService(broker, redis_connection_manager, process.env.SHARED_PATH));
             broker.start();
             break;
         }

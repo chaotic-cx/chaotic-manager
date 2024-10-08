@@ -26,7 +26,6 @@ import { MoleculerConfigCommonService } from "./moleculer.config";
  */
 export class BuilderService extends Service {
     private mutex: Mutex = new Mutex();
-    private redis_connection_manager: RedisConnectionManager;
 
     private builder = {
         ci_code_skip: Number(process.env.CI_CODE_SKIP) || 123,
@@ -35,9 +34,9 @@ export class BuilderService extends Service {
         container_engine: process.env.CONTAINER_ENGINE ? "podman" : "docker",
     };
 
-    private shared_srcdest_cache: string = path.join(process.env.SHARED_PATH || "", "srcdest_cache");
-    private shared_pkgout: string = path.join(process.env.SHARED_PATH || "", "pkgout");
-    private shared_sources: string = path.join(process.env.SHARED_PATH || "", "sources");
+    private shared_srcdest_cache: string;
+    private shared_pkgout: string;
+    private shared_sources: string;
     private mountPkgout = "/shared/pkgout";
     private mountSrcdest = "/shared/srcdest_cache";
 
@@ -51,9 +50,11 @@ export class BuilderService extends Service {
     private cancelledCode: BuildStatus.CANCELED | BuildStatus.CANCELED_REQUEUE = BuildStatus.CANCELED;
     private active = true;
 
-    constructor(broker: ServiceBroker, redis_connection_manager: RedisConnectionManager) {
+    constructor(broker: ServiceBroker, private redis_connection_manager: RedisConnectionManager, SHARED_PATH: string) {
         super(broker);
-        this.redis_connection_manager = redis_connection_manager;
+        this.shared_srcdest_cache = process.env.BUILDER_SRCDEST_CACHE_OVERRIDE || path.join(SHARED_PATH, "srcdest_cache");
+        this.shared_pkgout = path.join(SHARED_PATH, "pkgout");
+        this.shared_sources = path.join(SHARED_PATH, "sources");
 
         this.parseServiceSchema({
             name: "builder",
@@ -155,7 +156,12 @@ export class BuilderService extends Service {
                     return stats.isFile() && stats.size > 0;
                 });
 
-                if (err || out.StatusCode !== 0 || file_list.length === 0) {
+                if (file_list.length === 0) {
+                    logger.log(`No files were found in the build output directory.`);
+                    return { success: BuildStatus.FAILED };
+                }
+
+                if (err || out.StatusCode !== 0) {
                     if (!err && out.StatusCode === 13) {
                         return { success: BuildStatus.ALREADY_BUILT };
                     } else if (out.StatusCode === this.builder.ci_code_skip) {
