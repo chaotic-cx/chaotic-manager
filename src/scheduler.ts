@@ -5,7 +5,7 @@ import type {
     Coordinator_Action_AutoRepoRemove_Params,
     Coordinator_Action_PackageMetaData_List,
 } from "./types";
-import { isValidPkgbase } from "./utils";
+import { isNumeric, isValidPkgbase } from "./utils";
 
 export async function schedulePackages(
     broker: ServiceBroker,
@@ -57,7 +57,7 @@ export async function schedulePackages(
         const dependencies = package_dependency_map[pkgbase];
         packageList.push({
             pkgbase,
-            build_class: !build_class ? null : (/^\d+$/.test(build_class) ? Number(build_class) : build_class),
+            build_class: !build_class ? null : isNumeric(build_class) ? Number(build_class) : build_class,
             dependencies: dependencies ? dependencies.dependencies : undefined,
             pkgnames: dependencies ? dependencies.pkgnames : undefined,
         });

@@ -432,7 +432,11 @@ export class CoordinatorService extends Service {
                 const upload_info: Database_Action_fetchUploadInfo_Response = await this.getUploadInfo();
 
                 for (const node of available_nodes) {
-                    const jobs: CoordinatorTrackedJob[] = this.getPossibleJobs(graph, node.metadata.build_class as number, getPureNodeName(node.id));
+                    const jobs: CoordinatorTrackedJob[] = this.getPossibleJobs(
+                        graph,
+                        node.metadata.build_class as number,
+                        getPureNodeName(node.id),
+                    );
                     if (jobs.length == 0) {
                         continue;
                     }
@@ -686,19 +690,21 @@ export class CoordinatorService extends Service {
      * @returns A list of possible jobs that can be assigned to the builder node.
      * @private
      */
-    private getPossibleJobs(graph: DepGraph<CoordinatorTrackedJob>, builder_class: number, node_name: string): CoordinatorTrackedJob[] {
+    private getPossibleJobs(
+        graph: DepGraph<CoordinatorTrackedJob>,
+        builder_class: number,
+        node_name: string,
+    ): CoordinatorTrackedJob[] {
         const jobs: CoordinatorTrackedJob[] = [];
         const nodes: string[] = graph.overallOrder(true);
 
         for (const node of nodes) {
             const job: CoordinatorTrackedJob = graph.getNodeData(node);
             // Skip jobs that are already assigned to a node
-            if (job.node)
-                continue;
-            if (typeof job.build_class === "number" && job.build_class <= builder_class)
+            if (job.node) continue;
+            if (typeof job.build_class === "number" && builder_class !== null && job.build_class <= builder_class)
                 jobs.push(job);
-            else if (typeof job.build_class === "string" && job.build_class === node_name)
-                jobs.push(job);
+            else if (typeof job.build_class === "string" && job.build_class === node_name) jobs.push(job);
         }
 
         return jobs;

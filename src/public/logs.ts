@@ -85,14 +85,12 @@ async function setup(): Promise<void> {
 
     let url: URL = new URL("api/logs", window.location.href);
     url.pathname += `/${id}`;
-    if (timestamp)
-        url.pathname += `/${timestamp}`;
+    if (timestamp) url.pathname += `/${timestamp}`;
 
     let is_finished = false;
     await fetch(url).then(async (response: Response): Promise<void> => {
         document.title = `Chaotic logs: ${id}`;
-        if (timestamp)
-            document.title += `- ${timestamp}`;
+        if (timestamp) document.title += `- ${timestamp}`;
         if (!response.body) {
             term.writeln("\x1B[1;3;31mError: No response body\x1B[0m ");
             is_finished = true;

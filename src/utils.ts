@@ -100,3 +100,12 @@ export function getPureNodeName(nodeName: string): string {
 export function isValidPkgbase(pkgbase: string): boolean {
     return /^[a-z0-9-_+]+$/.test(pkgbase);
 }
+
+/**
+ * Returns a true/false value indicating if a string only contains numbers.
+ * @param str The string to check.
+ * @returns True if the string only contains numbers, false otherwise.
+ */
+export function isNumeric(str: string): boolean {
+    return /^\d+$/.test(str);
+}

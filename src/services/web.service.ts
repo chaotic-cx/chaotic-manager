@@ -15,7 +15,7 @@ import {
     type StatsReturnObject,
     type ValidMetrics,
 } from "../types";
-import { getDurationInMilliseconds, getPureNodeName, isValidPkgbase } from "../utils";
+import { getDurationInMilliseconds, getPureNodeName, isNumeric, isValidPkgbase } from "../utils";
 import type { QueueStatus, TrackedJobs } from "./coordinator.service";
 
 export class WebService extends Service {
@@ -96,7 +96,11 @@ export class WebService extends Service {
     }
 
     private invalidLogRequest(res: Response): void {
-        this.serverError(res, 400, "\x1B[1;3;31mParameters are invalid or no parameters provided. Did you copy the querystring?\x1B[0m ");
+        this.serverError(
+            res,
+            400,
+            "\x1B[1;3;31mParameters are invalid or no parameters provided. Did you copy the querystring?\x1B[0m ",
+        );
     }
     private notFoundLogRequest(res: Response): void {
         this.serverError(res, 404, "\x1B[1;3;31mBuild task not found\x1B[0m ");
@@ -117,7 +121,7 @@ export class WebService extends Service {
         const timestamp: string = req.params.timestamp;
 
         // Verify if the timestamp is a number and if id is valid
-        if (!/^\d+$/.test(timestamp) || !isValidPkgbase(id)) {
+        if (!isNumeric(timestamp) || !isValidPkgbase(id)) {
             return this.invalidLogRequest(res);
         }
 

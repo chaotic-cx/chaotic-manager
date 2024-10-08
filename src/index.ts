@@ -12,7 +12,7 @@ import { enableMetrics, MoleculerConfigCommon, MoleculerConfigLog } from "./serv
 import { NotifierService } from "./services/notifier.service";
 import { WebService } from "./services/web.service";
 import { BuildClassNumber } from "./types";
-import { generateNodeId } from "./utils";
+import { generateNodeId, isNumeric } from "./utils";
 
 if (!process.env.NODE_ENV) process.env.NODE_ENV = "production";
 
@@ -49,7 +49,9 @@ async function main(): Promise<void> {
         metadata: {
             // Nodes can ONLY have number build_class values. The string version is exclusively for packages.
             build_class: process.env.BUILDER_CLASS
-                ? Number(process.env.BUILDER_CLASS)
+                ? isNumeric(process.env.BUILDER_CLASS)
+                    ? Number(process.env.BUILDER_CLASS)
+                    : null
                 : BuildClassNumber.Medium,
         },
         metrics: enableMetrics(mainOptions.command === "database"),
@@ -68,6 +70,11 @@ async function main(): Promise<void> {
     const chaoticLogger = broker.getLogger("CHAOTIC");
     chaoticLogger.info(`Starting node ${nodeID}...`);
     chaoticLogger.info(broker.metadata);
+
+    if (broker.metadata.build_class === null)
+        chaoticLogger.warn(
+            "BUILDER_CLASS is set to a non-numeric value. This builder will only build packages specificially assigned to it.",
+        );
 
     switch (mainOptions.command) {
         case "schedule": {
