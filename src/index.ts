@@ -11,7 +11,7 @@ import { MetricsService } from "./services/metrics.service";
 import { enableMetrics, MoleculerConfigCommon, MoleculerConfigLog } from "./services/moleculer.config";
 import { NotifierService } from "./services/notifier.service";
 import { WebService } from "./services/web.service";
-import { BuildClass } from "./types";
+import { BuildClassNumber } from "./types";
 import { generateNodeId } from "./utils";
 
 if (!process.env.NODE_ENV) process.env.NODE_ENV = "production";
@@ -47,9 +47,10 @@ async function main(): Promise<void> {
     const broker = new ServiceBroker({
         logger: MoleculerConfigLog(process.env.NODE_ENV!),
         metadata: {
+            // Nodes can ONLY have number build_class values. The string version is exclusively for packages.
             build_class: process.env.BUILDER_CLASS
-                ? (Number(process.env.BUILDER_CLASS) as BuildClass)
-                : BuildClass.Medium,
+                ? Number(process.env.BUILDER_CLASS)
+                : BuildClassNumber.Medium,
         },
         metrics: enableMetrics(mainOptions.command === "database"),
         nodeID: nodeID,

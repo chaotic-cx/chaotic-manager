@@ -6,7 +6,8 @@ import { BuildsRedisLogger } from "../logging";
 import type { RedisConnectionManager } from "../redis-connection-manager";
 import { type Repo, RepoManager, type TargetRepo } from "../repo-manager";
 import {
-    BuildClass,
+    type BuildClass,
+    BuildClassNumber,
     type Builder_Action_BuildPackage_Params,
     BuildStatus,
     type BuildStatusReturn,
@@ -24,7 +25,7 @@ import {
     type MetricsCounterLabels,
     type MetricsGaugeContext,
 } from "../types";
-import { currentTime, getLogUrl, isValidPkgbase } from "../utils";
+import { currentTime, getLogUrl, getPureNodeName, isValidPkgbase } from "../utils";
 import { MoleculerConfigCommonService } from "./moleculer.config";
 
 export class CoordinatorTrackedJob extends CoordinatorJob {
@@ -36,7 +37,7 @@ export class CoordinatorTrackedJob extends CoordinatorJob {
         target_repo: string,
         source_repo: string,
         arch: string,
-        build_class: number,
+        build_class: BuildClass,
         pkgnames: string[] | undefined,
         dependencies: string[] | undefined,
         commit: string | undefined,
@@ -84,7 +85,7 @@ export interface TrackedJobs {
 export type JobStatus = "active" | "queued";
 
 export interface QueuedJob {
-    buildClass: number;
+    buildClass: BuildClass;
     jobData: CoordinatorJobSavable;
     node?: string;
     status: JobStatus;
@@ -431,7 +432,7 @@ export class CoordinatorService extends Service {
                 const upload_info: Database_Action_fetchUploadInfo_Response = await this.getUploadInfo();
 
                 for (const node of available_nodes) {
-                    const jobs: CoordinatorTrackedJob[] = this.getPossibleJobs(graph, node.metadata.build_class);
+                    const jobs: CoordinatorTrackedJob[] = this.getPossibleJobs(graph, node.metadata.build_class as number, getPureNodeName(node.id));
                     if (jobs.length == 0) {
                         continue;
                     }
@@ -502,7 +503,7 @@ export class CoordinatorService extends Service {
                     data.target_repo,
                     data.source_repo,
                     data.arch,
-                    pkg.build_class || BuildClass.Medium,
+                    pkg.build_class || BuildClassNumber.Medium,
                     pkg.pkgnames,
                     pkg.dependencies,
                     data.commit,
@@ -685,15 +686,19 @@ export class CoordinatorService extends Service {
      * @returns A list of possible jobs that can be assigned to the builder node.
      * @private
      */
-    private getPossibleJobs(graph: DepGraph<CoordinatorTrackedJob>, builder_class: number): CoordinatorTrackedJob[] {
+    private getPossibleJobs(graph: DepGraph<CoordinatorTrackedJob>, builder_class: number, node_name: string): CoordinatorTrackedJob[] {
         const jobs: CoordinatorTrackedJob[] = [];
         const nodes: string[] = graph.overallOrder(true);
 
         for (const node of nodes) {
             const job: CoordinatorTrackedJob = graph.getNodeData(node);
-            if (job.build_class <= builder_class && !job.node) {
+            // Skip jobs that are already assigned to a node
+            if (job.node)
+                continue;
+            if (typeof job.build_class === "number" && job.build_class <= builder_class)
                 jobs.push(job);
-            }
+            else if (typeof job.build_class === "string" && job.build_class === node_name)
+                jobs.push(job);
         }
 
         return jobs;

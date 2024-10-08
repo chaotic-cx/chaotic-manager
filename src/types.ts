@@ -54,7 +54,7 @@ export type PackagesReturnObject = Record<
     string,
     {
         arch: string;
-        build_class: number;
+        build_class: BuildClass;
         repo_files?: string;
         srcrepo: string;
         timestamp: number;
@@ -68,7 +68,7 @@ export type StatsReturnObject = {
     };
     waiting: {
         count: number;
-        packages: { name: string; build_class: number }[];
+        packages: { name: string; build_class: BuildClass }[];
     };
     idle: {
         count: number;
@@ -162,7 +162,7 @@ export interface DatabaseRemoveStatusReturn {
 }
 
 export interface Coordinator_Action_PackageMetaData_Single {
-    build_class?: number;
+    build_class: BuildClass | null;
     dependencies?: string[];
     pkgbase: string;
     pkgnames?: string[];
@@ -180,11 +180,13 @@ export type Coordinator_Action_AddJobsToQueue_Params = {
 
 export type Coordinator_Action_AutoRepoRemove_Params = Omit<Database_Action_AutoRepoRemove_Params, "builder_image">;
 
-export enum BuildClass {
+export enum BuildClassNumber {
     "Small" = 0,
     "Medium" = 1,
     "Heavy" = 2,
 }
+
+export type BuildClass = BuildClassNumber | string | number;
 
 export class CoordinatorJobSavable {
     constructor(
@@ -192,7 +194,7 @@ export class CoordinatorJobSavable {
         public target_repo: string,
         public source_repo: string,
         public arch: string,
-        public build_class: number,
+        public build_class: BuildClass,
         public pkgnames: string[] | undefined,
         public dependencies: string[] | undefined,
         public commit: string | undefined,
@@ -209,7 +211,7 @@ export class CoordinatorJob extends CoordinatorJobSavable {
         target_repo: string,
         source_repo: string,
         arch: string,
-        build_class: number,
+        build_class: BuildClass,
         pkgnames: string[] | undefined,
         dependencies: string[] | undefined,
         commit: string | undefined,
