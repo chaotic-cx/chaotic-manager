@@ -2,7 +2,7 @@ import { Stream } from "stream";
 import { Mutex } from "async-mutex";
 import to from "await-to-js";
 import type Dockerode from "dockerode";
-import Docker, { type Container } from "dockerode";
+import Docker, { HostConfig, type Container } from "dockerode";
 import type { LoggerInstance } from "moleculer";
 import { type ContainerCreateMountOption, type LibPod, LibpodDockerode } from "./libpod-dockerode";
 
@@ -62,7 +62,13 @@ export abstract class ContainerManager {
         return imagename;
     }
 
-    abstract create(imagename: string, args: string[], binds: string[], env: string[]): Promise<Docker.Container>;
+    abstract create(
+        imagename: string,
+        args: string[],
+        binds: string[],
+        env: string[],
+        HostConfig?: HostConfig,
+    ): Promise<Docker.Container>;
 
     // Manually re-implementing the dockerode run function because we need better lifecycle control
     abstract start(container: Docker.Container, logfunc: (arg: string) => void): Promise<any>;
@@ -132,29 +138,38 @@ export class DockerManager extends ContainerManager {
         super(logger);
     }
 
-    async create(imagename: string, args: string[], binds: string[] = [], env: string[] = []): Promise<Container> {
+    async create(
+        imagename: string,
+        args: string[],
+        binds: string[] = [],
+        env: string[] = [],
+        HostConfig?: HostConfig,
+    ): Promise<Container> {
         const image = await this.getImage(imagename);
 
         const [err, out] = await to(
             this.docker.createContainer({
                 Image: image,
                 Cmd: args,
-                HostConfig: {
-                    AutoRemove: true,
-                    Binds: binds,
-                    Ulimits: [
-                        {
-                            Name: "nofile",
-                            Soft: 1024,
-                            Hard: 1048576,
-                        },
-                    ],
-                    // Some builds require this for setting up specific things, like unionfs for fluffychat
-                    // Docker containers are much more restricted than systemd-nspawn chroots,
-                    // which were used in infra 3.0.
-                    // Preferred would be, of course, adding this per package as opt-in, but this suffices for now.
-                    CapAdd: ["SYS_ADMIN"],
-                },
+                HostConfig: Object.assign(
+                    {
+                        AutoRemove: true,
+                        Binds: binds,
+                        Ulimits: [
+                            {
+                                Name: "nofile",
+                                Soft: 1024,
+                                Hard: 1048576,
+                            },
+                        ],
+                        // Some builds require this for setting up specific things, like unionfs for fluffychat
+                        // Docker containers are much more restricted than systemd-nspawn chroots,
+                        // which were used in infra 3.0.
+                        // Preferred would be, of course, adding this per package as opt-in, but this suffices for now.
+                        CapAdd: ["SYS_ADMIN"],
+                    },
+                    HostConfig ? HostConfig : {},
+                ),
                 Env: env,
                 AttachStderr: true,
                 AttachStdout: true,
@@ -215,7 +230,14 @@ export class PodmanManager extends ContainerManager {
         this.libPodApi = this.docker as unknown as LibPod;
     }
 
-    async create(imagename: string, args: string[], binds: string[] = [], env: string[] = []): Promise<Container> {
+    // TODO: Implement HostConfig for podman
+    async create(
+        imagename: string,
+        args: string[],
+        binds: string[] = [],
+        env: string[] = [],
+        HostConfig?: HostConfig,
+    ): Promise<Container> {
         const image = await this.getImage(imagename);
         const mountsOption: ContainerCreateMountOption[] = binds.map((bind) => {
             const [host, container] = bind.split(":");

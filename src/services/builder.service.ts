@@ -18,7 +18,7 @@ import {
     type MetricsHistogramContext,
     SOURCECACHE_MAX_LIFETIME,
 } from "../types";
-import { currentTime, getDurationInMilliseconds } from "../utils";
+import { currentTime, getDurationInMilliseconds, isNumeric } from "../utils";
 import { MoleculerConfigCommonService } from "./moleculer.config";
 
 /**
@@ -32,6 +32,10 @@ export class BuilderService extends Service {
         name: process.env.BUILDER_HOSTNAME || "chaotic-builder",
         timeout: Number(process.env.BUILDER_TIMEOUT) || 3600,
         container_engine: process.env.CONTAINER_ENGINE ? "podman" : "docker",
+        cpu_limit:
+            process.env.BUILDER_LIMITS_CPUS && isNumeric(process.env.BUILDER_LIMITS_CPUS)
+                ? Number(process.env.BUILDER_LIMITS_CPUS)
+                : null,
     };
 
     private shared_srcdest_cache: string;
@@ -134,7 +138,16 @@ export class BuilderService extends Service {
                         "EXTRA_PACMAN_KEYRINGS=" + data.extra_keyrings,
                         "PACKAGE_REPO_ID=" + data.source_repo,
                         "PACKAGE_REPO_URL=" + data.source_repo_url,
+                        ...(this.builder.cpu_limit ? [`MAKEFLAGS=-j${this.builder.cpu_limit}`] : []),
                     ],
+                    {
+                        CpuPeriod: this.builder.cpu_limit ? 100000 : undefined,
+                        CpuQuota: this.builder.cpu_limit ? 100000 * this.builder.cpu_limit : undefined,
+                        Memory:
+                            process.env.BUILDER_LIMITS_RAM && isNumeric(process.env.BUILDER_LIMITS_RAM)
+                                ? Number(process.env.BUILDER_LIMITS_RAM) * 1024 * 1024
+                                : undefined,
+                    },
                 );
 
                 if (this.cancelled) {
