@@ -181,9 +181,16 @@ export type Coordinator_Action_AddJobsToQueue_Params = {
 export type Coordinator_Action_AutoRepoRemove_Params = Omit<Database_Action_AutoRepoRemove_Params, "builder_image">;
 
 export enum BuildClassNumber {
-    "Small" = 0,
-    "Medium" = 1,
-    "Heavy" = 2,
+    "Trivial-1" = 0,
+    "Trivial-2" = 1,
+    "Easy-1" = 2,
+    "Easy-2" = 3,
+    "Medium-1" = 4,
+    "Medium-2" = 5,
+    "Heavy-1" = 6,
+    "Heavy-2" = 7,
+    "Hard" = 8,
+    "Chromium" = 9,
 }
 
 export type BuildClass = BuildClassNumber | string | number;

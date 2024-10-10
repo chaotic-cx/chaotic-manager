@@ -52,7 +52,7 @@ async function main(): Promise<void> {
                 ? isNumeric(process.env.BUILDER_CLASS)
                     ? Number(process.env.BUILDER_CLASS)
                     : null
-                : BuildClassNumber.Medium,
+                : BuildClassNumber["Medium-2"],
         },
         metrics: enableMetrics(mainOptions.command === "database"),
         nodeID: nodeID,

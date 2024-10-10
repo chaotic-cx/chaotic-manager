@@ -1,6 +1,7 @@
 import type { ServiceBroker } from "moleculer";
-import type {
+import {
     BuildClass,
+    BuildClassNumber,
     Coordinator_Action_AddJobsToQueue_Params,
     Coordinator_Action_AutoRepoRemove_Params,
     Coordinator_Action_PackageMetaData_List,
@@ -57,7 +58,7 @@ export async function schedulePackages(
         const dependencies = package_dependency_map[pkgbase];
         packageList.push({
             pkgbase,
-            build_class: !build_class ? null : isNumeric(build_class) ? Number(build_class) : build_class,
+            build_class: autoAssignBuildClass(build_class, pkgbase),
             dependencies: dependencies ? dependencies.dependencies : undefined,
             pkgnames: dependencies ? dependencies.pkgnames : undefined,
         });
@@ -78,6 +79,24 @@ export async function schedulePackages(
     chaoticLogger.info(packageList);
 
     return;
+}
+
+/** Automatically assigns a build class to a job based on some criteria.
+ * @param build_class The build class to assign.
+ * @param pkgbase The package base of the job.
+ * @returns The assigned build class or the original value in case a value is already assigned.
+ */
+function autoAssignBuildClass(build_class: any, pkgbase: string): BuildClass {
+    switch (true) {
+        case isNumeric(build_class):
+            return Number(build_class);
+        case typeof build_class === "string":
+            return build_class;
+        case pkgbase.endsWith("-bin"):
+            return BuildClassNumber["Easy-2"];
+        default:
+            return BuildClassNumber["Medium-2"];
+    }
 }
 
 export async function scheduleAutoRepoRemove(

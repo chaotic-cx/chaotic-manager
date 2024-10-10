@@ -7,7 +7,6 @@ import type { RedisConnectionManager } from "../redis-connection-manager";
 import { type Repo, RepoManager, type TargetRepo } from "../repo-manager";
 import {
     type BuildClass,
-    BuildClassNumber,
     type Builder_Action_BuildPackage_Params,
     BuildStatus,
     type BuildStatusReturn,
@@ -448,23 +447,25 @@ export class CoordinatorService extends Service {
                     const source_repo: Repo = this.repo_manager.getRepo(job.source_repo);
                     const target_repo: TargetRepo = this.repo_manager.getTargetRepo(job.target_repo);
                     const params: Builder_Action_BuildPackage_Params = {
-                        pkgbase: job.pkgbase,
-                        target_repo: job.target_repo,
-                        source_repo: job.source_repo,
-                        source_repo_url: source_repo.getUrl(),
-                        extra_repos: target_repo.repoToString(),
-                        extra_keyrings: target_repo.keyringsToBashArray(),
                         arch: job.arch,
                         builder_image: this.builder_image,
-                        upload_info,
-                        timestamp: job.timestamp,
                         commit: job.commit,
+                        extra_keyrings: target_repo.keyringsToBashArray(),
+                        extra_repos: target_repo.repoToString(),
+                        pkgbase: job.pkgbase,
+                        source_repo: job.source_repo,
+                        source_repo_url: source_repo.getUrl(),
+                        target_repo: job.target_repo,
+                        timestamp: job.timestamp,
+                        upload_info,
                     };
 
                     job.node = node.id;
                     this.busy_nodes[node.id] = job;
 
-                    this.chaoticLogger.info(`Assigning job for ${job.pkgbase} to node ${node.id}`);
+                    this.chaoticLogger.info(
+                        `Assigning job for ${job.pkgbase} to node ${node.id} with build class ${node.metadata.build_class}`,
+                    );
                     source_repo.notify(job, "running", "Build in progress...");
 
                     const promise = this.broker.call<BuildStatusReturn, Builder_Action_BuildPackage_Params>(
@@ -507,7 +508,7 @@ export class CoordinatorService extends Service {
                     data.target_repo,
                     data.source_repo,
                     data.arch,
-                    pkg.build_class || BuildClassNumber.Medium,
+                    this.autoAssignBuildClass(pkg.build_class, pkg.pkgbase),
                     pkg.pkgnames,
                     pkg.dependencies,
                     data.commit,
@@ -687,6 +688,7 @@ export class CoordinatorService extends Service {
      * Returns a list of possible jobs that can be assigned to a builder node. Also handles circular dependencies.
      * @param graph The dependency graph of the jobs.
      * @param builder_class The builder class of the node. Jobs with a build class higher than this value will be ignored.
+     * @param node_name The name of the node.
      * @returns A list of possible jobs that can be assigned to the builder node.
      * @private
      */
@@ -706,17 +708,16 @@ export class CoordinatorService extends Service {
             const job: CoordinatorTrackedJob = graph.getNodeData(node);
             // Skip jobs that are already assigned to a node
             if (job.node) {
-                unresolvable.push(... graph.dependantsOf(node));
+                unresolvable.push(...graph.dependantsOf(node));
                 continue;
             }
             if (unresolvable.includes(node)) continue;
             if (typeof job.build_class === "number" && builder_class !== null && job.build_class <= builder_class) {
                 jobs.push(job);
-                unresolvable.push(... graph.dependantsOf(node));
-            }
-            else if (typeof job.build_class === "string" && job.build_class === node_name) {
+                unresolvable.push(...graph.dependantsOf(node));
+            } else if (typeof job.build_class === "string" && job.build_class === node_name) {
                 jobs.push(job);
-                unresolvable.push(... graph.dependantsOf(node));
+                unresolvable.push(...graph.dependantsOf(node));
             }
         }
 
