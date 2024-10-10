@@ -115,11 +115,8 @@ export class BuilderService extends Service {
                 // Goal: Avoid building packages that are already in the target repo
                 await this.generateDestFillerFiles(ctx, data.target_repo, data.arch, this.mountPkgout);
 
-                // Clean the source cache of any old source files
-                this.clearSourceCache(this.mountSrcdest, data.target_repo);
-
                 // Generate the folder path for the specific package source cache
-                const srcdest_package_path = path.join(this.shared_srcdest_cache, data.target_repo, data.pkgbase);
+                const srcdest_package_path = this.manageSourceCache(data);
 
                 // Make sure the builder image is always up to date
                 await this.containerManager.scheduledPull(data.builder_image);
@@ -376,6 +373,21 @@ export class BuilderService extends Service {
             }
             fs.rmSync(filePath, { recursive: true, force: true });
         }
+    }
+
+    private manageSourceCache(data: Builder_Action_BuildPackage_Params): string {
+        // Clean up old source cache files
+        this.clearSourceCache(this.mountSrcdest, data.target_repo);
+
+        const srcdest_package_path = path.join(this.shared_srcdest_cache, data.target_repo, data.pkgbase);
+        const mount_srcdest_package_path = path.join(this.mountSrcdest, data.target_repo, data.pkgbase);
+        const mount_srcdest_package_path_timestamp = path.join(mount_srcdest_package_path, ".timestamp");
+        if (!fs.existsSync(mount_srcdest_package_path)) {
+            fs.mkdirSync(mount_srcdest_package_path, { recursive: true });
+        }
+        if (!fs.existsSync(mount_srcdest_package_path_timestamp))
+            fs.closeSync(fs.openSync(mount_srcdest_package_path_timestamp, "w"));
+        return srcdest_package_path;
     }
 
     async stop(): Promise<void> {

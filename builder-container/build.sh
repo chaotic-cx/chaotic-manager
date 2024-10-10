@@ -89,16 +89,13 @@ function setup-build-configs {
     if [ -f "/pkgbuilds/${PACKAGE_REPO_ID}/${PACKAGE}/.CI/config" ]; then
     	UTIL_READ_VARIABLES_FROM_FILE "/pkgbuilds/${PACKAGE_REPO_ID}/${PACKAGE}/.CI/config" CONFIG
         # In case we want to cache sources for heavier packages. This should be used only if really needed.
-        if [ -v "CONFIG[BUILDER_CACHE_SOURCES]" ] && [ "${CONFIG[BUILDER_CACHE_SOURCES]}" == "true" ] && [ -d "$SRCDEST_CACHED" ]; then
+        if [ -v "CONFIG[BUILDER_CACHE_SOURCES]" ] && [ "${CONFIG[BUILDER_CACHE_SOURCES]}" == "true" ] && [ -f "$SRCDEST_CACHED/.timestamp" ]; then
             echo "Will cache sources..."
 
 			# Make sure we have the appropriate permissions to modify the mounted directory
 			chown builder:builder "$SRCDEST_CACHED"
 
             SRCDEST="${SRCDEST_CACHED}"
-            if [[ ! -f "$SRCDEST/.timestamp" ]]; then
-                touch "$SRCDEST/.timestamp"
-            fi
         fi
 
 		# In case we want to override the global timeout for a specific package. Useful for e.g. Ungoogled Chromium or kernels.
