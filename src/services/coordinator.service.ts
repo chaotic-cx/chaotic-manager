@@ -684,7 +684,7 @@ export class CoordinatorService extends Service {
     }
 
     /**
-     * Returns a list of possible jobs that can be assigned to a builder node.
+     * Returns a list of possible jobs that can be assigned to a builder node. Also handles circular dependencies.
      * @param graph The dependency graph of the jobs.
      * @param builder_class The builder class of the node. Jobs with a build class higher than this value will be ignored.
      * @returns A list of possible jobs that can be assigned to the builder node.
@@ -696,15 +696,28 @@ export class CoordinatorService extends Service {
         node_name: string,
     ): CoordinatorTrackedJob[] {
         const jobs: CoordinatorTrackedJob[] = [];
-        const nodes: string[] = graph.overallOrder(true);
+        let nodes: string[] = graph.overallOrder();
+        // Used to
+        // 1. Skip jobs that depend on other jobs
+        // 2. Handle circular dependencies gently
+        let unresolvable: string[] = [];
 
         for (const node of nodes) {
             const job: CoordinatorTrackedJob = graph.getNodeData(node);
             // Skip jobs that are already assigned to a node
-            if (job.node) continue;
-            if (typeof job.build_class === "number" && builder_class !== null && job.build_class <= builder_class)
+            if (job.node) {
+                unresolvable.push(... graph.dependantsOf(node));
+                continue;
+            }
+            if (unresolvable.includes(node)) continue;
+            if (typeof job.build_class === "number" && builder_class !== null && job.build_class <= builder_class) {
                 jobs.push(job);
-            else if (typeof job.build_class === "string" && job.build_class === node_name) jobs.push(job);
+                unresolvable.push(... graph.dependantsOf(node));
+            }
+            else if (typeof job.build_class === "string" && job.build_class === node_name) {
+                jobs.push(job);
+                unresolvable.push(... graph.dependantsOf(node));
+            }
         }
 
         return jobs;
