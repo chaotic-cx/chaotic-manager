@@ -97,6 +97,9 @@ export class DatabaseService extends Service {
                     };
                 }
 
+                // Make sure the builder image is always up to date
+                await this.container_manager.scheduledPull(data.builder_image);
+
                 const [err, out] = await this.container_manager.run(
                     data.builder_image,
                     ["repo-add", data.arch, "/landing_zone", "/repo_root", data.target_repo].concat(data.pkgfiles),
@@ -200,6 +203,7 @@ export class DatabaseService extends Service {
     async stop(): Promise<void> {
         this.active = false;
         await this.mutex.waitForUnlock();
+        this.container_manager.destroy();
     }
 
     async stopped(): Promise<void> {

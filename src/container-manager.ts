@@ -9,6 +9,7 @@ import { type ContainerCreateMountOption, type LibPod, LibpodDockerode } from ".
 export abstract class ContainerManager {
     protected abstract docker: Dockerode;
     private pull_schedule: NodeJS.Timeout | null = null;
+    private pull_schedule_image: string | null = null;
     private pull_mutex = new Mutex();
     private chaoticLogger: LoggerInstance;
 
@@ -40,6 +41,9 @@ export abstract class ContainerManager {
                 });
             });
             this.chaoticLogger.info("Downloaded builder image.");
+        } catch (err) {
+            this.chaoticLogger.error("Failed to download builder image:", err);
+            throw err;
         } finally {
             if (!locked) this.pull_mutex.release();
         }
@@ -115,18 +119,21 @@ export abstract class ContainerManager {
         await this.docker.getContainer(container.id).remove({ force: true });
     }
 
-    async scheduledPull(imagename: string) {
+    async scheduledPull(imagename: string | null) {
         await this.pull_mutex.acquire();
-        if (this.pull_schedule) {
+        if (this.pull_schedule && this.pull_schedule_image !== imagename) {
             clearTimeout(this.pull_schedule);
             this.pull_schedule = null;
         }
-        try {
-            await this.pullImage(imagename, true);
-        } catch (err) {
-            this.chaoticLogger.error(err);
+        if (!this.pull_schedule) {
+            if (imagename) this.pull_schedule_image = imagename;
+            try {
+                await this.pullImage(this.pull_schedule_image!, true);
+            } catch (err) {
+                this.chaoticLogger.error(err);
+            }
+            this.pull_schedule = setTimeout(this.scheduledPull.bind(this, null), 7200000);
         }
-        this.pull_schedule = setTimeout(this.scheduledPull.bind(this, imagename), 7200000);
         this.pull_mutex.release();
     }
 }

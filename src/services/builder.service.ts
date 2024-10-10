@@ -121,6 +121,9 @@ export class BuilderService extends Service {
                 // Generate the folder path for the specific package source cache
                 const srcdest_package_path = path.join(this.shared_srcdest_cache, data.target_repo, data.pkgbase);
 
+                // Make sure the builder image is always up to date
+                await this.containerManager.scheduledPull(data.builder_image);
+
                 // Append the container object to the job context
                 this.container = await this.containerManager.create(
                     data.builder_image,
@@ -379,6 +382,7 @@ export class BuilderService extends Service {
         this.active = false;
         if (!this.cancelled) this.cancelledCode = BuildStatus.CANCELED_REQUEUE;
         await this.cancelBuild();
+        this.containerManager.destroy();
     }
 
     async stopped(): Promise<void> {
