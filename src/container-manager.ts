@@ -24,6 +24,11 @@ export abstract class ContainerManager {
     }
 
     async pullImage(imagename: string, locked = false): Promise<void> {
+        // NOOP if NODE_ENV == "development"
+        if (process.env.NODE_ENV === "development") {
+            this.chaoticLogger.info("Skipping image pull in development mode.");
+            return;
+        }
         if (!locked) await this.pull_mutex.acquire();
 
         try {

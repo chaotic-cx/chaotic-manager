@@ -33,6 +33,7 @@ services:
             - ./temp/landing_zone:$(pwd)/temp/landing_zone
         image: lscr.io/linuxserver/openssh-server:latest
         entrypoint: bash -c "chown -R 1000:1000 '$(pwd)/temp/landing_zone' && exec /init"
+        stop_grace_period: 1ms
 EOM
 
 if [ "$1" == "docker" ]; then
@@ -66,6 +67,8 @@ if [ "$1" == "docker" ]; then
             - BUILDER_CLASS=1
         image: registry.gitlab.com/garuda-linux/tools/chaotic-manager/manager
         command: builder
+        depends_on:
+            - openssh-server
     chaotic-database:
         network_mode: host
         volumes:
@@ -83,6 +86,8 @@ if [ "$1" == "docker" ]; then
             - LOGS_URL=http://localhost:8080/logs.html
         image: registry.gitlab.com/garuda-linux/tools/chaotic-manager/manager
         command: database --web-port 8080
+        depends_on:
+            - openssh-server
 EOM
 
     docker build -t registry.gitlab.com/garuda-linux/tools/chaotic-manager/manager .
