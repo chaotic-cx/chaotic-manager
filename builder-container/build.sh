@@ -6,7 +6,7 @@ source ./util.shlib
 
 PKGOUT="/home/builder/pkgout/"
 SRCDEST="/home/builder/srcdest/"
-SRCDEST_CACHED="/home/builder/srcdest_cached/"
+SRCDEST_CACHED="/home/builder/srcdest_cached"
 
 PACKAGE="$1"
 BUILDDIR="/home/builder/build/"
