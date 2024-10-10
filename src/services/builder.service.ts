@@ -168,8 +168,14 @@ export class BuilderService extends Service {
                     };
                 }
 
-                if (err || out.StatusCode !== 0) {
-                    if (!err && out.StatusCode === 13) {
+                if (err || !out || out.StatusCode !== 0) {
+                    if (err) {
+                        logger.log("Unknown container failure during build.");
+                        this.chaoticLogger.error("Unknown container failure during build:", err);
+                    } else if (!out) {
+                        logger.log("Unknown container failure during build.");
+                        this.chaoticLogger.error("Unknown container failure during build. No output.");
+                    } else if (out.StatusCode === 13) {
                         return { success: BuildStatus.ALREADY_BUILT };
                     } else if (out.StatusCode === this.builder.ci_code_skip) {
                         return { success: BuildStatus.SKIPPED };
