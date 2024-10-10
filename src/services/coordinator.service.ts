@@ -464,7 +464,7 @@ export class CoordinatorService extends Service {
                     this.busy_nodes[node.id] = job;
 
                     this.chaoticLogger.info(
-                        `Assigning job for ${job.pkgbase} to node ${node.id} with build class ${node.metadata.build_class}`,
+                        `Assigning job (${job.build_class}) for ${job.pkgbase} to node ${node.id} (${node.metadata.build_class})`,
                     );
                     source_repo.notify(job, "running", "Build in progress...");
 
@@ -508,7 +508,7 @@ export class CoordinatorService extends Service {
                     data.target_repo,
                     data.source_repo,
                     data.arch,
-                    this.autoAssignBuildClass(pkg.build_class, pkg.pkgbase),
+                    pkg.build_class,
                     pkg.pkgnames,
                     pkg.dependencies,
                     data.commit,

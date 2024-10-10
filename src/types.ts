@@ -162,7 +162,7 @@ export interface DatabaseRemoveStatusReturn {
 }
 
 export interface Coordinator_Action_PackageMetaData_Single {
-    build_class: BuildClass | null;
+    build_class: BuildClass;
     dependencies?: string[];
     pkgbase: string;
     pkgnames?: string[];
@@ -181,16 +181,16 @@ export type Coordinator_Action_AddJobsToQueue_Params = {
 export type Coordinator_Action_AutoRepoRemove_Params = Omit<Database_Action_AutoRepoRemove_Params, "builder_image">;
 
 export enum BuildClassNumber {
-    "Trivial-1" = 0,
-    "Trivial-2" = 1,
-    "Easy-1" = 2,
-    "Easy-2" = 3,
-    "Medium-1" = 4,
-    "Medium-2" = 5,
-    "Heavy-1" = 6,
-    "Heavy-2" = 7,
-    "Hard" = 8,
-    "Chromium" = 9,
+    "Trivial-1" = 1,
+    "Trivial-2" = 2,
+    "Easy-1" = 3,
+    "Easy-2" = 4,
+    "Medium-1" = 5,
+    "Medium-2" = 6,
+    "Heavy-1" = 7,
+    "Heavy-2" = 8,
+    "Hard" = 9,
+    "Chromium" = 10,
 }
 
 export type BuildClass = BuildClassNumber | string | number;

@@ -65,11 +65,11 @@ export async function schedulePackages(
     }
 
     const params: Coordinator_Action_AddJobsToQueue_Params = {
-        target_repo,
-        source_repo,
-        commit,
         arch,
+        commit,
         packages: packageList,
+        source_repo,
+        target_repo,
     };
 
     await broker.waitForServices(["coordinator"], 10000);
@@ -86,16 +86,16 @@ export async function schedulePackages(
  * @param pkgbase The package base of the job.
  * @returns The assigned build class or the original value in case a value is already assigned.
  */
-function autoAssignBuildClass(build_class: any, pkgbase: string): BuildClass {
+function autoAssignBuildClass(build_class: any, pkgbase: string): BuildClass | string | number {
     switch (true) {
         case isNumeric(build_class):
             return Number(build_class);
         case typeof build_class === "string":
             return build_class;
         case pkgbase.endsWith("-bin"):
-            return BuildClassNumber["Easy-2"];
+            return BuildClassNumber["Easy-1"];
         default:
-            return BuildClassNumber["Medium-2"];
+            return BuildClassNumber["Medium-1"];
     }
 }
 
