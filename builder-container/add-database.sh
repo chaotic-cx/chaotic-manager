@@ -267,6 +267,10 @@ function post-deploy() {
 	(clean-sigs -q) || true
 	(clean-landing-zone -q) || true
 
+	# This file contains the timestamp of the last package addition
+	# This is how we know when mirrors are up to date or not
+	date +'%s' >"${REPO_DIR}/../lastupdate"
+
 	# kill gpg-agent
 	gpgconf --kill gpg-agent
 
