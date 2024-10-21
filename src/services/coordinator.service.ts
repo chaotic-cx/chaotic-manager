@@ -508,7 +508,7 @@ export class CoordinatorService extends Service {
                     data.target_repo,
                     data.source_repo,
                     data.arch,
-                    pkg.build_class,
+                    pkg.build_class || 1,
                     pkg.pkgnames,
                     pkg.dependencies,
                     data.commit,

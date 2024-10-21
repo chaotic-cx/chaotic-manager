@@ -11,7 +11,6 @@ import { MetricsService } from "./services/metrics.service";
 import { enableMetrics, MoleculerConfigCommon, MoleculerConfigLog } from "./services/moleculer.config";
 import { NotifierService } from "./services/notifier.service";
 import { WebService } from "./services/web.service";
-import { BuildClassNumber } from "./types";
 import { generateNodeId, isNumeric } from "./utils";
 
 if (!process.env.NODE_ENV) process.env.NODE_ENV = "production";
@@ -52,7 +51,7 @@ async function main(): Promise<void> {
                 ? isNumeric(process.env.BUILDER_CLASS)
                     ? Number(process.env.BUILDER_CLASS)
                     : null
-                : BuildClassNumber["Medium-1"],
+                : 2,
         },
         metrics: enableMetrics(mainOptions.command === "database"),
         nodeID: nodeID,
