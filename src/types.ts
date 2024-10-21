@@ -163,7 +163,7 @@ export interface DatabaseRemoveStatusReturn {
 }
 
 export interface Coordinator_Action_PackageMetaData_Single {
-    build_class?: BuildClass;
+    build_class: BuildClass | null;
     dependencies?: string[];
     pkgbase: string;
     pkgnames?: string[];

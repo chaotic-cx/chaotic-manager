@@ -829,9 +829,11 @@ export class CoordinatorService extends Service {
                 if (data.version === current_version) {
                     for (const savedJob of data.save_queue) {
                         const logger = new BuildsRedisLogger(client, this.broker, "BUILD");
+                        logger.from(savedJob.pkgbase, timestamp);
                         const job = toTracked(savedJob, timestamp, logger);
                         const id = job.toId();
                         job.logger.log(`Restored job ${id} at ${currentTime()}`);
+                        void job.logger.setDefault();
                         this.chaoticLogger.info(`Restored saved job ${job.pkgbase} for ${job.target_repo}`);
                         this.queue[id] = job;
                     }

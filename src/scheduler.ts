@@ -57,7 +57,7 @@ export async function schedulePackages(
         const dependencies = package_dependency_map[pkgbase];
         packageList.push({
             pkgbase,
-            build_class: build_class as string | undefined,
+            build_class: !build_class ? null : isNumeric(build_class) ? Number(build_class) : build_class,
             dependencies: dependencies ? dependencies.dependencies : undefined,
             pkgnames: dependencies ? dependencies.pkgnames : undefined,
         });
