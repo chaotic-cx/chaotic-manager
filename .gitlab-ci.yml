@@ -64,20 +64,3 @@ build-manager:
     DOCKER_TLS_CERTDIR: ''
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $UPDATE_BUILDER != "1"
-build-manager-podman:
-  stage: build
-  image: docker:24-cli
-  services:
-    - name: docker:24-dind
-      alias: docker-daemon
-  script:
-    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
-    - docker build -t "$CI_REGISTRY_IMAGE/manager-podman:latest" -f Dockerfile-podman .
-    - docker push "$CI_REGISTRY_IMAGE/manager-podman:latest"
-  tags: [dind]
-  variables:
-    DOCKER_DRIVER: overlay2
-    DOCKER_HOST: tcp://docker-daemon:2375/
-    DOCKER_TLS_CERTDIR: ''
-  rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $UPDATE_BUILDER != "1"
