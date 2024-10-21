@@ -205,7 +205,7 @@ export class CoordinatorService extends Service {
                             metricsParams.status = BuildStatus.ALREADY_BUILT;
                             notificationPromises.push(
                                 this.broker.call<void, MetricsCounterLabels>(
-                                    "chaoticMetrics.incCounterAlreadyBuilt",
+                                    "metrics.incCounterAlreadyBuilt",
                                     metricsParams,
                                 ),
                             );
@@ -235,7 +235,7 @@ export class CoordinatorService extends Service {
                             );
                             notificationPromises.push(
                                 this.broker.call<void, MetricsCounterLabels>(
-                                    "chaoticMetrics.incCounterBuildSuccess",
+                                    "metrics.incCounterBuildSuccess",
                                     metricsParams,
                                 ),
                             );
@@ -250,7 +250,7 @@ export class CoordinatorService extends Service {
                             metricsParams.status = BuildStatus.SKIPPED;
                             notificationPromises.push(
                                 this.broker.call<void, MetricsCounterLabels>(
-                                    "chaoticMetrics.incCounterBuildSkipped",
+                                    "metrics.incCounterBuildSkipped",
                                     metricsParams,
                                 ),
                             );
@@ -277,7 +277,7 @@ export class CoordinatorService extends Service {
                             );
                             notificationPromises.push(
                                 this.broker.call<void, MetricsCounterLabels>(
-                                    "chaoticMetrics.incCounterBuildFailure",
+                                    "metrics.incCounterBuildFailure",
                                     metricsParams,
                                 ),
                             );
@@ -294,7 +294,7 @@ export class CoordinatorService extends Service {
                                 metricsParams.replaced = true;
                                 notificationPromises.push(
                                     this.broker.call<void, MetricsCounterLabels>(
-                                        "chaoticMetrics.incCounterBuildCancelled",
+                                        "metrics.incCounterBuildCancelled",
                                         metricsParams,
                                     ),
                                 );
@@ -305,7 +305,7 @@ export class CoordinatorService extends Service {
                                 notificationPromises.push(source_repo.notify(job, "canceled", "Build canceled."));
                                 notificationPromises.push(
                                     this.broker.call<void, MetricsCounterLabels>(
-                                        "chaoticMetrics.incCounterBuildCancelled",
+                                        "metrics.incCounterBuildCancelled",
                                         metricsParams,
                                     ),
                                 );
@@ -319,7 +319,7 @@ export class CoordinatorService extends Service {
                             metricsParams.replaced = true;
                             notificationPromises.push(
                                 this.broker.call<void, MetricsCounterLabels>(
-                                    "chaoticMetrics.incCounterBuildCancelled",
+                                    "metrics.incCounterBuildCancelled",
                                     metricsParams,
                                 ),
                             );
@@ -349,7 +349,7 @@ export class CoordinatorService extends Service {
                             metricsParams.status = BuildStatus.TIMED_OUT;
                             notificationPromises.push(
                                 this.broker.call<void, MetricsCounterLabels>(
-                                    "chaoticMetrics.incCounterBuildTimeout",
+                                    "metrics.incCounterBuildTimeout",
                                     metricsParams,
                                 ),
                             );
@@ -379,7 +379,7 @@ export class CoordinatorService extends Service {
                     metricsParams.status = BuildStatus.SOFTWARE_FAILURE;
                     notificationPromises.push(
                         this.broker.call<void, MetricsCounterLabels>(
-                            "chaoticMetrics.incCounterSoftwareFailure",
+                            "metrics.incCounterSoftwareFailure",
                             metricsParams,
                         ),
                     );
@@ -778,13 +778,13 @@ export class CoordinatorService extends Service {
     private async updateMetrics(): Promise<void> {
         const available_nodes: BrokerNode[] = await this.getAvailableNodes();
         try {
-            await this.broker.call<void, MetricsGaugeContext>("chaoticMetrics.setGaugeActiveBuilders", {
+            await this.broker.call<void, MetricsGaugeContext>("metrics.setGaugeActiveBuilders", {
                 count: Object.keys(this.busy_nodes).length,
             });
-            await this.broker.call<void, MetricsGaugeContext>("chaoticMetrics.setGaugeIdleBuilders", {
+            await this.broker.call<void, MetricsGaugeContext>("metrics.setGaugeIdleBuilders", {
                 count: available_nodes.length,
             });
-            await this.broker.call<void, MetricsGaugeContext>("chaoticMetrics.setGaugeCurrentQueue", {
+            await this.broker.call<void, MetricsGaugeContext>("metrics.setGaugeCurrentQueue", {
                 count: Object.keys(this.queue).length,
                 labels: {
                     build_class: Object.keys(this.queue).map((key) => this.queue[key].build_class) as BuildClass[],

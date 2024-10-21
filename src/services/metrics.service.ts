@@ -22,7 +22,7 @@ export class MetricsService extends Service {
         const init = this.init.bind(this);
 
         this.parseServiceSchema({
-            name: "chaoticMetrics",
+            name: "metrics",
 
             actions: {
                 addToBuildTimerHistogram: this.addToBuildTimerHistogram,

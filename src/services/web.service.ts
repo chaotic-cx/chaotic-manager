@@ -208,7 +208,7 @@ export class WebService extends Service {
         ];
 
         const [errMetrics, outMetrics] = await to(
-            this.broker.call<MetricsRequest, ValidMetrics[]>("chaoticMetrics.getMetrics", request),
+            this.broker.call<MetricsRequest, ValidMetrics[]>("metrics.getMetrics", request),
         );
 
         if (errMetrics || !outMetrics) {

@@ -258,7 +258,7 @@ export class BuilderService extends Service {
                 if (!addToDbReturn.success) {
                     return { success: BuildStatus.FAILED };
                 } else {
-                    ctx.call<void, MetricsHistogramContext>("chaoticMetrics.addToBuildTimerHistogram", {
+                    ctx.call<void, MetricsHistogramContext>("metrics.addToBuildTimerHistogram", {
                         labels: {
                             arch: data.arch,
                             pkgbase: data.pkgbase,

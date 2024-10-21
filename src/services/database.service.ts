@@ -111,7 +111,7 @@ export class DatabaseService extends Service {
                 if (err) {
                     this.chaoticLogger.warn(err);
                     metrics_promises.push(
-                        this.broker.call<void, MetricsDatabaseLabels>("chaoticMetrics.incCounterDatabaseFailure", {
+                        this.broker.call<void, MetricsDatabaseLabels>("metrics.incCounterDatabaseFailure", {
                             arch: data.arch,
                             target_repo: data.target_repo,
                             pkgname: data.pkgbase,
@@ -126,7 +126,7 @@ export class DatabaseService extends Service {
                 this.chaoticLogger.info(`Successfully added new packages to the database.`);
 
                 metrics_promises.push(
-                    this.broker.call<void, MetricsDatabaseLabels>("chaoticMetrics.incCounterDatabaseSuccess", {
+                    this.broker.call<void, MetricsDatabaseLabels>("metrics.incCounterDatabaseSuccess", {
                         arch: data.arch,
                         target_repo: data.target_repo,
                         pkgname: data.pkgbase,
