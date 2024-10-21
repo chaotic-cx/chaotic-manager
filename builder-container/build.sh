@@ -58,8 +58,8 @@ function setup-package-repo {
 	fi
 	GIT_TERMINAL_PROMPT=0 git fetch origin main --depth=1
 	git reset --hard origin/main
-	popd
-	popd
+	popd # $PACKAGE_REPO_ID
+	popd # /pkgbuilds
 }
 
 function setup-extra-keyrings {

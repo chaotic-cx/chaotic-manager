@@ -86,9 +86,9 @@ function interference-pkgrel() {
 
   echo "if [ \"\$(vercmp \"${_PKGVER}\" \"\${epoch:-0}:\$pkgver-\$pkgrel\")\" = \"0\" ]; then
   pkgrel=\"\$pkgrel.${_BUMPCOUNT}\"
-fi" >>PKGBUILD
-  echo ":: Interfere applied: pkgrel increased by .${_BUMPCOUNT}."
-  APPLIED_INTERFERES+=("Increased pkgrel by .${_BUMPCOUNT}.")
+fi" >>"${BUILDDIR}/PKGBUILD"
+  echo ":: Interfere applied: pkgrel will be bumped by .${_BUMPCOUNT} if the detected version is ${_PKGVER}"
+  APPLIED_INTERFERES+=("pkgrel will be bumped by .${_BUMPCOUNT} if the detected version is ${_PKGVER}")
 }
 
 function interference-apply() {
