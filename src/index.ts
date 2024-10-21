@@ -12,6 +12,7 @@ import { enableMetrics, MoleculerConfigCommon, MoleculerConfigLog } from "./serv
 import { NotifierService } from "./services/notifier.service";
 import { WebService } from "./services/web.service";
 import { generateNodeId, isNumeric } from "./utils";
+import { current_version } from "./types";
 
 if (!process.env.NODE_ENV) process.env.NODE_ENV = "production";
 
@@ -52,6 +53,8 @@ async function main(): Promise<void> {
                     ? Number(process.env.BUILDER_CLASS)
                     : null
                 : 2,
+            // This value is used to isolate builder nodes that are on a different version of the internal API than the coordinator.
+            version: current_version
         },
         metrics: enableMetrics(mainOptions.command === "database"),
         nodeID: nodeID,

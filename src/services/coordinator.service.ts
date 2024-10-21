@@ -763,11 +763,12 @@ export class CoordinatorService extends Service {
             return [];
         }
 
+        // node.metadata.version === current_version → check if the node is compatible with the coordinator
         // nodes.includes(node.id) → check if the node is in the list of builder nodes
         // node.available → check if the node is available (not offline)
         // !this.busy_nodes[node.id] → check if the node is not in the list of busy nodes
         return full_node_list.filter(
-            (node: BrokerNode) => nodes.includes(node.id) && node.available && !this.busy_nodes[node.id],
+            (node: BrokerNode) => node.metadata.version === current_version && nodes.includes(node.id) && node.available && !this.busy_nodes[node.id]
         );
     }
 
