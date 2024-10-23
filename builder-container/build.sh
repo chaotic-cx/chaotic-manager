@@ -10,6 +10,8 @@ SRCDEST_CACHED="/home/builder/srcdest_cached"
 
 PACKAGE="$1"
 BUILDDIR="/home/builder/build/"
+PACKAGE_DIR="$(echo "$PACKAGE" | cut -c1)/$PACKAGE"
+
 [[ -z $BUILDER_HOSTNAME ]] && BUILDER_HOSTNAME="unknown builder (please supply BUILDER_HOSTNAME via Docker environment)"
 [[ -z $BUILDER_TIMEOUT ]] && BUILDER_TIMEOUT=3600
 [[ -z $CI_CODE_SKIP ]] && CI_CODE_SKIP=123
@@ -86,8 +88,8 @@ function setup-build-configs {
     fi
 
     declare -A CONFIG
-    if [ -f "/pkgbuilds/${PACKAGE_REPO_ID}/${PACKAGE}/.CI/config" ]; then
-    	UTIL_READ_VARIABLES_FROM_FILE "/pkgbuilds/${PACKAGE_REPO_ID}/${PACKAGE}/.CI/config" CONFIG
+    if [ -f "/pkgbuilds/${PACKAGE_REPO_ID}/${PACKAGE_DIR}/.CI/config" ]; then
+    	UTIL_READ_VARIABLES_FROM_FILE "/pkgbuilds/${PACKAGE_REPO_ID}/${PACKAGE_DIR}/.CI/config" CONFIG
         # In case we want to cache sources for heavier packages. This should be used only if really needed.
         if [ -v "CONFIG[BUILDER_CACHE_SOURCES]" ] && [ "${CONFIG[BUILDER_CACHE_SOURCES]}" == "true" ] && [ -f "$SRCDEST_CACHED/.timestamp" ]; then
             echo "Will cache sources..."
@@ -120,7 +122,7 @@ function setup-buildenv {
 	chown builder:builder "$PKGOUT"
 	chmod 700 "$PKGOUT"
 
-	cp -rT "/pkgbuilds/${PACKAGE_REPO_ID}/${PACKAGE}" "${BUILDDIR}"
+	cp -rT "/pkgbuilds/${PACKAGE_REPO_ID}/${PACKAGE_DIR}" "${BUILDDIR}"
 	chown -R builder:builder "${BUILDDIR}"
 
 	pacman-key --init || return 1
@@ -131,7 +133,10 @@ function build-pkg {
 	printf "Building package...\n"
 
 	# Timeout ensures that the build process doesn't hang indefinitely, sending the kill signal if it still hangs 10 seconds after sending the term signal
-	time sudo -D "${BUILDDIR}" -u builder PKGDEST="${PKGOUT}" SRCDEST="${SRCDEST}" COREPACK_ENABLE_DOWNLOAD_PROMPT=0 timeout -k 10 "${BUILDER_TIMEOUT}" makepkg --skippgpcheck -s --noconfirm || { local ret=$? && echo "Didn't finish building the package!" >&2 && return $ret; }
+	time sudo -D "${BUILDDIR}" -u builder PKGDEST="${PKGOUT}" SRCDEST="${SRCDEST}" COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
+	    timeout -k 10 "${BUILDER_TIMEOUT}" makepkg --skippgpcheck -s --noconfirm || \
+	     { local ret=$? && echo "Didn't finish building the package!" >&2 && return $ret; }
+
 	find "${PKGOUT}" -type f -empty -delete || return 1
 }
 
