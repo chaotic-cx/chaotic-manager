@@ -191,6 +191,10 @@ export class CoordinatorService extends Service {
                         (ret.success === BuildStatus.CANCELED || ret.success === BuildStatus.CANCELED_REQUEUE)
                     ) {
                         await source_repo.notify(job, "canceled", "Build canceled due to coordinator shutdown.");
+                        metricsParams.status = ret.success;
+                        notificationPromises.push(
+                            this.broker.broadcast<MetricsCounterLabels>("builds.canceled-requeue", metricsParams),
+                        );
                         return;
                     }
                     switch (ret.success) {
@@ -208,6 +212,8 @@ export class CoordinatorService extends Service {
                                     "metrics.incCounterAlreadyBuilt",
                                     metricsParams,
                                 ),
+
+                                this.broker.broadcast<MetricsCounterLabels>("builds.alreadyBuilt", metricsParams),
                             );
                             break;
                         }
@@ -238,6 +244,8 @@ export class CoordinatorService extends Service {
                                     "metrics.incCounterBuildSuccess",
                                     metricsParams,
                                 ),
+
+                                this.broker.broadcast<MetricsCounterLabels>("builds.success", metricsParams),
                             );
                             break;
                         }
@@ -253,6 +261,8 @@ export class CoordinatorService extends Service {
                                     "metrics.incCounterBuildSkipped",
                                     metricsParams,
                                 ),
+
+                                this.broker.broadcast<MetricsCounterLabels>("builds.skipped", metricsParams),
                             );
                             break;
                         }
@@ -280,6 +290,8 @@ export class CoordinatorService extends Service {
                                     "metrics.incCounterBuildFailure",
                                     metricsParams,
                                 ),
+
+                                this.broker.broadcast<MetricsCounterLabels>("builds.failed", metricsParams),
                             );
                             break;
                         }
@@ -297,6 +309,8 @@ export class CoordinatorService extends Service {
                                         "metrics.incCounterBuildCancelled",
                                         metricsParams,
                                     ),
+
+                                    this.broker.broadcast<MetricsCounterLabels>("builds.replaced", metricsParams),
                                 );
                             } else {
                                 job.logger.log(`Job ${job.toId()} was canceled.`);
@@ -308,6 +322,8 @@ export class CoordinatorService extends Service {
                                         "metrics.incCounterBuildCancelled",
                                         metricsParams,
                                     ),
+
+                                    this.broker.broadcast<MetricsCounterLabels>("builds.canceled", metricsParams),
                                 );
                             }
                             break;
@@ -322,6 +338,8 @@ export class CoordinatorService extends Service {
                                     "metrics.incCounterBuildCancelled",
                                     metricsParams,
                                 ),
+
+                                this.broker.broadcast<MetricsCounterLabels>("builds.canceled-requeue", metricsParams),
                             );
                             job.logger.log(`Job ${job.toId()} was canceled and re-queued due to builder shutdown.`);
                             const new_job = job.toSavable();
@@ -352,6 +370,8 @@ export class CoordinatorService extends Service {
                                     "metrics.incCounterBuildTimeout",
                                     metricsParams,
                                 ),
+
+                                this.broker.broadcast<MetricsCounterLabels>("builds.timeout", metricsParams),
                             );
                             break;
                         }
@@ -382,6 +402,8 @@ export class CoordinatorService extends Service {
                             "metrics.incCounterSoftwareFailure",
                             metricsParams,
                         ),
+
+                        this.broker.broadcast<MetricsCounterLabels>("builds.softwareFailure", metricsParams),
                     );
                 },
             )
@@ -768,7 +790,11 @@ export class CoordinatorService extends Service {
         // node.available → check if the node is available (not offline)
         // !this.busy_nodes[node.id] → check if the node is not in the list of busy nodes
         return full_node_list.filter(
-            (node: BrokerNode) => node.metadata.version === current_version && nodes.includes(node.id) && node.available && !this.busy_nodes[node.id]
+            (node: BrokerNode) =>
+                node.metadata.version === current_version &&
+                nodes.includes(node.id) &&
+                node.available &&
+                !this.busy_nodes[node.id],
         );
     }
 
