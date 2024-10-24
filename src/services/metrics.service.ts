@@ -24,29 +24,67 @@ export class MetricsService extends Service {
         this.parseServiceSchema({
             name: "metrics",
 
-            actions: {
-                addToBuildTimerHistogram: this.addToBuildTimerHistogram,
-                incCounterBuildSuccess: this.incCounterSuccess,
-                incCounterBuildFailure: this.incCounterBuildFailure,
-                incCounterSoftwareFailure: this.incCounterSoftwareFailure,
-                incCounterBuildTimeout: this.incCounterBuildTimeout,
-                incCounterBuildTotal: this.incCounterBuildTotal,
-                incCounterAlreadyBuilt: this.incCounterAlreadyBuilt,
-                incCounterBuildCancelled: this.incCounterBuildCancelled,
-                incCounterBuildSkipped: this.incCounterBuildSkipped,
-                incCounterDatabaseTotal: this.incCounterDatabaseTotal,
-                incCounterDatabaseSuccess: this.incCounterDatabaseSuccess,
-                incCounterDatabaseFailure: this.incCounterDatabaseFailure,
-                startHistogramTimer: this.startHistogramTimer,
-                setGaugeActiveBuilders: this.setGaugeActiveBuilders,
-                setGaugeIdleBuilders: this.setGaugeIdleBuilders,
-                setGaugeCurrentQueue: this.setGaugeCurrentQueue,
-                getMetrics: this.getMetrics,
-            },
-
             created() {
                 init();
             },
+
+            events: {
+                "builds.success": {
+                    group: "builds",
+                    handler(ctx: Context) {
+                        this.incCounterSuccess(ctx);
+                    },
+                },
+                "builds.canceled-requeue": {
+                    group: "builds",
+                    handler(ctx: Context) {
+                        this.incCounterBuildCancelled(ctx);
+                    },
+                },
+                "builds.failed": {
+                    group: "builds",
+                    handler(ctx: Context) {
+                        this.incCounterBuildFailure(ctx);
+                    },
+                },
+                "builds.skipped": {
+                    group: "builds",
+                    handler(ctx: Context) {
+                        this.incCounterBuildSkipped(ctx);
+                    },
+                },
+                "builds.alreadyBuilt": {
+                    group: "builds",
+                    handler(ctx: Context) {
+                        this.incCounterAlreadyBuilt(ctx);
+                    },
+                },
+                "builds.timeout": {
+                    group: "builds",
+                    handler(ctx: Context) {
+                        this.incCounterBuildTimeout(ctx);
+                    },
+                },
+                "builds.replaced": {
+                    group: "builds",
+                    handler(ctx: Context) {
+                        this.incCounterBuildCancelled(ctx);
+                    },
+                },
+                "builds.canceled": {
+                    group: "builds",
+                    handler(ctx: Context) {
+                        this.incCounterBuildCanceled(ctx);
+                    },
+                },
+                "builds.softwareFailure": {
+                    group: "builds",
+                    handler(ctx: Context) {
+                        this.incCounterSoftwareFailure(ctx);
+                    },
+                },
+            },
+
             ...MoleculerConfigCommonService,
         });
     }

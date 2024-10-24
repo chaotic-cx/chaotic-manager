@@ -214,11 +214,6 @@ export class CoordinatorService extends Service {
 
                             metricsParams.status = BuildStatus.ALREADY_BUILT;
                             notificationPromises.push(
-                                this.broker.call<void, MetricsCounterLabels>(
-                                    "metrics.incCounterAlreadyBuilt",
-                                    metricsParams,
-                                ),
-
                                 this.broker.broadcast<MetricsCounterLabels>("builds.alreadyBuilt", metricsParams),
                             );
                             break;
@@ -246,11 +241,6 @@ export class CoordinatorService extends Service {
                                 ),
                             );
                             notificationPromises.push(
-                                this.broker.call<void, MetricsCounterLabels>(
-                                    "metrics.incCounterBuildSuccess",
-                                    metricsParams,
-                                ),
-
                                 this.broker.broadcast<MetricsCounterLabels>("builds.success", metricsParams),
                             );
                             break;
@@ -263,11 +253,6 @@ export class CoordinatorService extends Service {
 
                             metricsParams.status = BuildStatus.SKIPPED;
                             notificationPromises.push(
-                                this.broker.call<void, MetricsCounterLabels>(
-                                    "metrics.incCounterBuildSkipped",
-                                    metricsParams,
-                                ),
-
                                 this.broker.broadcast<MetricsCounterLabels>("builds.skipped", metricsParams),
                             );
                             break;
@@ -292,11 +277,6 @@ export class CoordinatorService extends Service {
                                 ),
                             );
                             notificationPromises.push(
-                                this.broker.call<void, MetricsCounterLabels>(
-                                    "metrics.incCounterBuildFailure",
-                                    metricsParams,
-                                ),
-
                                 this.broker.broadcast<MetricsCounterLabels>("builds.failed", metricsParams),
                             );
                             break;
@@ -311,11 +291,6 @@ export class CoordinatorService extends Service {
                                 );
                                 metricsParams.replaced = true;
                                 notificationPromises.push(
-                                    this.broker.call<void, MetricsCounterLabels>(
-                                        "metrics.incCounterBuildCancelled",
-                                        metricsParams,
-                                    ),
-
                                     this.broker.broadcast<MetricsCounterLabels>("builds.replaced", metricsParams),
                                 );
                             } else {
@@ -324,11 +299,6 @@ export class CoordinatorService extends Service {
                                 metricsParams.replaced = false;
                                 notificationPromises.push(source_repo.notify(job, "canceled", "Build canceled."));
                                 notificationPromises.push(
-                                    this.broker.call<void, MetricsCounterLabels>(
-                                        "metrics.incCounterBuildCancelled",
-                                        metricsParams,
-                                    ),
-
                                     this.broker.broadcast<MetricsCounterLabels>("builds.canceled", metricsParams),
                                 );
                             }
@@ -340,11 +310,6 @@ export class CoordinatorService extends Service {
                             );
                             metricsParams.replaced = true;
                             notificationPromises.push(
-                                this.broker.call<void, MetricsCounterLabels>(
-                                    "metrics.incCounterBuildCancelled",
-                                    metricsParams,
-                                ),
-
                                 this.broker.broadcast<MetricsCounterLabels>("builds.canceled-requeue", metricsParams),
                             );
                             job.logger.log(`Job ${job.toId()} was canceled and re-queued due to builder shutdown.`);
@@ -372,11 +337,6 @@ export class CoordinatorService extends Service {
                             );
                             metricsParams.status = BuildStatus.TIMED_OUT;
                             notificationPromises.push(
-                                this.broker.call<void, MetricsCounterLabels>(
-                                    "metrics.incCounterBuildTimeout",
-                                    metricsParams,
-                                ),
-
                                 this.broker.broadcast<MetricsCounterLabels>("builds.timeout", metricsParams),
                             );
                             break;
@@ -404,11 +364,6 @@ export class CoordinatorService extends Service {
                     );
                     metricsParams.status = BuildStatus.SOFTWARE_FAILURE;
                     notificationPromises.push(
-                        this.broker.call<void, MetricsCounterLabels>(
-                            "metrics.incCounterSoftwareFailure",
-                            metricsParams,
-                        ),
-
                         this.broker.broadcast<MetricsCounterLabels>("builds.softwareFailure", metricsParams),
                     );
                 },
