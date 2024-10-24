@@ -241,10 +241,14 @@ export interface MetricsTimerLabels {
 export interface MetricsCounterLabels {
     arch: string;
     build_class: BuildClass;
+    builder_class: BuildClass;
+    builder_name: string;
+    commit?: string;
     pkgname: string;
     replaced: boolean;
     status?: BuildStatus;
     target_repo: string;
+    timestamp: number;
 }
 
 export interface MetricsGaugeLabels {

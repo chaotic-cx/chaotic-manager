@@ -173,11 +173,15 @@ export class CoordinatorService extends Service {
         node_id: string,
     ): void {
         const metricsParams: MetricsCounterLabels = {
-            pkgname: job.pkgbase,
-            target_repo: job.target_repo,
-            replaced: false,
-            build_class: job.build_class,
             arch: job.arch,
+            build_class: job.build_class,
+            builder_class: this.broker.metadata.build_class,
+            builder_name: getPureNodeName(node_id),
+            commit: job.commit,
+            pkgname: job.pkgbase,
+            replaced: false,
+            target_repo: job.target_repo,
+            timestamp: job.timestamp,
         };
 
         const notificationPromises: Promise<any>[] = [];
