@@ -176,13 +176,13 @@ export class BuilderService extends Service {
                         logger.log("Unknown container failure during build.");
                         this.chaoticLogger.error("Unknown container failure during build. No output.");
                     } else if (out.StatusCode === 13) {
-                        return { success: BuildStatus.ALREADY_BUILT };
+                        return { success: BuildStatus.ALREADY_BUILT, duration: this.stopTimer(timeStart) };
                     } else if (out.StatusCode === this.builder.ci_code_skip) {
-                        return { success: BuildStatus.SKIPPED };
+                        return { success: BuildStatus.SKIPPED, duration: this.stopTimer(timeStart) };
                     } else if (out.StatusCode === 124) {
-                        return { success: BuildStatus.TIMED_OUT };
+                        return { success: BuildStatus.TIMED_OUT, duration: this.stopTimer(timeStart) };
                     } else {
-                        return { success: BuildStatus.FAILED };
+                        return { success: BuildStatus.FAILED, duration: this.stopTimer(timeStart) };
                     }
                 } else {
                     logger.log(`Finished build. Uploading...`);
@@ -197,7 +197,7 @@ export class BuilderService extends Service {
 
                 if (file_list.length === 0) {
                     logger.log(`No files were found in the build output directory.`);
-                    return { success: BuildStatus.FAILED };
+                    return { success: BuildStatus.FAILED, duration: this.stopTimer(timeStart) };
                 }
 
                 const sshlogger = new SshLogger();
@@ -213,6 +213,7 @@ export class BuilderService extends Service {
                     if (this.cancelled) {
                         return {
                             success: this.cancelledCode,
+                            duration: this.stopTimer(timeStart),
                         };
                     }
                     await this.scpClient.uploadDir(this.mountPkgout, data.upload_info.database.landing_zone);
@@ -221,6 +222,7 @@ export class BuilderService extends Service {
                     if (this.cancelled) {
                         return {
                             success: this.cancelledCode,
+                            duration: this.stopTimer(timeStart),
                         };
                     }
 
@@ -256,21 +258,23 @@ export class BuilderService extends Service {
                 const addToDbReturn: { success: boolean } = await ctx.call("database.addToDb", addToDbParams);
 
                 if (!addToDbReturn.success) {
-                    return { success: BuildStatus.FAILED };
+                    return { success: BuildStatus.FAILED, duration: this.stopTimer(timeStart) };
                 } else {
+                    const duration = this.stopTimer(timeStart);
                     ctx.call<void, MetricsHistogramContext>("metrics.addToBuildTimerHistogram", {
                         labels: {
                             arch: data.arch,
                             pkgbase: data.pkgbase,
                             target_repo: data.target_repo,
                         },
-                        duration: this.stopTimer(timeStart),
+                        duration: duration
                     }).catch((e) => {
                         this.chaoticLogger.error("Error while adding to histogram: ", e);
                     });
                     return {
                         success: BuildStatus.SUCCESS,
                         packages: file_list,
+                        duration: duration,
                     };
                 }
             })

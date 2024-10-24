@@ -30,9 +30,9 @@ build-builder:
   # Used to deploy a new base Docker image for building purposes,
   # this one runs once per day via pipeline schedules
   stage: build
-  image: docker:24-cli
+  image: docker:27-cli
   services:
-    - name: docker:24-dind
+    - name: docker:27-dind
       alias: docker-daemon
   script:
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
@@ -49,9 +49,9 @@ build-builder:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $UPDATE_BUILDER == "1"
 build-manager:
   stage: build
-  image: docker:24-cli
+  image: docker:27-cli
   services:
-    - name: docker:24-dind
+    - name: docker:27-dind
       alias: docker-daemon
   script:
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"

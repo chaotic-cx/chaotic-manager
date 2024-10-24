@@ -155,7 +155,7 @@ export type Builder_Action_BuildPackage_Params = {
 export type BuildStatusReturn = {
     packages?: string[];
     success: BuildStatus;
-    timer?: number;
+    duration?: number;
 };
 
 export interface DatabaseRemoveStatusReturn {
@@ -241,9 +241,10 @@ export interface MetricsTimerLabels {
 export interface MetricsCounterLabels {
     arch: string;
     build_class: BuildClass;
-    builder_class: BuildClass;
     builder_name: string;
     commit?: string;
+    duration?: number;
+    logUrl?: string;
     pkgname: string;
     replaced: boolean;
     status?: BuildStatus;

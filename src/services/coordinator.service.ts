@@ -175,9 +175,9 @@ export class CoordinatorService extends Service {
         const metricsParams: MetricsCounterLabels = {
             arch: job.arch,
             build_class: job.build_class,
-            builder_class: this.broker.metadata.build_class,
             builder_name: getPureNodeName(node_id),
             commit: job.commit,
+            logUrl: this.base_logs_url ? getLogUrl(job, this.base_logs_url) : undefined,
             pkgname: job.pkgbase,
             replaced: false,
             target_repo: job.target_repo,
@@ -189,6 +189,8 @@ export class CoordinatorService extends Service {
         promise
             .then(
                 async (ret: BuildStatusReturn) => {
+                    metricsParams.duration = ret.duration;
+
                     // Special logic, don't be needlessly noisy and prevent other logic
                     if (
                         !this.active &&
