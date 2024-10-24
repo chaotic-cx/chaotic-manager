@@ -98,7 +98,7 @@ export function getPureNodeName(nodeName: string): string {
  * @returns True if the pkgbase is valid, false otherwise.
  */
 export function isValidPkgbase(pkgbase: string): boolean {
-    return /^[a-z0-9-_+]+$/.test(pkgbase);
+    return /^[a-z0-9-_\.+]+$/.test(pkgbase);
 }
 
 /**
