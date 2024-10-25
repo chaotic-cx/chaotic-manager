@@ -766,13 +766,13 @@ export class CoordinatorService extends Service {
     private async updateMetrics(): Promise<void> {
         const available_nodes: BrokerNode[] = await this.getAvailableNodes();
         try {
-            await this.broker.call<void, MetricsGaugeContext>("metrics.setGaugeActiveBuilders", {
+            await this.broker.broadcast<MetricsGaugeContext>("metrics.activeBuilders", {
                 count: Object.keys(this.busy_nodes).length,
             });
-            await this.broker.call<void, MetricsGaugeContext>("metrics.setGaugeIdleBuilders", {
+            await this.broker.broadcast<MetricsGaugeContext>("metrics.idleBuilders", {
                 count: available_nodes.length,
             });
-            await this.broker.call<void, MetricsGaugeContext>("metrics.setGaugeCurrentQueue", {
+            await this.broker.broadcast<MetricsGaugeContext>("metrics.currentQueue", {
                 count: Object.keys(this.queue).length,
                 labels: {
                     build_class: Object.keys(this.queue).map((key) => this.queue[key].build_class) as BuildClass[],

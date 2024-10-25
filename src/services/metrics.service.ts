@@ -31,56 +31,86 @@ export class MetricsService extends Service {
             events: {
                 "builds.success": {
                     group: "builds",
-                    handler(ctx: Context) {
+                    handler(ctx: Context<MetricsCounterLabels>) {
                         this.incCounterSuccess(ctx);
                     },
                 },
                 "builds.canceled-requeue": {
                     group: "builds",
-                    handler(ctx: Context) {
+                    handler(ctx: Context<MetricsCounterLabels>) {
                         this.incCounterBuildCancelled(ctx);
                     },
                 },
                 "builds.failed": {
                     group: "builds",
-                    handler(ctx: Context) {
+                    handler(ctx: Context<MetricsCounterLabels>) {
                         this.incCounterBuildFailure(ctx);
                     },
                 },
                 "builds.skipped": {
                     group: "builds",
-                    handler(ctx: Context) {
+                    handler(ctx: Context<MetricsCounterLabels>) {
                         this.incCounterBuildSkipped(ctx);
                     },
                 },
                 "builds.alreadyBuilt": {
                     group: "builds",
-                    handler(ctx: Context) {
+                    handler(ctx: Context<MetricsCounterLabels>) {
                         this.incCounterAlreadyBuilt(ctx);
                     },
                 },
                 "builds.timeout": {
                     group: "builds",
-                    handler(ctx: Context) {
+                    handler(ctx: Context<MetricsCounterLabels>) {
                         this.incCounterBuildTimeout(ctx);
                     },
                 },
                 "builds.replaced": {
                     group: "builds",
-                    handler(ctx: Context) {
+                    handler(ctx: Context<MetricsCounterLabels>) {
                         this.incCounterBuildCancelled(ctx);
                     },
                 },
                 "builds.canceled": {
                     group: "builds",
-                    handler(ctx: Context) {
+                    handler(ctx: Context<MetricsCounterLabels>) {
                         this.incCounterBuildCanceled(ctx);
                     },
                 },
                 "builds.softwareFailure": {
                     group: "builds",
-                    handler(ctx: Context) {
+                    handler(ctx: Context<MetricsCounterLabels>) {
                         this.incCounterSoftwareFailure(ctx);
+                    },
+                },
+                "metrics.activeBuilders": {
+                    group: "metrics",
+                    handler(ctx: Context<MetricsGaugeContext>) {
+                        this.setGaugeActiveBuilders(ctx);
+                    },
+                },
+                "metrics.idleBuilders": {
+                    group: "metrics",
+                    handler(ctx: Context<MetricsGaugeContext>) {
+                        this.setGaugeIdleBuilders(ctx);
+                    },
+                },
+                "metrics.currentQueue": {
+                    group: "metrics",
+                    handler(ctx: Context<MetricsGaugeContext>) {
+                        this.setGaugeCurrentQueue(ctx);
+                    },
+                },
+                "database.success": {
+                    group: "database",
+                    handler(ctx: Context<MetricsDatabaseLabels>) {
+                        this.incCounterDatabaseSuccess(ctx);
+                    },
+                },
+                "database.failure": {
+                    group: "database",
+                    handler(ctx: Context<MetricsDatabaseLabels>) {
+                        this.incCounterDatabaseFailure(ctx);
                     },
                 },
             },

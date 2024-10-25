@@ -261,7 +261,7 @@ export class BuilderService extends Service {
                     return { success: BuildStatus.FAILED, duration: this.stopTimer(timeStart) };
                 } else {
                     const duration = this.stopTimer(timeStart);
-                    ctx.call<void, MetricsHistogramContext>("metrics.addToBuildTimerHistogram", {
+                    ctx.broadcast<MetricsHistogramContext>("builds.addToBuildTimerHistogram", {
                         labels: {
                             arch: data.arch,
                             pkgbase: data.pkgbase,
