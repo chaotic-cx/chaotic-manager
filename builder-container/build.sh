@@ -7,6 +7,7 @@ source ./util.shlib
 PKGOUT="/home/builder/pkgout/"
 SRCDEST="/home/builder/srcdest/"
 SRCDEST_CACHED="/home/builder/srcdest_cached"
+TEMPOUT="/home/builder/tempOut/"
 
 PACKAGE="$1"
 BUILDDIR="/home/builder/build/"
@@ -137,8 +138,9 @@ function build-pkg {
 
 function check-pkg {
 	printf "\nChecking the package integrity with namcap...\n"
-	# These should not fail the build due to namcap bugs. The build already succeeded.
-	namcap -i "$PKGOUT"/*.pkg.tar.zst || true
+	# These should not fail the build due to namcap bugs.
+	# The build already succeeded. Also log to TEMPOUT for builder service to pick up.
+    namcap -mi "$PKGOUT"/*.pkg.tar.zst | tee "$TEMPOUT/$PACKAGE.namcap" || true
 	printf "\n"
 }
 

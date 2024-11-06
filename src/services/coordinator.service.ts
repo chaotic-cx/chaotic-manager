@@ -233,7 +233,10 @@ export class CoordinatorService extends Service {
                                 source_repo_url: source_repo.getUrl(),
                                 timestamp: job.timestamp,
                             };
+
                             metricsParams.status = BuildStatus.SUCCESS;
+                            metricsParams.namcapAnalysis = ret.namcapAnalysis;
+
                             notificationPromises.push(
                                 this.broker.call<void, DeploymentNotificationParams>(
                                     "notifier.notifyDeployment",

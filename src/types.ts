@@ -61,7 +61,7 @@ export type PackagesReturnObject = Record<
     }
 >[];
 
-export type StatsReturnObject = {
+export interface StatsReturnObject {
     active: {
         count: number;
         packages: { name: string; node: string; build_class: number | string; liveLog?: string }[];
@@ -74,7 +74,7 @@ export type StatsReturnObject = {
         count: number;
         nodes: { name: string; build_class: number }[];
     };
-};
+}
 
 export interface MetricsReturnObject {
     builder_queue: {
@@ -105,7 +105,7 @@ export const corsOptions: CorsOptions = {
     methods: ALLOWED_CORS_METHODS,
 };
 
-export type Database_Action_fetchUploadInfo_Response = {
+export interface Database_Action_fetchUploadInfo_Response {
     database: {
         ssh: {
             host: string;
@@ -114,9 +114,9 @@ export type Database_Action_fetchUploadInfo_Response = {
         };
         landing_zone: string;
     };
-};
+}
 
-export type Database_Action_AddToDb_Params = {
+export interface Database_Action_AddToDb_Params {
     arch: string;
     builder_image: string;
     pkgbase: string;
@@ -124,21 +124,21 @@ export type Database_Action_AddToDb_Params = {
     source_repo: string;
     target_repo: string;
     timestamp: number;
-};
+}
 
-export type Database_Action_AutoRepoRemove_Params = {
+export interface Database_Action_AutoRepoRemove_Params {
     arch: string;
     builder_image: string;
     pkgbases: string[];
     repo: string;
-};
+}
 
-export type Database_Action_GenerateDestFillerFiles_Params = {
+export interface Database_Action_GenerateDestFillerFiles_Params {
     target_repo: string;
     arch: string;
-};
+}
 
-export type Builder_Action_BuildPackage_Params = {
+export interface Builder_Action_BuildPackage_Params {
     arch: string;
     builder_image: string;
     commit?: string;
@@ -150,13 +150,14 @@ export type Builder_Action_BuildPackage_Params = {
     target_repo: string;
     timestamp: number;
     upload_info: Database_Action_fetchUploadInfo_Response;
-};
+}
 
-export type BuildStatusReturn = {
+export interface BuildStatusReturn {
+    duration?: number;
+    namcapAnalysis?: string;
     packages?: string[];
     success: BuildStatus;
-    duration?: number;
-};
+}
 
 export interface DatabaseRemoveStatusReturn {
     success: boolean;
@@ -171,13 +172,13 @@ export interface Coordinator_Action_PackageMetaData_Single {
 
 export type Coordinator_Action_PackageMetaData_List = Coordinator_Action_PackageMetaData_Single[];
 
-export type Coordinator_Action_AddJobsToQueue_Params = {
+export interface Coordinator_Action_AddJobsToQueue_Params {
     arch: string;
     commit: string | undefined;
     packages: Coordinator_Action_PackageMetaData_List;
     source_repo: string;
     target_repo: string;
-};
+}
 
 export type Coordinator_Action_AutoRepoRemove_Params = Omit<Database_Action_AutoRepoRemove_Params, "builder_image">;
 
@@ -250,6 +251,7 @@ export interface MetricsCounterLabels {
     status?: BuildStatus;
     target_repo: string;
     timestamp: number;
+    namcapAnalysis?: string;
 }
 
 export interface MetricsGaugeLabels {

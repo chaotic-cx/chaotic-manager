@@ -1,5 +1,5 @@
 import fs from "fs";
-import type { Dirent } from "node:fs";
+import type { Dirent, Stats } from "node:fs";
 import path from "path";
 import { E_ALREADY_LOCKED, Mutex, tryAcquire } from "async-mutex";
 import { to } from "await-to-js";
@@ -43,6 +43,7 @@ export class BuilderService extends Service {
     private shared_sources: string;
     private mountPkgout = "/shared/pkgout";
     private mountSrcdest = "/shared/srcdest_cache";
+    private tempOut = "/shared/tempOut";
 
     private containerManager: ContainerManager;
     private container: Container | null = null;
@@ -64,6 +65,7 @@ export class BuilderService extends Service {
             process.env.BUILDER_SRCDEST_CACHE_OVERRIDE || path.join(SHARED_PATH, "srcdest_cache");
         this.shared_pkgout = path.join(SHARED_PATH, "pkgout");
         this.shared_sources = path.join(SHARED_PATH, "sources");
+        this.tempOut = path.join(SHARED_PATH, "temp");
 
         this.parseServiceSchema({
             name: "builder",
@@ -129,6 +131,7 @@ export class BuilderService extends Service {
                         srcdest_package_path + ":/home/builder/srcdest_cached",
                         this.shared_pkgout + ":/home/builder/pkgout",
                         this.shared_sources + ":/pkgbuilds",
+                        this.tempOut + ":/home/builder/tempOut",
                     ],
                     [
                         "BUILDER_HOSTNAME=" + this.builder.name,
@@ -190,8 +193,8 @@ export class BuilderService extends Service {
                 }
 
                 // Remove any filler files from the equation
-                const file_list = fs.readdirSync(this.mountPkgout).filter((file): boolean => {
-                    const stats = fs.statSync(path.join(this.mountPkgout, file));
+                const file_list: string[] = fs.readdirSync(this.mountPkgout).filter((file): boolean => {
+                    const stats: Stats = fs.statSync(path.join(this.mountPkgout, file));
                     return stats.isFile() && stats.size > 0;
                 });
 
@@ -257,6 +260,26 @@ export class BuilderService extends Service {
                 };
                 const addToDbReturn: { success: boolean } = await ctx.call("database.addToDb", addToDbParams);
 
+                // Retrieve any information from the namcap analysis file if it exists and clean up afterwards
+                let namcapAnalysis = "";
+                try {
+                    const filesInTempOut: Dirent[] = fs.readdirSync(this.tempOut, { withFileTypes: true });
+                    const namcapAnalysisFile: Dirent | undefined = filesInTempOut.find(
+                        (file) => file.name === `${data.pkgbase}.namcap`,
+                    );
+
+                    if (namcapAnalysisFile) {
+                        namcapAnalysis = fs.readFileSync(path.join(this.tempOut, namcapAnalysisFile.name), {
+                            encoding: "utf-8",
+                        });
+                        fs.rmSync(path.join(this.tempOut, namcapAnalysisFile.name));
+                    } else {
+                        this.chaoticLogger.error(`Namcap analysis file not found for ${data.pkgbase}`);
+                    }
+                } catch (err: any) {
+                    this.chaoticLogger.error(err);
+                }
+
                 if (!addToDbReturn.success) {
                     return { success: BuildStatus.FAILED, duration: this.stopTimer(timeStart) };
                 } else {
@@ -267,14 +290,15 @@ export class BuilderService extends Service {
                             pkgbase: data.pkgbase,
                             target_repo: data.target_repo,
                         },
-                        duration: duration
+                        duration: duration,
                     }).catch((e) => {
                         this.chaoticLogger.error("Error while adding to histogram: ", e);
                     });
                     return {
                         success: BuildStatus.SUCCESS,
                         packages: file_list,
-                        duration: duration,
+                        duration,
+                        namcapAnalysis,
                     };
                 }
             })
