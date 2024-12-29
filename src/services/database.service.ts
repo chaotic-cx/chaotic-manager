@@ -188,7 +188,7 @@ export class DatabaseService extends Service {
 
             // Broadcast event to inform caur-backend to remove the packages from the database
             void this.broker.broadcast<string[]>("database.removalComplete", data.pkgbases);
-            
+
             return {
                 success: true,
             };

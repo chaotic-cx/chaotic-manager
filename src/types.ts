@@ -98,7 +98,11 @@ export const MAX_SHUTDOWN_TIME = 1000 * 30;
 export const SOURCECACHE_MAX_LIFETIME = ONE_UNIX_MONTH;
 export const HTTP_CACHE_MAX_AGE = ONE_UNIX_DAY;
 
-export const ALLOWED_CORS_ORIGINS = ["https://aur.chaotic.cx", "https://caur-frontend.pages.dev"];
+export const ALLOWED_CORS_ORIGINS = [
+    "https://aur.chaotic.cx",
+    "https://caur-frontend.pages.dev",
+    "https://v2.caur-frontend.pages.dev",
+];
 export const ALLOWED_CORS_METHODS = ["GET"];
 export const corsOptions: CorsOptions = {
     origin: ALLOWED_CORS_ORIGINS,
