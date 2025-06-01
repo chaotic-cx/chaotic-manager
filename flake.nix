@@ -8,7 +8,6 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     pre-commit-hooks = {
       url = "github:cachix/pre-commit-hooks.nix";
-      inputs.nixpkgs-stable.follows = "nixpkgs";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
@@ -42,41 +41,48 @@
         default = chaotic-shell;
         chaotic-shell = mkShell {
           devshell.name = "chaotic-devshell";
-          commands = [
-            {
-              category = "chaotic-manager";
-              command = ''
-                tsc-watch --onSuccess 'node --env-file=.env dist/index.js database --web-port 8080'
-              '';
-              help = "Starts the manager instance with watching file changes";
-              name = "start-dev-manager";
-            }
-            {
-              category = "chaotic-manager";
-              command = ''
-                tsc-watch --onSuccess 'node --env-file=.env dist/index.js builder'
-              '';
-              help = "Starts the builder instance with watching file changes";
-              name = "start-dev-builder";
-            }
-            {
-              category = "chaotic-manager";
-              command = ''
-                tsc && node dist/index.js
-              '';
-              help = "Starts the development environment";
-              name = "start";
-            }
-            {package = "biome";}
-            {package = "commitizen";}
-            {package = "corepack";}
-            {package = "docker-compose";}
-            {package = "jq";}
-            {package = "nodejs_22";}
-            {package = "pre-commit";}
-            {package = "psmisc";}
-            {package = "redis";}
-          ];
+          commands =
+            [
+              {
+                category = "chaotic-manager";
+                command = ''
+                  tsc-watch --onSuccess 'node --env-file=.env dist/index.js database --web-port 8080'
+                '';
+                help = "Starts the manager instance with watching file changes";
+                name = "start-dev-manager";
+              }
+              {
+                category = "chaotic-manager";
+                command = ''
+                  tsc-watch --onSuccess 'node --env-file=.env dist/index.js builder'
+                '';
+                help = "Starts the builder instance with watching file changes";
+                name = "start-dev-builder";
+              }
+              {
+                category = "chaotic-manager";
+                command = ''
+                  tsc && node dist/index.js
+                '';
+                help = "Starts the development environment";
+                name = "start";
+              }
+              {package = "biome";}
+              {package = "commitizen";}
+              {package = "corepack";}
+              {package = "docker-compose";}
+              {package = "jq";}
+              {package = "nodejs_24";}
+              {package = "pre-commit";}
+              {package = "redis";}
+            ]
+            ++ (
+              if system == "x86_64-linux" || system == "aarch64-linux"
+              then [
+                {package = "psmisc";}
+              ]
+              else []
+            );
           devshell.startup.preCommitHooks.text = ''
             ${self.checks.${system}.pre-commit-check.shellHook}
 
@@ -91,10 +97,11 @@
               name = "NIX_PATH";
               value = "${nixpkgs}";
             }
-            {
-              name = "NODE_PATH";
-              value = "${self.packages.${system}.node-modules}";
-            }
+            # TODO: Unknown token: { line: 3, col: 2, type: 'INVALID', value: undefined } 3:2 in lockfile
+            #{
+            #  name = "NODE_PATH";
+            #  value = "${self.packages.${system}.node-modules}";
+            #}
           ];
         };
       };
@@ -137,7 +144,7 @@
       ];
 
       # The systems currently available
-      systems = ["x86_64-linux" "aarch64-linux"];
+      systems = ["x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin"];
 
       # This applies to all systems
       inherit perSystem;

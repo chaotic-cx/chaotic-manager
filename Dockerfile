@@ -6,7 +6,7 @@ RUN corepack enable && yarn install
 COPY . /build
 RUN yarn build
 
-FROM node:alpine
+FROM node:24-alpine
 
 RUN apk add autossh bash gawk
 WORKDIR /app
