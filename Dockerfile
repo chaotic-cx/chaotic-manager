@@ -1,4 +1,4 @@
-FROM node:22-alpine AS builder
+FROM node:24-alpine AS builder
 
 WORKDIR /build
 COPY package.json yarn.lock .yarnrc.yml /build/
@@ -8,7 +8,7 @@ RUN yarn build
 
 FROM node:alpine
 
-RUN apk add autossh bash
+RUN apk add autossh bash gawk
 WORKDIR /app
 COPY --from=builder /build/config /app/config
 COPY ./manager-container/entry_point.sh /entry_point.sh
