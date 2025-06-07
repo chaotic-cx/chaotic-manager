@@ -7,8 +7,10 @@
         "outDir": "./dist",
         "esModuleInterop": true,
         "forceConsistentCasingInFileNames": true,
+        "allowSyntheticDefaultImports": true,
         "strict": true,
         "skipLibCheck": true
     },
+    "include": ["src/**/*"],
     "exclude": ["dist", "src/public"]
 }

@@ -4,7 +4,6 @@
     "main": "dist/index.js",
     "author": "Garuda Team",
     "license": "AGPL-3.0-or-later",
-    "type": "module",
     "private": true,
     "dependencies": {
         "@xterm/addon-fit": "^0.10.0",
@@ -27,7 +26,7 @@
         "typescript": "^5.8.3"
     },
     "scripts": {
-        "build": "tsc && rspack",
+        "build": "tsc -P tsconfig.app.json && rspack",
         "build-docs": "typedoc --out docs 'src/*.ts' 'src/*/*.ts' --plugin typedoc-material-theme --themeColor '#1e1e2e'",
         "format:check": "prettier --check .",
         "format:write": "prettier --write .",

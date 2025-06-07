@@ -4,16 +4,23 @@ import { resolve } from "node:path";
 
 export default defineConfig({
     entry: "./src/public/logs.ts",
+    experiments: {
+        css: true,
+    },
     module: {
         rules: [
             {
                 test: /\.ts?$/,
-                use: "ts-loader",
-                exclude: /node_modules/,
-            },
-            {
-                test: /\.css$/i,
-                use: ["style-loader", "css-loader"],
+                exclude: [/node_modules/],
+                loader: "builtin:swc-loader",
+                options: {
+                    jsc: {
+                        parser: {
+                            syntax: "typescript",
+                        },
+                    },
+                },
+                type: "javascript/auto",
             },
         ],
     },
