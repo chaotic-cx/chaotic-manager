@@ -124,9 +124,6 @@ function setup-buildenv {
 		current_mirrorlist=$(cat /etc/pacman.d/mirrorlist)
 		echo "Server = $PACMAN_REPO" > /etc/pacman.d/mirrorlist
 		echo "$current_mirrorlist" >> /etc/pacman.d/mirrorlist
-
-		echo "Prepended custom Archlinux repository to /etc/pacman.d/mirrorlist:"
-		echo "  - $PACMAN_REPO"
 	fi
 
 	if [[ ! -d "$PKGOUT" ]]; then mkdir -p "$PKGOUT"; fi
@@ -159,6 +156,12 @@ function check-pkg {
 printf "\nExecuting build on host %s.\n" "$BUILDER_HOSTNAME"
 echo "Setting up package repository..."
 print-if-failed setup-package-repo
+
+if [[ -n "$PACMAN_REPO" ]]; then
+	echo "Prepended custom Archlinux repository to /etc/pacman.d/mirrorlist as passed by build tools:"
+	echo "  - $PACMAN_REPO"
+fi
+
 echo "Setting up build environment..."
 # Apply interference, this also does a pacman -Syu, which is why it's under setup-buildenv
 print-if-failed setup-buildenv
