@@ -11,6 +11,7 @@ TEMPOUT="/home/builder/tempOut/"
 
 PACKAGE="$1"
 BUILDDIR="/home/builder/build/"
+
 [[ -z $BUILDER_HOSTNAME ]] && BUILDER_HOSTNAME="unknown builder (please supply BUILDER_HOSTNAME via Docker environment)"
 [[ -z $BUILDER_TIMEOUT ]] && BUILDER_TIMEOUT=3600
 [[ -z $CI_CODE_SKIP ]] && CI_CODE_SKIP=123
@@ -116,6 +117,17 @@ function setup-buildenv {
 	echo "MAKEFLAGS=$MAKEFLAGS" >>/etc/makepkg.conf
 
 	if [[ -n "$EXTRA_PACMAN_REPOS" ]]; then echo "$EXTRA_PACMAN_REPOS" >>/etc/pacman.conf; fi
+
+	if [[ -n "$PACMAN_REPO" ]]; then
+		# Prepend the given repository to the pacman.conf.d/mirrorlist
+		local current_mirrorlist
+		current_mirrorlist=$(cat /etc/pacman.d/mirrorlist)
+		echo "$PACMAN_REPO" > /etc/pacman.d/mirrorlist
+		echo "$current_mirrorlist" >> /etc/pacman.d/mirrorlist
+
+		echo "Prepended custom Archlinux repository to /etc/pacman.d/mirrorlist:"
+		echo "  - $PACMAN_REPO"
+	fi
 
 	if [[ ! -d "$PKGOUT" ]]; then mkdir -p "$PKGOUT"; fi
 	chown builder:builder "$PKGOUT"

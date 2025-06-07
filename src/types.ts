@@ -154,6 +154,7 @@ export interface Builder_Action_BuildPackage_Params {
     target_repo: string;
     timestamp: number;
     upload_info: Database_Action_fetchUploadInfo_Response;
+    arch_mirror?: string;
 }
 
 export interface BuildStatusReturn {
@@ -182,6 +183,7 @@ export interface Coordinator_Action_AddJobsToQueue_Params {
     packages: Coordinator_Action_PackageMetaData_List;
     source_repo: string;
     target_repo: string;
+    arch_mirror: string | undefined;
 }
 
 export type Coordinator_Action_AutoRepoRemove_Params = Omit<Database_Action_AutoRepoRemove_Params, "builder_image">;
@@ -198,6 +200,7 @@ export class CoordinatorJobSavable {
         public pkgnames: string[] | undefined,
         public dependencies: string[] | undefined,
         public commit: string | undefined,
+        public arch_mirror: string | undefined,
     ) {}
 
     toId(): string {
@@ -216,8 +219,9 @@ export class CoordinatorJob extends CoordinatorJobSavable {
         dependencies: string[] | undefined,
         commit: string | undefined,
         public timestamp: number,
+        arch_mirror: string | undefined,
     ) {
-        super(pkgbase, target_repo, source_repo, arch, build_class, pkgnames, dependencies, commit);
+        super(pkgbase, target_repo, source_repo, arch, build_class, pkgnames, dependencies, commit, arch_mirror);
     }
 }
 

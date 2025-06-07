@@ -89,8 +89,8 @@ export class BuilderService extends Service {
      * @param ctx The Moleculer context object
      * @returns The exit code of the build action as a BuildStatusReturn object
      */
-    async buildPackage(ctx: Context): Promise<BuildStatusReturn> {
-        const data = ctx.params as Builder_Action_BuildPackage_Params;
+    async buildPackage(ctx: Context<Builder_Action_BuildPackage_Params>): Promise<BuildStatusReturn> {
+        const data: Builder_Action_BuildPackage_Params = ctx.params;
         this.cancelled = false;
 
         // If this fails, something has gone terribly wrong.
@@ -142,6 +142,7 @@ export class BuilderService extends Service {
                         "PACKAGE_REPO_ID=" + data.source_repo,
                         "PACKAGE_REPO_URL=" + data.source_repo_url,
                         ...(this.builder.cpu_limit ? [`MAKEFLAGS=-j${this.builder.cpu_limit}`] : []),
+                        ...(data.arch_mirror ? "PACMAN_REPO=" + data.arch_mirror : []),
                     ],
                     {
                         CpuPeriod: this.builder.cpu_limit ? 100000 : undefined,

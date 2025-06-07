@@ -1,5 +1,5 @@
 import fs from "fs";
-import commandLineArgs from "command-line-args";
+import commandLineArgs, { CommandLineOptions } from "command-line-args";
 import IORedis from "ioredis";
 import { ServiceBroker } from "moleculer";
 import { RedisConnectionManager } from "./redis-connection-manager";
@@ -24,8 +24,9 @@ const mainDefinitions = [
     { name: "web-port", type: Number },
     { name: "commit", type: String },
     { name: "deptree", type: String },
+    { name: "arch-mirror", type: String },
 ];
-const mainOptions = commandLineArgs(mainDefinitions, {
+const mainOptions: CommandLineOptions = commandLineArgs(mainDefinitions, {
     stopAtFirstUnknown: true,
 });
 
@@ -107,8 +108,9 @@ async function main(): Promise<void> {
                 mainOptions._unknown,
                 mainOptions.commit,
                 deptree ? deptree : mainOptions.deptree,
+                mainOptions["arch-mirror"] || undefined,
             );
-            broker.stop();
+            await broker.stop();
             redis_connection_manager.shutdown();
             return;
         }
@@ -124,7 +126,7 @@ async function main(): Promise<void> {
                 mainOptions["target-repo"] || "chaotic-aur",
                 mainOptions._unknown,
             );
-            broker.stop();
+            await broker.stop();
             connection.quit();
             break;
         }
@@ -137,7 +139,7 @@ async function main(): Promise<void> {
             chaoticLogger.info("Starting builder instance...");
 
             broker.createService(new BuilderService(broker, redis_connection_manager, process.env.SHARED_PATH));
-            broker.start();
+            await broker.start();
             break;
         }
         case "database": {
@@ -162,13 +164,13 @@ async function main(): Promise<void> {
             broker.createService(new WebService(broker, Number(mainOptions["web-port"]), redis_connection_manager));
             broker.createService(new MetricsService(broker));
 
-            broker.start();
+            await broker.start();
             break;
         }
         case "web": {
             broker.createService(new WebService(broker, Number(mainOptions["web-port"]), redis_connection_manager));
 
-            broker.start();
+            await broker.start();
             break;
         }
         default:

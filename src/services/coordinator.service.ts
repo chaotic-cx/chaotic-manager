@@ -42,8 +42,20 @@ export class CoordinatorTrackedJob extends CoordinatorJob {
         commit: string | undefined,
         timestamp: number,
         public logger: BuildsRedisLogger,
+        arch_mirror: string | undefined,
     ) {
-        super(pkgbase, target_repo, source_repo, arch, build_class, pkgnames, dependencies, commit, timestamp);
+        super(
+            pkgbase,
+            target_repo,
+            source_repo,
+            arch,
+            build_class,
+            pkgnames,
+            dependencies,
+            commit,
+            timestamp,
+            arch_mirror,
+        );
         this.node = undefined;
     }
 
@@ -58,6 +70,7 @@ export class CoordinatorTrackedJob extends CoordinatorJob {
             this.pkgnames,
             this.dependencies,
             this.commit,
+            this.arch_mirror,
         );
     }
 }
@@ -74,6 +87,7 @@ function toTracked(job: CoordinatorJobSavable, timestamp: number, logger: Builds
         job.commit,
         timestamp,
         logger,
+        job.arch_mirror,
     );
 }
 
@@ -444,6 +458,7 @@ export class CoordinatorService extends Service {
                         target_repo: job.target_repo,
                         timestamp: job.timestamp,
                         upload_info,
+                        arch_mirror: job.arch_mirror,
                     };
 
                     job.node = node.id;
@@ -452,15 +467,14 @@ export class CoordinatorService extends Service {
                     this.chaoticLogger.info(
                         `Assigning job (${job.build_class}) for ${job.pkgbase} to node ${node.id} (${node.metadata.build_class})`,
                     );
-                    source_repo.notify(job, "running", "Build in progress...");
+                    void source_repo.notify(job, "running", "Build in progress...");
 
-                    const promise = this.broker.call<BuildStatusReturn, Builder_Action_BuildPackage_Params>(
-                        "builder.buildPackage",
-                        params,
-                        {
-                            nodeID: node.id,
-                        },
-                    );
+                    const promise: Promise<BuildStatusReturn> = this.broker.call<
+                        BuildStatusReturn,
+                        Builder_Action_BuildPackage_Params
+                    >("builder.buildPackage", params, {
+                        nodeID: node.id,
+                    });
                     this.onJobComplete(promise, job, source_repo, node.id);
                 }
             })
@@ -474,9 +488,9 @@ export class CoordinatorService extends Service {
      * Adds new jobs to the queue.
      * @param ctx The Moleculer context object.
      */
-    async addJobsToQueue(ctx: Context): Promise<void> {
+    async addJobsToQueue(ctx: Context<Coordinator_Action_AddJobsToQueue_Params>): Promise<void> {
         const timestamp: number = Date.now();
-        const data = ctx.params as Coordinator_Action_AddJobsToQueue_Params;
+        const data: Coordinator_Action_AddJobsToQueue_Params = ctx.params;
         const jobs: CoordinatorTrackedJob[] = [];
 
         const redis: Redis = this.redis_connection_manager.getClient();
@@ -500,6 +514,7 @@ export class CoordinatorService extends Service {
                     data.commit,
                     timestamp,
                     logger,
+                    data.arch_mirror,
                 ),
             );
         }

@@ -15,6 +15,7 @@ export async function schedulePackages(
     packages: string[],
     commit: string | undefined,
     deptree: string | undefined,
+    arch_mirror: string | undefined,
 ): Promise<void> {
     const package_dependency_map: Record<
         string,
@@ -69,6 +70,7 @@ export async function schedulePackages(
         packages: packageList,
         source_repo,
         target_repo,
+        arch_mirror,
     };
 
     await broker.waitForServices(["coordinator"], 10000);
