@@ -4,6 +4,7 @@
     "main": "dist/index.js",
     "author": "Garuda Team",
     "license": "AGPL-3.0-or-later",
+    "type": "module",
     "private": true,
     "dependencies": {
         "@xterm/addon-fit": "^0.10.0",
@@ -16,7 +17,7 @@
         "cors": "^2.8.5",
         "css-loader": "^7.1.2",
         "dependency-graph": "^1.0.0",
-        "dockerode": "^4.0.6",
+        "dockerode": "^4.0.7",
         "express": "5.1.0",
         "ioredis": "^5.6.1",
         "moleculer": "^0.14.35",
@@ -26,7 +27,7 @@
         "typescript": "^5.8.3"
     },
     "scripts": {
-        "build": "tsc && webpack",
+        "build": "tsc && rspack",
         "build-docs": "typedoc --out docs 'src/*.ts' 'src/*/*.ts' --plugin typedoc-material-theme --themeColor '#1e1e2e'",
         "format:check": "prettier --check .",
         "format:write": "prettier --write .",
@@ -39,16 +40,18 @@
     },
     "devDependencies": {
         "@eslint/js": "^9.28.0",
-        "@jest/globals": "^29.7.0",
+        "@jest/globals": "30.0.0-beta.8",
+        "@rspack/cli": "^1.3.15",
+        "@rspack/core": "^1.3.15",
         "@types/await-timeout": "^0.3.4",
         "@types/command-line-args": "^5.2.3",
         "@types/config": "^3.3.5",
-        "@types/cors": "^2.8.18",
-        "@types/dockerode": "^3.3.39",
-        "@types/express": "^5.0.2",
+        "@types/cors": "^2.8.19",
+        "@types/dockerode": "^3.3.40",
+        "@types/express": "^5.0.3",
         "@types/jest": "^29.5.14",
-        "@types/node": "^22.15.29",
-        "@types/node-telegram-bot-api": "^0.64.8",
+        "@types/node": "^22.15.30",
+        "@types/node-telegram-bot-api": "^0.64.9",
         "@types/supertest": "^6.0.3",
         "eslint": "^9.28.0",
         "eslint-config-prettier": "^10.1.5",
@@ -65,9 +68,7 @@
         "typed-moleculer": "^4.1.2",
         "typedoc": "^0.28.5",
         "typedoc-material-theme": "^1.4.0",
-        "typescript-eslint": "^8.33.0",
-        "webpack": "^5.99.9",
-        "webpack-cli": "^6.0.1"
+        "typescript-eslint": "^8.33.1"
     },
     "packageManager": "yarn@4.9.1+sha512.f95ce356460e05be48d66401c1ae64ef84d163dd689964962c6888a9810865e39097a5e9de748876c2e0bf89b232d583c33982773e9903ae7a76257270986538"
 }

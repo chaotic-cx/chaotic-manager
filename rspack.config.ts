@@ -1,12 +1,13 @@
-const path = require("path");
-const HtmlWebpackPlugin = require("html-webpack-plugin");
+import HtmlWebpackPlugin from "html-webpack-plugin";
+import { defineConfig } from "@rspack/cli";
+import { resolve } from "node:path";
 
-module.exports = {
+export default defineConfig({
     entry: "./src/public/logs.ts",
     module: {
         rules: [
             {
-                test: /\.tsx?$/,
+                test: /\.ts?$/,
                 use: "ts-loader",
                 exclude: /node_modules/,
             },
@@ -17,18 +18,22 @@ module.exports = {
         ],
     },
     resolve: {
-        extensions: [".tsx", ".ts", ".js"],
+        extensions: [".ts", ".js"],
     },
+    devtool: false,
     output: {
         filename: "[contenthash].bundle.js",
-        path: path.resolve(__dirname, "dist", "public"),
+        path: resolve("dist", "public"),
+    },
+    performance: {
+        maxEntrypointSize: 500000,
+        maxAssetSize: 500000,
     },
     plugins: [
         new HtmlWebpackPlugin({
-            // Also generate a test.html
             filename: "logs.html",
             template: "src/public/logs.html",
         }),
     ],
     mode: "production",
-};
+});
