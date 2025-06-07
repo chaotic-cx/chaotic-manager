@@ -142,7 +142,7 @@ export class BuilderService extends Service {
                         "PACKAGE_REPO_ID=" + data.source_repo,
                         "PACKAGE_REPO_URL=" + data.source_repo_url,
                         ...(this.builder.cpu_limit ? [`MAKEFLAGS=-j${this.builder.cpu_limit}`] : []),
-                        ...(data.arch_mirror ? "PACMAN_REPO=" + data.arch_mirror : []),
+                        ...(data.arch_mirror ? [`PACMAN_REPO=${data.arch_mirror}`] : []),
                     ],
                     {
                         CpuPeriod: this.builder.cpu_limit ? 100000 : undefined,
@@ -180,13 +180,25 @@ export class BuilderService extends Service {
                         logger.log("Unknown container failure during build.");
                         this.chaoticLogger.error("Unknown container failure during build. No output.");
                     } else if (out.StatusCode === 13) {
-                        return { success: BuildStatus.ALREADY_BUILT, duration: this.stopTimer(timeStart) };
+                        return {
+                            success: BuildStatus.ALREADY_BUILT,
+                            duration: this.stopTimer(timeStart),
+                        };
                     } else if (out.StatusCode === this.builder.ci_code_skip) {
-                        return { success: BuildStatus.SKIPPED, duration: this.stopTimer(timeStart) };
+                        return {
+                            success: BuildStatus.SKIPPED,
+                            duration: this.stopTimer(timeStart),
+                        };
                     } else if (out.StatusCode === 124) {
-                        return { success: BuildStatus.TIMED_OUT, duration: this.stopTimer(timeStart) };
+                        return {
+                            success: BuildStatus.TIMED_OUT,
+                            duration: this.stopTimer(timeStart),
+                        };
                     } else {
-                        return { success: BuildStatus.FAILED, duration: this.stopTimer(timeStart) };
+                        return {
+                            success: BuildStatus.FAILED,
+                            duration: this.stopTimer(timeStart),
+                        };
                     }
                 } else {
                     logger.log(`Finished build. Uploading...`);
@@ -201,7 +213,10 @@ export class BuilderService extends Service {
 
                 if (file_list.length === 0) {
                     logger.log(`No files were found in the build output directory.`);
-                    return { success: BuildStatus.FAILED, duration: this.stopTimer(timeStart) };
+                    return {
+                        success: BuildStatus.FAILED,
+                        duration: this.stopTimer(timeStart),
+                    };
                 }
 
                 const sshlogger = new SshLogger();
@@ -264,7 +279,9 @@ export class BuilderService extends Service {
                 // Retrieve any information from the namcap analysis file if it exists and clean up afterwards
                 let namcapAnalysis = "";
                 try {
-                    const filesInTempOut: Dirent[] = fs.readdirSync(this.tempOut, { withFileTypes: true });
+                    const filesInTempOut: Dirent[] = fs.readdirSync(this.tempOut, {
+                        withFileTypes: true,
+                    });
                     const namcapAnalysisFile: Dirent | undefined = filesInTempOut.find(
                         (file) => file.name === `${data.pkgbase}.namcap`,
                     );
@@ -282,7 +299,10 @@ export class BuilderService extends Service {
                 }
 
                 if (!addToDbReturn.success) {
-                    return { success: BuildStatus.FAILED, duration: this.stopTimer(timeStart) };
+                    return {
+                        success: BuildStatus.FAILED,
+                        duration: this.stopTimer(timeStart),
+                    };
                 } else {
                     const duration = this.stopTimer(timeStart);
                     ctx.broadcast<MetricsHistogramContext>("builds.addToBuildTimerHistogram", {
@@ -390,7 +410,9 @@ export class BuilderService extends Service {
 
         if (!fs.existsSync(sourceCacheDir)) return;
 
-        const directory: Dirent[] = fs.readdirSync(sourceCacheDir, { withFileTypes: true });
+        const directory: Dirent[] = fs.readdirSync(sourceCacheDir, {
+            withFileTypes: true,
+        });
 
         directory.filter((dirent) => dirent.isDirectory()).map((dirent) => dirent.name);
         for (const dir of directory) {

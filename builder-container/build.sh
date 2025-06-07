@@ -122,7 +122,7 @@ function setup-buildenv {
 		# Prepend the given repository to the pacman.conf.d/mirrorlist
 		local current_mirrorlist
 		current_mirrorlist=$(cat /etc/pacman.d/mirrorlist)
-		echo "$PACMAN_REPO" > /etc/pacman.d/mirrorlist
+		echo "Server = $PACMAN_REPO" > /etc/pacman.d/mirrorlist
 		echo "$current_mirrorlist" >> /etc/pacman.d/mirrorlist
 
 		echo "Prepended custom Archlinux repository to /etc/pacman.d/mirrorlist:"
