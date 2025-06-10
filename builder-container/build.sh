@@ -153,19 +153,46 @@ function check-pkg {
 	printf "\n"
 }
 
+function printEnv {
+    # Print environment variables for debugging purposes
+    GIT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+
+    echo "This is our build environment:"
+    echo ":: BUILDDIR: $BUILDDIR"
+    echo ":: BUILDER_CACHE_SOURCES: $BUILDER_CACHE_SOURCES"
+    echo ":: BUILDER_EXTRA_TIMEOUT: $BUILDER_EXTRA_TIMEOUT"
+    echo ":: BUILDER_HOSTNAME: $BUILDER_HOSTNAME"
+    echo ":: BUILDER_TIMEOUT: $BUILDER_TIMEOUT"
+    echo ":: CI_CODE_SKIP: $CI_CODE_SKIP"
+    echo ":: COMMIT: $GIT_COMMIT"
+    echo ":: EXTRA_PACMAN_KEYRINGS: ${EXTRA_PACMAN_KEYRINGS[*]}"
+    echo ":: EXTRA_PACMAN_REPOS: $EXTRA_PACMAN_REPOS"
+    echo ":: MAKEFLAGS: $MAKEFLAGS"
+    echo ":: PACKAGE_REPO_ID: $PACKAGE_REPO_ID"
+    echo ":: PACKAGE_REPO_URL: $PACKAGE_REPO_URL"
+    echo ":: PACKAGE: $PACKAGE"
+    echo ":: PACKAGER: $PACKAGER"
+    echo ":: PACMAN_REPO: $PACMAN_REPO"
+    echo ":: PKGOUT: $PKGOUT"
+    echo ":: SRCDEST: $SRCDEST"
+    echo ":: TEMPOUT: $TEMPOUT"
+}
+
+
 printf "\nExecuting build on host %s.\n" "$BUILDER_HOSTNAME"
 echo "Setting up package repository..."
 print-if-failed setup-package-repo
 
 if [[ -n "$PACMAN_REPO" ]]; then
 	echo "Prepended custom Archlinux repository to /etc/pacman.d/mirrorlist as passed by build tools:"
-	echo "  - $PACMAN_REPO"
+	echo ":: $PACMAN_REPO"
 fi
 
 echo "Setting up build environment..."
 # Apply interference, this also does a pacman -Syu, which is why it's under setup-buildenv
 print-if-failed setup-buildenv
 setup-build-configs
+printEnv
 build-pkg
 check-pkg
 
