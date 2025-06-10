@@ -11,6 +11,7 @@ TEMPOUT="/home/builder/tempOut/"
 
 PACKAGE="$1"
 BUILDDIR="/home/builder/build/"
+GIT_COMMIT=
 
 [[ -z $BUILDER_HOSTNAME ]] && BUILDER_HOSTNAME="unknown builder (please supply BUILDER_HOSTNAME via Docker environment)"
 [[ -z $BUILDER_TIMEOUT ]] && BUILDER_TIMEOUT=3600
@@ -60,6 +61,9 @@ function setup-package-repo {
 	fi
 	GIT_TERMINAL_PROMPT=0 git fetch origin main --depth=1
 	git reset --hard origin/main
+
+    GIT_COMMIT=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
+
 	popd # $PACKAGE_REPO_ID
 	popd # /pkgbuilds
 }
@@ -155,8 +159,6 @@ function check-pkg {
 
 function printEnv {
     # Print environment variables for debugging purposes
-    GIT_COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
-
     echo "This is our build environment:"
     echo ":: BUILDDIR: $BUILDDIR"
     echo ":: BUILDER_CACHE_SOURCES: $BUILDER_CACHE_SOURCES"
