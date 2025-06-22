@@ -41,9 +41,10 @@ export class BuilderService extends Service {
     private shared_srcdest_cache: string;
     private shared_pkgout: string;
     private shared_sources: string;
+    private shared_tmpOut: string;
     private mountPkgout = "/shared/pkgout";
     private mountSrcdest = "/shared/srcdest_cache";
-    private tempOut = "/shared/tempOut";
+    private mountTmpOut = "/shared/temp";
 
     private containerManager: ContainerManager;
     private container: Container | null = null;
@@ -65,7 +66,7 @@ export class BuilderService extends Service {
             process.env.BUILDER_SRCDEST_CACHE_OVERRIDE || path.join(SHARED_PATH, "srcdest_cache");
         this.shared_pkgout = path.join(SHARED_PATH, "pkgout");
         this.shared_sources = path.join(SHARED_PATH, "sources");
-        this.tempOut = path.join(SHARED_PATH, "temp");
+        this.shared_tmpOut = path.join(SHARED_PATH, "temp");
 
         this.parseServiceSchema({
             name: "builder",
@@ -131,7 +132,7 @@ export class BuilderService extends Service {
                         srcdest_package_path + ":/home/builder/srcdest_cached",
                         this.shared_pkgout + ":/home/builder/pkgout",
                         this.shared_sources + ":/pkgbuilds",
-                        this.tempOut + ":/home/builder/tempOut",
+                        this.shared_tmpOut + ":/home/builder/tempOut",
                     ],
                     [
                         "BUILDER_HOSTNAME=" + this.builder.name,
@@ -218,7 +219,9 @@ export class BuilderService extends Service {
                         duration: this.stopTimer(timeStart),
                     };
                 } else {
-                    this.chaoticLogger.info(`Found ${file_list.length} files in the build output directory for ${data.pkgbase}.`);
+                    this.chaoticLogger.info(
+                        `Found ${file_list.length} files in the build output directory for ${data.pkgbase}.`,
+                    );
                 }
 
                 const sshlogger = new SshLogger();
@@ -289,7 +292,7 @@ export class BuilderService extends Service {
                 // Retrieve any information from the namcap analysis file if it exists and clean up afterwards
                 let namcapAnalysis = "";
                 try {
-                    const filesInTempOut: Dirent[] = fs.readdirSync(this.tempOut, {
+                    const filesInTempOut: Dirent[] = fs.readdirSync(this.mountTmpOut, {
                         withFileTypes: true,
                     });
                     const namcapAnalysisFile: Dirent | undefined = filesInTempOut.find(
@@ -297,10 +300,10 @@ export class BuilderService extends Service {
                     );
 
                     if (namcapAnalysisFile) {
-                        namcapAnalysis = fs.readFileSync(path.join(this.tempOut, namcapAnalysisFile.name), {
+                        namcapAnalysis = fs.readFileSync(path.join(this.mountTmpOut, namcapAnalysisFile.name), {
                             encoding: "utf-8",
                         });
-                        fs.rmSync(path.join(this.tempOut, namcapAnalysisFile.name));
+                        fs.rmSync(path.join(this.mountTmpOut, namcapAnalysisFile.name));
                     } else {
                         this.chaoticLogger.error(`Namcap analysis file not found for ${data.pkgbase}`);
                     }
