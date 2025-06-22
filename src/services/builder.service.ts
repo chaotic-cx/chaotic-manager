@@ -217,10 +217,14 @@ export class BuilderService extends Service {
                         success: BuildStatus.FAILED,
                         duration: this.stopTimer(timeStart),
                     };
+                } else {
+                    this.chaoticLogger.info(`Found ${file_list.length} files in the build output directory for ${data.pkgbase}.`);
                 }
 
                 const sshlogger = new SshLogger();
                 try {
+                    this.chaoticLogger.info(`Uploading files to the landing zone for ${data.pkgbase}.`);
+
                     // Prefer override values from the environment
                     this.scpClient = await Client({
                         host: String(process.env.DATABASE_HOST || data.upload_info.database.ssh.host),
@@ -228,15 +232,21 @@ export class BuilderService extends Service {
                         username: String(process.env.DATABASE_USER || data.upload_info.database.ssh.user),
                         privateKey: fs.readFileSync("sshkey"),
                         debug: sshlogger.log.bind(sshlogger),
+                        keepaliveInterval: 10000, // Keep the connection alive every 10 seconds and let it die after 30 seconds of inactivity
                     });
+
                     if (this.cancelled) {
                         return {
                             success: this.cancelledCode,
                             duration: this.stopTimer(timeStart),
                         };
                     }
+
                     await this.scpClient.uploadDir(this.mountPkgout, data.upload_info.database.landing_zone);
+                    this.chaoticLogger.debug(`Finished uploading files to the landing zone for ${data.pkgbase}.`);
+
                     this.scpClient.close();
+                    this.chaoticLogger.debug(`SCP client connection closed for ${data.pkgbase}.`);
                 } catch (e) {
                     if (this.cancelled) {
                         return {
