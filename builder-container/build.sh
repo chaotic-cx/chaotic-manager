@@ -183,8 +183,8 @@ echo "Setting up package repository..."
 print-if-failed setup-package-repo
 
 if [[ -n "$PACMAN_REPO" ]]; then
-    echo "Prepended custom Archlinux repository to /etc/pacman.d/mirrorlist as passed by build tools:"
-    echo ":: $PACMAN_REPO"
+	echo "Prepended custom Archlinux repository to /etc/pacman.d/mirrorlist as passed by build tools:"
+	echo ":: $PACMAN_REPO"
 fi
 
 echo "Setting up build environment..."

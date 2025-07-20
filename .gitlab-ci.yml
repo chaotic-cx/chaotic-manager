@@ -31,18 +31,11 @@ build-builder:
   # this one runs once per day via pipeline schedules
   stage: build
   image: docker:28-cli
-  services:
-    - name: docker:28-dind
-      alias: docker-daemon
   script:
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
     - docker build -t "$CI_REGISTRY_IMAGE/builder:latest" ./builder-container
     - docker push "$CI_REGISTRY_IMAGE/builder:latest"
   tags: [dind]
-  variables:
-    DOCKER_DRIVER: overlay2
-    DOCKER_HOST: tcp://docker-daemon:2375/
-    DOCKER_TLS_CERTDIR: ''
   rules:
     - changes: [builder-container/*]
       if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
@@ -50,17 +43,10 @@ build-builder:
 build-manager:
   stage: build
   image: docker:28-cli
-  services:
-    - name: docker:28-dind
-      alias: docker-daemon
   script:
     - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
     - docker build -t "$CI_REGISTRY_IMAGE/manager:latest" -f Dockerfile .
     - docker push "$CI_REGISTRY_IMAGE/manager:latest"
   tags: [dind]
-  variables:
-    DOCKER_DRIVER: overlay2
-    DOCKER_HOST: tcp://docker-daemon:2375/
-    DOCKER_TLS_CERTDIR: ''
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $UPDATE_BUILDER != "1"
