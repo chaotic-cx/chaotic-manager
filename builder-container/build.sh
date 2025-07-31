@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -eo pipefail
+shopt -s nullglob
 
 # shellcheck source=util.shlib
 source ./util.shlib
@@ -18,12 +19,17 @@ BUILDDIR="/home/builder/build/"
 [[ -z $PACKAGER ]] && PACKAGER="Garuda Builder <team@garudalinux.org>"
 [[ -z $MAKEFLAGS ]] && MAKEFLAGS="-j$(nproc)"
 
+# Config from pkg/.CI/config file
+declare -A CONFIG
+# Interfere actions taken on the finished package
+POST_BUILD_INTERFERE=()
+
 function print-if-failed {
     local output=""
     local exit=0
-    output="$($@ 2>&1)" || exit=1
+    output="$("$@" 2>&1)" || exit=1
     if [[ $exit -ne 0 ]]; then
-        echo "FATAL: Failed to execute $@:"
+        echo "FATAL: Failed to execute $*:"
         echo "$output"
         return 1
     fi
@@ -90,7 +96,6 @@ function setup-build-configs {
         exit "$exit_code"
     fi
 
-    declare -A CONFIG
     if [ -f "/pkgbuilds/${PACKAGE_REPO_ID}/${PACKAGE}/.CI/config" ]; then
         UTIL_READ_VARIABLES_FROM_FILE "/pkgbuilds/${PACKAGE_REPO_ID}/${PACKAGE}/.CI/config" CONFIG
         # In case we want to cache sources for heavier packages. This should be used only if really needed.
@@ -116,6 +121,9 @@ function setup-buildenv {
 
     echo "PACKAGER=\"$PACKAGER\"" >>/etc/makepkg.conf
     echo "MAKEFLAGS=$MAKEFLAGS" >>/etc/makepkg.conf
+    echo "OPTIONS=(strip docs !libtool !staticlibs emptydirs zipman purge !debug lto)" >>/etc/makepkg.conf
+    echo "BUILDENV=(!distcc !color !ccache check !sign)" >>/etc/makepkg.conf
+    echo "PKGEXT='.pkg.tar'" >>/etc/makepkg.conf
 
     if [[ -n "$EXTRA_PACMAN_REPOS" ]]; then echo "$EXTRA_PACMAN_REPOS" >>/etc/pacman.conf; fi
 
@@ -137,20 +145,73 @@ function setup-buildenv {
     pacman-key --init || return 1
 }
 
+# Check *.pkg.tar/.PKGINFO file and remove prohibited variables such as replaces and groups
+function check-pkginfo {
+    set -eo pipefail
+
+    if [ ! -v "CONFIG[BUILDER_ALLOW_PROHIBITED]" ] || [ "${CONFIG[BUILDER_ALLOW_PROHIBITED]}" != "true" ]; then
+        for pkg in "${PACKAGES[@]}"; do
+            # Extract the PKGINFO file from the package
+            tar -xf "$pkg" -C /tmp .PKGINFO
+            # Remove prohibited variables from the PKGINFO file
+            awk -i inplace 'BEGIN {
+                exit_code = 0
+            }
+            /^replaces ?=|^groups ?=/ {
+                exit_code = 2
+                next
+            }
+            { print }
+            END {
+                exit exit_code
+            }' /tmp/.PKGINFO || { if [[ $? -eq 2 ]]; then
+                    POST_BUILD_INTERFERE+=("Removed replaces and/or groups from PKGINFO of $(basename "$pkg")")
+                else
+                    return 1
+                fi
+            }
+            # Repack the package with the modified PKGINFO
+            tar --delete -f "$pkg" .PKGINFO
+            tar -r -f "$pkg" --owner=0 --group=0 --mode=644 -C /tmp .PKGINFO
+        done
+    else
+        POST_BUILD_INTERFERE+=("Skipped removing replaces and/or groups from PKGINFO per BUILDER_ALLOW_PROHIBITED")
+    fi
+}
+
+function compress-pkg {
+    set -eo pipefail
+
+    echo "Compressing packages in $PKGOUT..."
+
+    for pkg in "${PACKAGES[@]}"; do
+        zstd -T0 -q --rm -- "$pkg" || {
+            echo "Failed to compress $pkg"
+            return 1
+        }
+    done
+}
+
 function build-pkg {
     set -eo pipefail
 
     # Timeout ensures that the build process doesn't hang indefinitely, sending the kill signal if it still hangs 10 seconds after sending the term signal
     time sudo -D "${BUILDDIR}" -u builder PKGDEST="${PKGOUT}" SRCDEST="${SRCDEST}" COREPACK_ENABLE_DOWNLOAD_PROMPT=0 timeout -k 10 "${BUILDER_TIMEOUT}" makepkg --skippgpcheck -s --noconfirm || { local ret=$? && echo "Didn't finish building the package!" >&2 && return $ret; }
     find "${PKGOUT}" -type f -empty -delete || return 1
+    PACKAGES=("$PKGOUT"/*.pkg.tar)
+    if [[ ${#PACKAGES[@]} -eq 0 ]]; then
+        echo "No packages found in package output directory."
+        return 1
+    fi
 }
 
 function check-pkg {
     printf "\nChecking the package integrity with namcap...\n"
     # These should not fail the build due to namcap bugs.
     # The build already succeeded. Also log to TEMPOUT for builder service to pick up.
-    namcap -mi "$PKGOUT"/*.pkg.tar.zst | tee "$TEMPOUT/$PACKAGE.namcap" || true
+    namcap -mi "${PACKAGES[@]}" | tee "$TEMPOUT/$PACKAGE.namcap" || true
     printf "\n"
+    check-pkginfo
 }
 
 function print-env {
@@ -194,7 +255,15 @@ setup-build-configs
 print-env
 build-pkg
 check-pkg
+compress-pkg
 
 if test -f /tmp/interfere.log; then
     cat /tmp/interfere.log
 fi
+if [[ ${#POST_BUILD_INTERFERE[@]} -gt 0 ]]; then
+    printf ":: Maintainer info: applied the following post-build interferes:\n"
+    printf ':: * %s\n' "${POST_BUILD_INTERFERE[@]}"
+else
+    printf ":: Maintainer info: no post-build interferes applied.\n"
+fi
+printf '\n'

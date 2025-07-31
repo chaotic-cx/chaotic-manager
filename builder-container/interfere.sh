@@ -53,9 +53,7 @@ function interference-generic() {
 	# * Get rid of troublesome options
 	{
 		echo -e '\n\n\n'
-		echo "PKGEXT='.pkg.tar.zst'"
-		echo 'unset groups'
-		echo 'unset replaces'
+		unset PKGEXT
 	} >>"${BUILDDIR}/PKGBUILD"
 
 	# * Get rid of 'native optimizations'
@@ -156,5 +154,4 @@ if [ ${#APPLIED_INTERFERES[@]} -eq 0 ]; then
 else
     printf ":: Maintainer info: applied the interferes below.\n" >/tmp/interfere.log
     printf ':: * %s\n' "${APPLIED_INTERFERES[@]}" >>/tmp/interfere.log
-    printf '\n' >>/tmp/interfere.log
 fi

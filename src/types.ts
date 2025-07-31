@@ -88,7 +88,7 @@ export interface MetricsReturnObject {
 }
 
 // This value is used to isolate builder nodes that are on a different version of the internal API than the coordinator.
-export const current_version = 1;
+export const current_version = 2;
 
 const ONE_UNIX_DAY = 1000 * 60 * 60 * 24;
 const ONE_UNIX_MONTH = 1000 * 60 * 60 * 24 * 30;

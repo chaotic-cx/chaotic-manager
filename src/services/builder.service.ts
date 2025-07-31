@@ -406,7 +406,8 @@ export class BuilderService extends Service {
         await this.broker.waitForServices(["database"], 1000);
         const repo_files: string[] = await ctx.call("database.generateDestFillerFiles", generateDestFillerFilesParams);
         for (const line of repo_files) {
-            const filepath = path.join(destdir, line);
+            // Replace the file extension with .pkg.tar. makepkg uses this to determine if the package already exists in the repository.
+            const filepath = path.join(destdir, line.replace(/\.pkg\.tar\.[^.]+$/, ".pkg.tar"));
             fs.writeFileSync(filepath, "");
         }
     }
