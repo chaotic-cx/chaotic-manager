@@ -15,7 +15,7 @@ BUILDDIR="/home/builder/build/"
 
 [[ -z $BUILDER_HOSTNAME ]] && BUILDER_HOSTNAME="unknown builder (please supply BUILDER_HOSTNAME via Docker environment)"
 [[ -z $BUILDER_TIMEOUT ]] && BUILDER_TIMEOUT=3600
-[[ -z $CI_CODE_SKIP ]] && CI_CODE_SKIP=123
+[[ -z $CI_CODE_SKIP ]] && export CI_CODE_SKIP=123
 [[ -z $PACKAGER ]] && PACKAGER="Garuda Builder <team@garudalinux.org>"
 [[ -z $MAKEFLAGS ]] && MAKEFLAGS="-j$(nproc)"
 
