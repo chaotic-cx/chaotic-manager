@@ -1,4 +1,4 @@
-FROM node:24-alpine AS builder
+FROM node:25-alpine AS builder
 
 WORKDIR /build
 COPY package.json yarn.lock .yarnrc.yml /build/
@@ -6,7 +6,7 @@ RUN corepack enable && yarn install
 COPY . /build
 RUN yarn build
 
-FROM node:24-alpine
+FROM node:25-alpine
 
 RUN apk add autossh bash gawk
 WORKDIR /app
