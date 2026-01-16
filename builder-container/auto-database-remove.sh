@@ -50,16 +50,45 @@ fi
 
 tar -xf "$DBFILE" -C "$TEMP"
 
+declare -A PKGBASES
+declare -A BUILDDATES
+declare -A PKGFILES
+declare -A PKGBASE_BUILDDATES
+
 declare -a TO_REMOVE=()
 
-while read -r pkgfile pkgname pkgbase; do
+while read -r pkgfile pkgname pkgbase builddate; do
 	# shellcheck disable=SC2128
-	if [[ -v PACKAGES["$pkgbase"] ]]; then
+	if [[ ! -v PACKAGES["$pkgbase"] ]]; then
+		TO_REMOVE+=("$pkgname")
+		rm -f "${REPO_DIR}/${pkgfile}" "${REPO_DIR}/${pkgfile}.sig"
 		continue
 	fi
-	TO_REMOVE+=("$pkgname")
-	rm -f "${REPO_DIR}/${pkgfile}" "${REPO_DIR}/${pkgfile}.sig"
+
+	PKGBASES["$pkgname"]="${pkgbase}"
+	BUILDDATES["$pkgname"]="${builddate}"
+	PKGFILES["$pkgname"]="${pkgfile}"
+
+	if [[ -v PKGBASE_BUILDDATES["$pkgbase"] ]]; then
+		if [[ "${PKGBASE_BUILDDATES["$pkgbase"]}" -lt "$builddate" ]]; then
+			PKGBASE_BUILDDATES["$pkgbase"]="$builddate"
+		fi
+	else
+		PKGBASE_BUILDDATES["$pkgbase"]="$builddate"
+	fi
 done < <(find "$TEMP" -maxdepth 2 -name 'desc' -exec awk -f ./parse-database.awk {} +)
+
+for pkg in "${!PKGBASES[@]}"; do
+	pkgbase="${PKGBASES["$pkg"]}"
+	builddate="${BUILDDATES["$pkg"]}"
+	pkgfile="${PKGFILES["$pkg"]}"
+	pkgbase_builddate="${PKGBASE_BUILDDATES["$pkgbase"]}"
+
+	if [[ "$builddate" -ne "$pkgbase_builddate" ]]; then
+		TO_REMOVE+=("$pkg")
+		rm -f "${REPO_DIR}/${pkgfile}" "${REPO_DIR}/${pkgfile}.sig"
+	fi
+done
 
 if [[ "${#TO_REMOVE[@]}" -eq 0 ]]; then
 	echo "No packages to remove"

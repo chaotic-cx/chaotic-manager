@@ -15,6 +15,10 @@ BEGINFILE {
     v=3
     next
 }
+/%BUILDDATE%/ {
+    v=4
+    next
+}
 v==1 {
     filename=$0
     v=0
@@ -27,6 +31,10 @@ v==3 {
     base=$0
     v=0
 }
+v==4 {
+    builddate=$0
+    v=0
+}
 ENDFILE {
-    print filename, name, base
+    print filename, name, base, builddate
 }
