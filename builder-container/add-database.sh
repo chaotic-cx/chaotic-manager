@@ -57,8 +57,8 @@ function clean-duplicates() {
 		fi
 	else
 		_TO_MV=$(
-			echo "${_DUPLICATED[@]}" |
-				awk '{print "find -name \""$1"*\" -printf \"%T@ %p\\n\" | sort -n | grep -Po \"\\.\\/"$1"(((-[^-]*){3}\\.pkg\\.tar(?>\\.xz|\\.zst)?))\\.sig$\" | head -n -1;"}' |
+			echo "${_DUPLICATED}" |
+				awk '{print "find -name \""$1"*\" -printf \"%T@ %p\\n\" | sort -n | grep -Po \"\\.\\/\\Q"$1"\\E(((-[^-]*){3}\\.pkg\\.tar(?>\\.xz|\\.zst)?))\\.sig$\" | head -n -1;"}' |
 				bash |
 				awk '{sub(/\.sig$/,"");print $1"\n"$1".sig"}'
 		)
