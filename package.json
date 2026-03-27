@@ -23,7 +23,7 @@
         "node-scp": "^0.0.25",
         "node-telegram-bot-api": "^0.67.0",
         "style-loader": "^4.0.0",
-        "typescript": "^6.0.2"
+        "typescript": "^5.9.3"
     },
     "scripts": {
         "build": "tsc -P tsconfig.app.json && rspack",
@@ -39,7 +39,6 @@
     },
     "devDependencies": {
         "@eslint/js": "^10.0.1",
-        "@jest/globals": "30.3.0",
         "@rspack/cli": "^1.7.10",
         "@rspack/core": "^1.7.10",
         "@types/await-timeout": "^0.3.4",
@@ -48,19 +47,14 @@
         "@types/cors": "^2.8.19",
         "@types/dockerode": "^4.0.1",
         "@types/express": "^5.0.6",
-        "@types/jest": "^30.0.0",
         "@types/node": "^25.5.0",
         "@types/node-telegram-bot-api": "^0.64.14",
-        "@types/supertest": "^7.2.0",
         "eslint": "^10.1.0",
         "eslint-config-prettier": "^10.1.8",
         "eslint-plugin-tsdoc": "^0.5.2",
         "html-webpack-plugin": "^5.6.6",
-        "jest": "^30.3.0",
         "prettier": "^3.8.1",
         "prettier-plugin-organize-imports": "^4.3.0",
-        "supertest": "^7.2.2",
-        "ts-jest": "^29.4.6",
         "ts-loader": "^9.5.4",
         "ts-node": "^10.9.2",
         "tsc-watch": "^7.2.0",

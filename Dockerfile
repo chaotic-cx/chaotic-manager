@@ -2,7 +2,7 @@ FROM node:25-alpine AS builder
 
 WORKDIR /build
 COPY package.json yarn.lock .yarnrc.yml /build/
-RUN corepack enable && yarn install
+RUN npm install -g corepack --force && yarn install
 COPY . /build
 RUN yarn build
 
