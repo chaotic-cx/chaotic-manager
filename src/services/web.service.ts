@@ -4,7 +4,7 @@ import to from "await-to-js";
 import cors from "cors";
 import express, { type NextFunction, type Request, type Response } from "express";
 import type RedisConnection from "ioredis";
-import { type BrokerNode, type LoggerInstance, Service, type ServiceBroker } from "moleculer";
+import { type Logger, Service, type ServiceBroker } from "moleculer";
 import type { RedisConnectionManager } from "../redis-connection-manager";
 import {
     corsOptions,
@@ -20,8 +20,8 @@ import type { QueueStatus, TrackedJobs } from "./coordinator.service";
 
 export class WebService extends Service {
     private app = express();
-    private chaoticLogger: LoggerInstance = this.broker.getLogger("CHAOTIC");
-    private httpLogger: LoggerInstance = this.broker.getLogger("HTTP");
+    private chaoticLogger: Logger = this.broker.getLogger("CHAOTIC");
+    private httpLogger: Logger = this.broker.getLogger("HTTP");
     private connection: RedisConnection;
     private subscriber: RedisConnection;
     private server: http.Server | null = null;
@@ -268,7 +268,7 @@ export class WebService extends Service {
 
     async getQueueStats(req: Request, res: Response) {
         const [errStats, outStats] = await to(this.broker.call<QueueStatus>("coordinator.getQueue"));
-        const [errNodes, outNodes] = await to(this.broker.call<BrokerNode[]>("coordinator.getAvailableNodes"));
+        const [errNodes, outNodes] = await to(this.broker.call<any[]>("coordinator.getAvailableNodes"));
 
         if (errStats || errNodes || !outStats) {
             this.serverError(res, 500, "Failed to fetch queue stats");

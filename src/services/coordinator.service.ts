@@ -1,7 +1,7 @@
 import { Mutex } from "async-mutex";
 import { DepGraph } from "dependency-graph";
 import type Redis from "ioredis";
-import { type BrokerNode, type Context, type LoggerInstance, Service, type ServiceBroker } from "moleculer";
+import { type Context, type Logger, Service, type ServiceBroker } from "moleculer";
 import { BuildsRedisLogger } from "../logging";
 import type { RedisConnectionManager } from "../redis-connection-manager";
 import { type Repo, RepoManager, type TargetRepo } from "../repo-manager";
@@ -122,7 +122,7 @@ export class CoordinatorService extends Service {
     private readonly repo_manager: RepoManager;
     private busy_nodes: TrackedJobs = {};
     private mutex: Mutex = new Mutex();
-    private chaoticLogger: LoggerInstance = this.broker.getLogger("CHAOTIC");
+    private chaoticLogger: Logger = this.broker.getLogger("CHAOTIC");
 
     private active = false;
     private drainedNotifier: (() => void) | null = null;
@@ -360,7 +360,19 @@ export class CoordinatorService extends Service {
                         }
                     }
                 },
-                (err) => {
+                (err: any) => {
+                    if (err && (err.name === "NodeDisconnectedError" || err.name === "RequestTimeoutError" || err.name === "MoleculerRetryableError") && !job.replacement) {
+                        this.chaoticLogger.warn(`Node ${node_id} disconnected or timed out. Re-queuing job ${job.pkgbase}.`);
+                        metricsParams.replaced = true;
+                        notificationPromises.push(
+                            this.broker.broadcast<MetricsCounterLabels>("builds.canceled-requeue", metricsParams),
+                        );
+                        job.logger.log(`Job ${job.toId()} execution failed (node disconnected). Re-queuing.`);
+                        const new_job = job.toSavable();
+                        job.replacement = toTracked(new_job, job.timestamp, job.logger);
+                        return;
+                    }
+
                     this.chaoticLogger.error("Unexpected promise rejection during package deployment:", err);
                     notificationPromises.push(source_repo.notify(job, "failed", "Build failed."));
                     job.logger.log(`Job ${job?.toId()} failed`);
@@ -421,7 +433,7 @@ export class CoordinatorService extends Service {
         await this.mutex
             .runExclusive(async () => {
                 // Fetch the list of available builder nodes
-                const available_nodes: BrokerNode[] = await this.getAvailableNodes();
+                const available_nodes: any[] = await this.getAvailableNodes();
 
                 if (available_nodes.length == 0) {
                     return;
@@ -744,8 +756,8 @@ export class CoordinatorService extends Service {
      * Fetches the list of available builder nodes (not busy).
      * @private
      */
-    private async getAvailableNodes(): Promise<BrokerNode[]> {
-        const services: Service[] = await this.broker.call<Service[]>("$node.services");
+    private async getAvailableNodes(): Promise<any[]> {
+        const services: Record<string, any>[] = await this.broker.call<Record<string, any>[]>("$node.services");
         let nodes: string[] | undefined;
         for (const entry of services) {
             if (entry.name === "builder") {
@@ -759,7 +771,7 @@ export class CoordinatorService extends Service {
         }
 
         // Fetch the full list of nodes
-        const full_node_list: BrokerNode[] = await this.broker.call("$node.list");
+        const full_node_list: any[] = await this.broker.call("$node.list");
         if (!full_node_list || full_node_list.length == 0) {
             return [];
         }
@@ -769,7 +781,7 @@ export class CoordinatorService extends Service {
         // node.available → check if the node is available (not offline)
         // !this.busy_nodes[node.id] → check if the node is not in the list of busy nodes
         return full_node_list.filter(
-            (node: BrokerNode) =>
+            (node: any) =>
                 node.metadata.version === current_version &&
                 nodes.includes(node.id) &&
                 node.available &&
@@ -782,7 +794,7 @@ export class CoordinatorService extends Service {
      * @private
      */
     private async updateMetrics(): Promise<void> {
-        const available_nodes: BrokerNode[] = await this.getAvailableNodes();
+        const available_nodes: any[] = await this.getAvailableNodes();
         try {
             await this.broker.broadcast<MetricsGaugeContext>("metrics.activeBuilders", {
                 count: Object.keys(this.busy_nodes).length,
@@ -893,11 +905,6 @@ export class CoordinatorService extends Service {
         await drained;
         if (timeout) clearTimeout(timeout);
     }
-
-    async stopped(): Promise<void> {
-        await this.schema.stop.bind(this.schema)();
-    }
-
     /**
      * Fetches the current build queue.
      * @returns The current build queue.

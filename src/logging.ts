@@ -1,6 +1,6 @@
 import to from "await-to-js";
 import type RedisConnection from "ioredis";
-import type { LoggerInstance, ServiceBroker } from "moleculer";
+import type { Logger, ServiceBroker } from "moleculer";
 
 // Console.log imitation that saves to a variable instead of stdout
 export class SshLogger {
@@ -22,8 +22,8 @@ export class BuildsRedisLogger {
     private key = "";
     private default_key = "";
     private timestamp = 0;
-    private chaoticLogger: LoggerInstance;
-    private buildLogger: LoggerInstance;
+    private chaoticLogger: Logger;
+    private buildLogger: Logger;
 
     constructor(connection: RedisConnection, broker: ServiceBroker, logType: string) {
         this.connection = connection;

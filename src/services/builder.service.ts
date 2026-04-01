@@ -4,8 +4,8 @@ import path from "path";
 import { E_ALREADY_LOCKED, Mutex, tryAcquire } from "async-mutex";
 import { to } from "await-to-js";
 import type { Container } from "dockerode";
-import { type Context, type LoggerInstance, Service, type ServiceBroker } from "moleculer";
-import Client, { type ScpClient } from "node-scp";
+import { type Context, type Logger, Service, type ServiceBroker } from "moleculer";
+import { Client as SshClient } from "ssh2";
 import { type ContainerManager, DockerManager, PodmanManager } from "../container-manager";
 import { BuildsRedisLogger, SshLogger } from "../logging";
 import type { RedisConnectionManager } from "../redis-connection-manager";
@@ -49,9 +49,9 @@ export class BuilderService extends Service {
     private containerManager: ContainerManager;
     private container: Container | null = null;
     private cancelled = false;
-    private chaoticLogger: LoggerInstance = this.broker.getLogger("CHAOTIC");
+    private chaoticLogger: Logger = this.broker.getLogger("CHAOTIC");
 
-    private scpClient: ScpClient | null = null;
+    private sshClient: SshClient | null = null;
 
     private cancelledCode: BuildStatus.CANCELED | BuildStatus.CANCELED_REQUEUE = BuildStatus.CANCELED;
     private active = true;
@@ -229,13 +229,47 @@ export class BuilderService extends Service {
                     this.chaoticLogger.info(`Uploading files to the landing zone for ${data.pkgbase}.`);
 
                     // Prefer override values from the environment
-                    this.scpClient = await Client({
-                        host: String(process.env.DATABASE_HOST || data.upload_info.database.ssh.host),
-                        port: Number(process.env.DATABASE_PORT || data.upload_info.database.ssh.port),
-                        username: String(process.env.DATABASE_USER || data.upload_info.database.ssh.user),
-                        privateKey: fs.readFileSync("sshkey"),
-                        debug: sshlogger.log.bind(sshlogger),
-                        keepaliveInterval: 10000, // Keep the connection alive every 10 seconds and let it die after 30 seconds of inactivity
+                    const sshConn = new SshClient();
+                    this.sshClient = sshConn;
+
+                    await new Promise<void>((resolve, reject) => {
+                        const timeout = setTimeout(() => {
+                            reject(new Error("SSH Connection timeout"));
+                        }, 30000);
+
+                        sshConn.on('ready', () => {
+                            clearTimeout(timeout);
+                            sshConn.sftp(async (err, sftp) => {
+                                if (err) return reject(err);
+
+                                try {
+                                    for (const file of file_list) {
+                                        const localPath = path.join(this.mountPkgout, file);
+                                        const remotePath = `${data.upload_info.database.landing_zone}/${file}`;
+                                        await new Promise<void>((res, rej) => {
+                                            sftp.fastPut(localPath, remotePath, (err) => {
+                                                if (err) rej(err);
+                                                else res();
+                                            });
+                                        });
+                                    }
+                                    resolve();
+                                } catch (e) {
+                                    reject(e);
+                                }
+                            });
+                        }).on('error', (err) => {
+                            clearTimeout(timeout);
+                            reject(err);
+                        }).connect({
+                            host: String(process.env.DATABASE_HOST || data.upload_info.database.ssh.host),
+                            port: Number(process.env.DATABASE_PORT || data.upload_info.database.ssh.port),
+                            username: String(process.env.DATABASE_USER || data.upload_info.database.ssh.user),
+                            privateKey: fs.readFileSync("sshkey"),
+                            debug: sshlogger.log.bind(sshlogger),
+                            keepaliveInterval: 10000,
+                            readyTimeout: 30000, // Timeout for connection
+                        });
                     });
 
                     if (this.cancelled) {
@@ -245,11 +279,10 @@ export class BuilderService extends Service {
                         };
                     }
 
-                    await this.scpClient.uploadDir(this.mountPkgout, data.upload_info.database.landing_zone);
                     this.chaoticLogger.debug(`Finished uploading files to the landing zone for ${data.pkgbase}.`);
 
-                    this.scpClient.close();
-                    this.chaoticLogger.debug(`SCP client connection closed for ${data.pkgbase}.`);
+                    sshConn.end();
+                    this.chaoticLogger.debug(`SSH client connection closed for ${data.pkgbase}.`);
                 } catch (e) {
                     if (this.cancelled) {
                         return {
@@ -266,7 +299,10 @@ export class BuilderService extends Service {
 
                     return { success: BuildStatus.FAILED };
                 } finally {
-                    if (this.scpClient) this.scpClient = null;
+                    if (this.sshClient) {
+                        this.sshClient.end();
+                        this.sshClient = null;
+                    }
                 }
 
                 logger.log(`Finished upload.`);
@@ -362,9 +398,9 @@ export class BuilderService extends Service {
                 this.containerManager.kill(this.container).catch((e) => {
                     this.chaoticLogger.error(e);
                 });
-            } else if (this.scpClient) {
+            } else if (this.sshClient) {
                 try {
-                    this.scpClient.close();
+                    this.sshClient.end();
                 } catch (error) {
                     this.chaoticLogger.error(error);
                 }
@@ -428,9 +464,9 @@ export class BuilderService extends Service {
             withFileTypes: true,
         });
 
-        directory.filter((dirent) => dirent.isDirectory()).map((dirent) => dirent.name);
-        for (const dir of directory) {
-            const filePath = path.join(sourceCacheDir, `${dir.name}`);
+        const dirs = directory.filter((dirent) => dirent.isDirectory());
+        for (const dir of dirs) {
+            const filePath = path.join(sourceCacheDir, dir.name);
             if (fs.existsSync(`${filePath}/.timestamp`)) {
                 const timestamp = fs.statSync(`${filePath}/.timestamp`);
                 const mtime = new Date(timestamp.mtime).getTime();
@@ -460,10 +496,6 @@ export class BuilderService extends Service {
         if (!this.cancelled) this.cancelledCode = BuildStatus.CANCELED_REQUEUE;
         await this.cancelBuild();
         this.containerManager.destroy();
-    }
-
-    async stopped(): Promise<void> {
-        await this.schema.stop.bind(this.schema)();
     }
 
     /**

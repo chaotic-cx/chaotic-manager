@@ -1,5 +1,5 @@
 import { to } from "await-to-js";
-import { Context, type LoggerInstance, Service, type ServiceBroker } from "moleculer";
+import { Context, type Logger, Service, type ServiceBroker } from "moleculer";
 import ChaoticTelegramBot from "../telegram-bot";
 import type { DeploymentNotificationParams, GenericNotificationParams } from "../types";
 import { MoleculerConfigCommonService } from "./moleculer.config";
@@ -12,7 +12,8 @@ import { getPureNodeName } from "../utils";
 export class NotifierService extends Service {
     private readonly telegramBot: ChaoticTelegramBot | undefined;
     private readonly base_logs_url: string | undefined;
-    private chaoticLogger: LoggerInstance = this.broker.getLogger("CHAOTIC");
+    private readonly package_repos: string | undefined;
+    private chaoticLogger: Logger = this.broker.getLogger("CHAOTIC");
 
     constructor(broker: ServiceBroker) {
         super(broker);

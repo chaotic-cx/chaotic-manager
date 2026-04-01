@@ -1,6 +1,6 @@
 import fs from "fs";
 import { Mutex } from "async-mutex";
-import { type Context, type LoggerInstance, Service, type ServiceBroker } from "moleculer";
+import { type Context, type Logger, Service, type ServiceBroker } from "moleculer";
 import { type ContainerManager, DockerManager, PodmanManager } from "../container-manager";
 import { BuildsRedisLogger } from "../logging";
 import type { RedisConnectionManager } from "../redis-connection-manager";
@@ -23,7 +23,7 @@ export class DatabaseService extends Service {
     private redis_connection_manager: RedisConnectionManager;
     private gpg: string = process.env.GPG_PATH || "";
     private container_manager: ContainerManager;
-    private chaoticLogger: LoggerInstance = this.broker.getLogger("DATABASE");
+    private chaoticLogger: Logger = this.broker.getLogger("DATABASE");
     private active = true;
 
     constructor(broker: ServiceBroker, redis_connection_manager: RedisConnectionManager) {
@@ -208,9 +208,5 @@ export class DatabaseService extends Service {
         this.active = false;
         await this.mutex.waitForUnlock();
         this.container_manager.destroy();
-    }
-
-    async stopped(): Promise<void> {
-        await this.schema.stop.bind(this.schema)();
     }
 }

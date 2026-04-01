@@ -1,4 +1,4 @@
-import type { LoggerInstance } from "moleculer";
+import type { Logger } from "moleculer";
 import TelegramBot from "node-telegram-bot-api";
 
 /**
@@ -10,7 +10,7 @@ export default class ChaoticTelegramBot {
     protected telegramChatId: string;
     protected validChatIds: string[];
     private readonly bot: TelegramBot;
-    private readonly chaoticLogger: LoggerInstance;
+    private readonly chaoticLogger: Logger;
 
     constructor(
         {
@@ -22,7 +22,7 @@ export default class ChaoticTelegramBot {
             telegramChatId: string;
             validChatIds?: string[];
         },
-        logger: LoggerInstance,
+        logger: Logger,
     ) {
         this.telegramToken = telegramToken;
         this.telegramChatId = telegramChatId;
@@ -87,11 +87,11 @@ export default class ChaoticTelegramBot {
      */
     async setupListeners(): Promise<void> {
         this.bot.on("message", (msg: TelegramBot.Message): void => {
-            if (this.isAllowedChat(msg.chat)) {
+            if (!this.isAllowedChat(msg.chat)) {
                 this.chaoticLogger.error("Unauthorized user tried to send a message.");
                 return;
             } else {
-                this.bot.sendMessage(msg.chat.id, "Received your message");
+                void this.bot.sendMessage(msg.chat.id, "Received your message");
             }
         });
     }

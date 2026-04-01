@@ -1,5 +1,4 @@
 import type { CorsOptions } from "cors";
-import type { GenericObject } from "moleculer";
 
 export interface PacmanRepo {
     name: string;
@@ -88,7 +87,7 @@ export interface MetricsReturnObject {
 }
 
 // This value is used to isolate builder nodes that are on a different version of the internal API than the coordinator.
-export const current_version = 2;
+export const current_version = 3;
 
 const ONE_UNIX_DAY = 1000 * 60 * 60 * 24;
 const ONE_UNIX_MONTH = 1000 * 60 * 60 * 24 * 30;
@@ -290,7 +289,7 @@ export type MetricsRequest = {
 
 export interface MetricsEntry {
     value: number;
-    labels: GenericObject;
+    labels: Record<string, any>;
     timestamp: number;
 }
 

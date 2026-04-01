@@ -1,6 +1,6 @@
 import { URL } from "url";
 import to from "await-to-js";
-import type { LoggerInstance } from "moleculer";
+import type { Logger } from "moleculer";
 import type { CoordinatorJob, PacmanRepo } from "./types";
 
 export type GitlabState = "pending" | "running" | "success" | "failed" | "canceled";
@@ -11,7 +11,7 @@ class GitlabNotifier {
         public token: string,
         public check_name: string,
         public base_log_url: URL,
-        public chaoticLogger: LoggerInstance,
+        public chaoticLogger: Logger,
     ) {}
 
     getLogUrl(job: CoordinatorJob) {
@@ -102,9 +102,9 @@ export class TargetRepo {
             for (let link of obj.extra_keyrings) {
                 if (typeof link !== "string") throw new Error("Attempted to add invalid gpg link");
                 // Normalize link
-                link = new URL(link);
+                new URL(link);
             }
-            this.extra_keyrings = obj.extra_keyrings;
+            this.extra_keyrings = obj.extra_keyrings.map((link: string) => new URL(link));
         }
     }
 
@@ -141,7 +141,7 @@ export class RepoManager {
 
     constructor(
         public base_log_url: URL | undefined,
-        public chaoticLogger: LoggerInstance,
+        public chaoticLogger: Logger,
     ) {
         this.chaoticLogger = chaoticLogger;
     }

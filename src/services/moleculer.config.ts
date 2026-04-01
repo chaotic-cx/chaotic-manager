@@ -1,4 +1,4 @@
-import type { ServiceRegistry } from "moleculer";
+import type { MetricRegistry } from "moleculer";
 
 export const MoleculerConfigCommon = {
     skipProcessEventRegistration: true,
@@ -11,10 +11,10 @@ export function enableMetrics(isDatabase: boolean) {
             enabled: true,
             reporter: [
                 {
-                    type: "Prometheus",
+                    type: "Prometheus" as const,
                     options: {
                         path: "/metrics",
-                        defaultLabels: (registry: ServiceRegistry) => ({
+                        defaultLabels: (registry: MetricRegistry) => ({
                             namespace: registry.broker.namespace,
                             nodeID: registry.broker.nodeID,
                         }),

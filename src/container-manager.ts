@@ -3,7 +3,7 @@ import { Mutex } from "async-mutex";
 import to from "await-to-js";
 import type Dockerode from "dockerode";
 import Docker, { HostConfig, type Container } from "dockerode";
-import type { LoggerInstance } from "moleculer";
+import type { Logger } from "moleculer";
 import { type ContainerCreateMountOption, type LibPod, LibpodDockerode } from "./libpod-dockerode";
 
 export abstract class ContainerManager {
@@ -11,9 +11,9 @@ export abstract class ContainerManager {
     private pull_schedule: NodeJS.Timeout | null = null;
     private pull_schedule_image: string | null = null;
     private pull_mutex = new Mutex();
-    private chaoticLogger: LoggerInstance;
+    private chaoticLogger: Logger;
 
-    protected constructor(chaoticLogger: LoggerInstance) {
+    protected constructor(chaoticLogger: Logger) {
         this.chaoticLogger = chaoticLogger;
     }
 
@@ -116,8 +116,19 @@ export abstract class ContainerManager {
             }),
         );
 
-        if (out[0]) this.chaoticLogger.error(out[0]);
-        return out;
+        if (out[0]) {
+            this.chaoticLogger.error(out[0]);
+            return out as [Error, undefined];
+        }
+
+        const data = out[1] as [{ StatusCode: number }?];
+        if (data?.[0]?.StatusCode && data[0].StatusCode !== 0) {
+            const err = new Error(`Container exited with code ${data[0].StatusCode}`);
+            this.chaoticLogger.error(err);
+            return [err, undefined];
+        }
+
+        return out as [null, unknown];
     }
 
     async kill(container: Docker.Container) {
@@ -146,7 +157,7 @@ export abstract class ContainerManager {
 export class DockerManager extends ContainerManager {
     docker: Docker = new Docker();
 
-    constructor(logger: LoggerInstance) {
+    constructor(logger: Logger) {
         super(logger);
     }
 
@@ -232,7 +243,7 @@ export class PodmanManager extends ContainerManager {
     docker: Docker;
     private libPodApi: LibPod;
 
-    constructor(logger: LoggerInstance) {
+    constructor(logger: Logger) {
         super(logger);
 
         const socketPath = process.env.DOCKER_SOCKET ? process.env.DOCKER_SOCKET : "/run/podman/podman.sock";

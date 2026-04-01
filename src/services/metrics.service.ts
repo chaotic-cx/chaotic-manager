@@ -1,4 +1,4 @@
-import { type Context, type LoggerInstance, Service, type ServiceBroker } from "moleculer";
+import { type Context, type Logger, Service, type ServiceBroker } from "moleculer";
 import type {
     MetricsCounterLabels,
     MetricsDatabaseLabels,
@@ -14,7 +14,7 @@ import { MoleculerConfigCommonService } from "./moleculer.config";
  * The metrics service that provides the metrics actions for other services to call.
  */
 export class MetricsService extends Service {
-    private metricsLogger: LoggerInstance = this.broker.getLogger("CHAOTIC-METRICS");
+    private metricsLogger: Logger = this.broker.getLogger("CHAOTIC-METRICS");
 
     constructor(broker: ServiceBroker) {
         super(broker);
@@ -226,7 +226,7 @@ export class MetricsService extends Service {
             quantiles: [60, 120, 360, 720, 1440, 2880, 4320, 5760, 7200],
             maxAgeSeconds: 60,
             ageBuckets: 10,
-        });
+        } as any);
         this.broker.metrics.register({
             type: "gauge",
             name: "builders.active",
@@ -391,7 +391,12 @@ export class MetricsService extends Service {
         this.metricsLogger.debug("Metrics requested");
 
         data.forEach((metric: string) => {
-            const allMetrics = this.broker.metrics.getMetric(metric).get();
+            const metricObj = this.broker.metrics.getMetric(metric);
+            if (!metricObj) {
+                this.metricsLogger.warn(`Metric ${metric} does not exist`);
+                return;
+            }
+            const allMetrics = metricObj.get();
             if (allMetrics === null) {
                 this.metricsLogger.warn(`Metric ${metric} does not exist`);
                 return;
