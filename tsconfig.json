@@ -10,5 +10,5 @@
         "strict": true,
         "skipLibCheck": true
     },
-    "exclude": ["dist", "src/public"]
+    "exclude": ["dist", "src/public", "rspack.config.ts"]
 }
