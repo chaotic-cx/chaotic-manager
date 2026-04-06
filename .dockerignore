@@ -1,4 +1,13 @@
+*.rdb
+.direnv
+.git
+.idea
+.yarn
 builder-container
+ci-template
+dist
 gpg
+nix
 node_modules
+sshkey
 temp

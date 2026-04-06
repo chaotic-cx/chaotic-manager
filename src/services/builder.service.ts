@@ -42,9 +42,11 @@ export class BuilderService extends Service {
     private shared_pkgout: string;
     private shared_sources: string;
     private shared_tmpOut: string;
+    private shared_build: string | null;
     private mountPkgout = "/shared/pkgout";
     private mountSrcdest = "/shared/srcdest_cache";
     private mountTmpOut = "/shared/temp";
+    private mountBuild = "/shared/build";
 
     private containerManager: ContainerManager;
     private container: Container | null = null;
@@ -67,6 +69,8 @@ export class BuilderService extends Service {
         this.shared_pkgout = path.join(SHARED_PATH, "pkgout");
         this.shared_sources = path.join(SHARED_PATH, "sources");
         this.shared_tmpOut = path.join(SHARED_PATH, "temp");
+        this.shared_build = process.env.BUILDER_BUILD_DIR_HOST || null;
+        this.mountBuild = process.env.BUILDER_BUILD_DIR_MANAGER || "/shared/build";
 
         this.parseServiceSchema({
             name: "builder",
@@ -114,6 +118,9 @@ export class BuilderService extends Service {
                 // Make sure the pkgout directory is clean for the current build
                 this.ensurePathClean(this.mountPkgout);
 
+                // Make sure the build directory is clean for the current build
+                if (this.shared_build) this.ensurePathClean(this.mountBuild);
+
                 // Generate filler files in the pkgout directory.
                 // Goal: Avoid building packages that are already in the target repo
                 await this.generateDestFillerFiles(ctx, data.target_repo, data.arch, this.mountPkgout);
@@ -133,6 +140,7 @@ export class BuilderService extends Service {
                         this.shared_pkgout + ":/home/builder/pkgout",
                         this.shared_sources + ":/pkgbuilds",
                         this.shared_tmpOut + ":/home/builder/tempOut",
+                        ...(this.shared_build ? [`${this.shared_build}:/home/builder/build`] : []),
                     ],
                     [
                         "BUILDER_HOSTNAME=" + this.builder.name,
@@ -237,39 +245,42 @@ export class BuilderService extends Service {
                             reject(new Error("SSH Connection timeout"));
                         }, 30000);
 
-                        sshConn.on('ready', () => {
-                            clearTimeout(timeout);
-                            sshConn.sftp(async (err, sftp) => {
-                                if (err) return reject(err);
+                        sshConn
+                            .on("ready", () => {
+                                clearTimeout(timeout);
+                                sshConn.sftp(async (err, sftp) => {
+                                    if (err) return reject(err);
 
-                                try {
-                                    for (const file of file_list) {
-                                        const localPath = path.join(this.mountPkgout, file);
-                                        const remotePath = `${data.upload_info.database.landing_zone}/${file}`;
-                                        await new Promise<void>((res, rej) => {
-                                            sftp.fastPut(localPath, remotePath, (err) => {
-                                                if (err) rej(err);
-                                                else res();
+                                    try {
+                                        for (const file of file_list) {
+                                            const localPath = path.join(this.mountPkgout, file);
+                                            const remotePath = `${data.upload_info.database.landing_zone}/${file}`;
+                                            await new Promise<void>((res, rej) => {
+                                                sftp.fastPut(localPath, remotePath, (err) => {
+                                                    if (err) rej(err);
+                                                    else res();
+                                                });
                                             });
-                                        });
+                                        }
+                                        resolve();
+                                    } catch (e) {
+                                        reject(e);
                                     }
-                                    resolve();
-                                } catch (e) {
-                                    reject(e);
-                                }
+                                });
+                            })
+                            .on("error", (err) => {
+                                clearTimeout(timeout);
+                                reject(err);
+                            })
+                            .connect({
+                                host: String(process.env.DATABASE_HOST || data.upload_info.database.ssh.host),
+                                port: Number(process.env.DATABASE_PORT || data.upload_info.database.ssh.port),
+                                username: String(process.env.DATABASE_USER || data.upload_info.database.ssh.user),
+                                privateKey: fs.readFileSync("sshkey"),
+                                debug: sshlogger.log.bind(sshlogger),
+                                keepaliveInterval: 10000,
+                                readyTimeout: 30000, // Timeout for connection
                             });
-                        }).on('error', (err) => {
-                            clearTimeout(timeout);
-                            reject(err);
-                        }).connect({
-                            host: String(process.env.DATABASE_HOST || data.upload_info.database.ssh.host),
-                            port: Number(process.env.DATABASE_PORT || data.upload_info.database.ssh.port),
-                            username: String(process.env.DATABASE_USER || data.upload_info.database.ssh.user),
-                            privateKey: fs.readFileSync("sshkey"),
-                            debug: sshlogger.log.bind(sshlogger),
-                            keepaliveInterval: 10000,
-                            readyTimeout: 30000, // Timeout for connection
-                        });
                     });
 
                     if (this.cancelled) {
@@ -416,8 +427,18 @@ export class BuilderService extends Service {
      * @private
      */
     private ensurePathClean(dir: string, create = true): void {
-        if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true });
-        if (create) fs.mkdirSync(dir, { recursive: true });
+        if (fs.existsSync(dir)) {
+            try {
+                const files = fs.readdirSync(dir);
+                for (const file of files) {
+                    fs.rmSync(path.join(dir, file), { recursive: true, force: true });
+                }
+            } catch (err: any) {
+                this.chaoticLogger.error(`Failed to clean directory ${dir}: ${err.message}`);
+            }
+        } else if (create) {
+            fs.mkdirSync(dir, { recursive: true });
+        }
     }
 
     /**
