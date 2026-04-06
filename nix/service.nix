@@ -95,6 +95,20 @@ in {
           The CI exit code signaling an intended build skip.
         '';
       };
+      buildDirHost = mkOption {
+        default = null;
+        type = types.nullOr types.str;
+        description = mdDoc ''
+          The host path to use as the build directory for the Chaotic Builder service.
+        '';
+      };
+      buildDirManager = mkOption {
+        default = "/shared/build";
+        type = types.str;
+        description = mdDoc ''
+          The manager container path where the host's build directory is mounted to.
+        '';
+      };
       user = mkOption {
         default = "root";
         type = types.str;
@@ -309,6 +323,11 @@ in {
       environment = {
         BUILDER_HOSTNAME = cfg.builder.hostname;
         BUILDER_TIMEOUT = cfg.builder.timeout;
+        BUILDER_BUILD_DIR_HOST =
+          if cfg.builder.buildDirHost != null
+          then cfg.builder.buildDirHost
+          else "";
+        BUILDER_BUILD_DIR_MANAGER = cfg.builder.buildDirManager;
         CI_CODE_SKIP = cfg.builder.ciCodeSkip;
         NODE_ENV = "production";
         REDIS_SSH_HOST = cfg.builder.redis.host;

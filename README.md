@@ -224,7 +224,7 @@ processes with.
 - `BUILDER_CACHE_SOURCES`: can be set to `true` in case the sources should be cached between builds. This can be useful
   in case of slow sources or sources that are not available all the time. Sources will be cleared automatically after 1
   month, which is important in case packages are getting removed or the source changes.
-- `BUILDER_EXTRA_TIMEOUT`: If set, will multiply the global `BUILDER_TIMEOUT` value with the given multiplier. If e.g., 
+- `BUILDER_EXTRA_TIMEOUT`: If set, will multiply the global `BUILDER_TIMEOUT` value with the given multiplier. If e.g.,
   the default timeout value of `3600` is used, setting this to `2` would increase the build timeout to `7200`.
 
 ### Known state variables
@@ -343,6 +343,8 @@ The following variables are only relevant for builder instances:
 - `BUILDER_HOSTNAME`: the hostname of the builder will be displayed in package logs to determine which builder built a
   package
 - `BUILDER_TIMEOUT`: the timeout for a package build, 3600 seconds by default. Should be increased on slow builders
+- `BUILDER_BUILD_DIR_HOST`: the path on the host to be used as the build directory. If provided, it will be mounted to the build container's hardcoded `/home/builder/build`. **Warning:** Multiple builder nodes sharing the same host path will collide. Use unique paths per builder instance.
+- `BUILDER_BUILD_DIR_MANAGER`: the path inside the manager container where the host's build directory is mounted to. If provided, it will be used to clean the build directory before starting a new build. Defaults to `/shared/build`.
 
 ### Setting up
 
@@ -469,9 +471,11 @@ services:
       REDIS_SSH_HOST: host.docker.internal
       REDIS_SSH_USER: package-deployer
       SHARED_PATH: /var/chaotic/shared
+      BUILDER_BUILD_DIR_HOST: /var/chaotic/build # optional, if desired
       DATABASE_HOST: host.docker.internal
       DATABASE_PORT: 22
     volumes:
+      - ./build:/shared/build # optional, if desired
       - ./shared:/shared
       - ./sshkey:/app/sshkey
       - /var/run/docker.sock:/var/run/docker.sock
