@@ -1,6 +1,6 @@
-import HtmlWebpackPlugin from "html-webpack-plugin";
 import { defineConfig } from "@rspack/cli";
 import { resolve } from "node:path";
+import { HtmlRspackPlugin } from "@rspack/core";
 
 export default defineConfig({
     entry: "./src/public/logs.ts",
@@ -41,7 +41,7 @@ export default defineConfig({
         maxAssetSize: 500000,
     },
     plugins: [
-        new HtmlWebpackPlugin({
+        new HtmlRspackPlugin({
             filename: "logs.html",
             template: "src/public/logs.html",
         }),
