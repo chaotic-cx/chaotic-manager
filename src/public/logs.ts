@@ -89,8 +89,6 @@ async function setup(): Promise<void> {
 
     let is_finished = false;
     await fetch(url).then(async (response: Response): Promise<void> => {
-        document.title = `Chaotic logs: ${id}`;
-        if (timestamp) document.title += `- ${timestamp}`;
         if (!response.body) {
             term.writeln("\x1B[1;3;31mError: No response body\x1B[0m ");
             is_finished = true;

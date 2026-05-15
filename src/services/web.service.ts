@@ -1,4 +1,6 @@
 import * as http from "node:http";
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import Timeout from "await-timeout";
 import to from "await-to-js";
 import cors from "cors";
@@ -64,6 +66,7 @@ export class WebService extends Service {
 
         this.app.get("/api/logs/:id", this.getOrStreamLogFromID.bind(this));
         this.app.get("/api/logs/:id/:timestamp", this.getOrStreamLog.bind(this));
+        this.app.get(["/logs.html", "/logs/logs.html"], this.renderLogsHtml.bind(this));
         this.app.get("/api/queue/metrics", cors(corsOptions), this.getCountMetrics.bind(this));
         this.app.get("/api/queue/packages", cors(corsOptions), this.getPackageStats.bind(this));
         this.app.get("/api/queue/stats", cors(corsOptions), this.getQueueStats.bind(this));
@@ -110,6 +113,55 @@ export class WebService extends Service {
         res.setHeader("Cache-Control", "no-cache");
         res.setHeader("Content-Type", "text/plain");
         res.status(code).send(message);
+    }
+
+    private async renderLogsHtml(req: Request, res: Response): Promise<void> {
+        const titleParam = req.query.pkgname ?? req.query.id;
+        const timestampParam = req.query.timestamp ?? req.query.timestamp;
+        const title = titleParam
+            ? `Chaotic logs: ${String(titleParam)}${timestampParam ? ` - ${timestampParam}` : ""}`
+            : "Chaotic logs";
+        const escapedTitle = title.replace(/[&<>"']/g, (char) => {
+            switch (char) {
+                case "&":
+                    return "&amp;";
+                case "<":
+                    return "&lt;";
+                case ">":
+                    return "&gt;";
+                case '"':
+                    return "&quot;";
+                case "'":
+                    return "&#39;";
+                default:
+                    return char;
+            }
+        });
+
+        const candidatePaths = [
+            resolve(process.cwd(), "dist", "public", "logs.html"),
+            resolve(process.cwd(), "public", "logs.html"),
+            resolve(process.cwd(), "src", "public", "logs.html"),
+        ];
+
+        let html: string | null = null;
+        for (const candidate of candidatePaths) {
+            try {
+                html = await readFile(candidate, "utf8");
+                break;
+            } catch {
+                // ignore
+            }
+        }
+
+        if (html === null) {
+            res.status(500).send("Unable to render logs viewer page");
+            return;
+        }
+
+        const renderedHtml = html.replace(/<title>.*<\/title>/i, `<title>${escapedTitle}</title>`);
+        res.setHeader("Content-Type", "text/html; charset=utf-8");
+        res.send(renderedHtml);
     }
 
     private async getOrStreamLog(req: Request, res: Response): Promise<any> {

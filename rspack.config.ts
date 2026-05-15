@@ -22,6 +22,10 @@ export default defineConfig({
                 },
                 type: "javascript/auto",
             },
+            {
+                test: /\.css$/i,
+                type: "css/auto",
+            },
         ],
     },
     resolve: {
